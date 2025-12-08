@@ -263,39 +263,33 @@ dry = {}
         println!("\n  💾 Checkpoint saved\n");
     }
 
-    // Print final summary
+    // Print comprehensive statistical summary
     println!();
     println!("{}", "─".repeat(65));
     println!("{}", " OUTER LOOP COMPLETE ".bold().on_green());
     println!("{}", "─".repeat(65));
-    println!();
 
-    println!("Total outer steps: {}", outer_scratchpad.episodes.len());
-    println!("Best NDCG: {:.4} (prompt: {})",
-        outer_scratchpad.best_ndcg, outer_scratchpad.best_prompt_id);
+    // Use the rich statistical summary from the scratchpad
+    print!("{}", outer_scratchpad.statistical_summary());
 
+    // Print structural insights (not in statistical_summary to keep it focused on numbers)
     if !outer_scratchpad.episodes.is_empty() {
-        let first = outer_scratchpad.episodes.first().unwrap();
-        let last = outer_scratchpad.episodes.last().unwrap();
-        println!("NDCG trajectory: {:.4} → {:.4}",
-            first.baseline_metrics.ndcg, last.final_metrics.ndcg);
+        let all_insights: std::collections::HashSet<_> = outer_scratchpad.episodes.iter()
+            .flat_map(|e| e.structural_insights.iter())
+            .collect();
+        if !all_insights.is_empty() {
+            println!("═══ STRUCTURAL INSIGHTS ═══");
+            for insight in all_insights.iter().take(5) {
+                println!("  • {}", insight);
+            }
+            println!();
+        }
 
         // Print strategy capsule diversity
         let all_capsules: Vec<_> = outer_scratchpad.episodes.iter()
             .flat_map(|e| e.strategy_capsules.iter())
             .collect();
-        println!("Total strategy capsules: {}", all_capsules.len());
-
-        // Print structural insights
-        let all_insights: std::collections::HashSet<_> = outer_scratchpad.episodes.iter()
-            .flat_map(|e| e.structural_insights.iter())
-            .collect();
-        if !all_insights.is_empty() {
-            println!("\nStructural insights discovered:");
-            for insight in all_insights.iter().take(5) {
-                println!("  • {}", insight);
-            }
-        }
+        println!("Total strategy capsules recorded: {}", all_capsules.len());
     }
 
     println!("\nOutputs saved to: {:?}", ctx.config.output_dir());

@@ -417,16 +417,35 @@ impl OuterLoop {
 
         // 3. Run inner episodes (this would call ripmap-train internally)
         // For Stage 0, we'll shell out to the existing binary
-        let inner_result = self.run_inner_loop(&promptgram, &inner_ctx)?;
+        // Pass best params from previous runs to enable accumulating learning
+        let best_params = outer_scratchpad.best_params_path.as_deref();
+        let inner_result = self.run_inner_loop(&promptgram, &inner_ctx, best_params)?;
 
         // 4. Summarize the run (includes selection mode)
-        let mut summary = self.summarize_inner_run(outer_step, &promptgram, &inner_result, &episode_start)?;
+        let mut summary = self.summarize_inner_run(outer_step, &promptgram, &inner_result, &inner_ctx, &episode_start)?;
         summary.selection_mode = selection_mode.as_str().to_string();
+        // Track warm start for diagnostic: if always None, learning isn't accumulating
+        summary.warm_started_from_step = outer_scratchpad.best_params_step.checked_sub(0)
+            .filter(|_| outer_scratchpad.best_params_path.is_some())
+            .map(|_| outer_scratchpad.best_params_step);
 
         // 5. Update scratchpad first (so L2 can see this episode)
+        // Also track best params path so subsequent runs can warm-start from best known config
         if summary.final_metrics.ndcg > outer_scratchpad.best_ndcg {
             outer_scratchpad.best_ndcg = summary.final_metrics.ndcg;
             outer_scratchpad.best_prompt_id = promptgram.id.clone();
+
+            // Track path to trained params from this run for warm-starting subsequent runs
+            // ripmap-train saves to <output>.trained.json
+            let trained_params_path = inner_ctx.config.output_dir()
+                .join("results.trained.json");
+            if trained_params_path.exists() {
+                outer_scratchpad.best_params_path = Some(
+                    trained_params_path.to_str().unwrap().to_string()
+                );
+                outer_scratchpad.best_params_step = outer_step;
+                println!("  🏆 New best! NDCG={:.4} - params saved for warm start", summary.final_metrics.ndcg);
+            }
         }
 
         // 6. Invoke L2 reasoning if enabled
@@ -449,8 +468,10 @@ impl OuterLoop {
                     println!("  📝 L2 proposal: mode={}, confidence={:.2}", proposal.mode, proposal.confidence);
                     println!("     {} edits proposed", proposal.edits.len());
                     for edit in &proposal.edits {
-                        println!("       • {}: {} in {}", edit.edit_type, edit.section,
-                            if edit.target.is_empty() { "(new)" } else { &edit.target });
+                        let target_display = edit.target.as_deref()
+                            .filter(|s| !s.is_empty())
+                            .unwrap_or("(new)");
+                        println!("       • {}: {} in {}", edit.edit_type, edit.section, target_display);
                     }
 
                     // Track proposal in summary
@@ -503,12 +524,19 @@ impl OuterLoop {
     ///
     /// For Stage 0, we shell out to `ripmap-train`. Later this could be
     /// integrated directly.
+    ///
+    /// # Parameter Persistence (Critical for Learning)
+    /// If `config_path` is Some, inner run starts from those params instead of defaults.
+    /// Without this, each outer step starts from scratch and the L2 loop can't
+    /// accumulate parameter improvements - it just adds variance without improving mean.
     fn run_inner_loop(
         &self,
         promptgram: &Promptgram,
         ctx: &RunContext,
+        config_path: Option<&str>,
     ) -> Result<InnerRunResult, String> {
-        use std::process::Command;
+        use std::process::{Command, Stdio};
+        use std::io::{BufRead, BufReader};
 
         let output_dir = ctx.config.output_dir();
 
@@ -523,7 +551,7 @@ impl OuterLoop {
             prompt_file.to_str().unwrap().to_string()
         };
 
-        // Build command
+        // Build command with piped stdout for streaming
         let mut cmd = Command::new("./target/release/ripmap-train");
         cmd.args([
             "--corpus", &self.inner_config.corpus,
@@ -536,13 +564,40 @@ impl OuterLoop {
             "--plot", output_dir.join("progress.png").to_str().unwrap(),
         ]);
 
-        // Run and capture output
-        let output = cmd.output()
-            .map_err(|e| format!("Failed to run inner loop: {}", e))?;
+        // Load best params from previous runs if available (critical for accumulating learning)
+        if let Some(config) = config_path {
+            if std::path::Path::new(config).exists() {
+                cmd.args(["--config", config]);
+                println!("     📦 Starting from best params: {}", config);
+            }
+        }
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(format!("Inner loop failed: {}", stderr));
+        cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::piped());
+
+        // Spawn and stream output
+        let mut child = cmd.spawn()
+            .map_err(|e| format!("Failed to spawn inner loop: {}", e))?;
+
+        // Stream stdout, filtering for episode progress
+        if let Some(stdout) = child.stdout.take() {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    // Forward episode progress lines
+                    if line.contains("Episode") || line.contains("NDCG") ||
+                       line.contains("TRAINING COMPLETE") || line.contains("Fail[") {
+                        println!("     {}", line.trim());
+                    }
+                }
+            }
+        }
+
+        let status = child.wait()
+            .map_err(|e| format!("Failed to wait for inner loop: {}", e))?;
+
+        if !status.success() {
+            return Err(format!("Inner loop failed with exit code: {:?}", status.code()));
         }
 
         // Load results
@@ -589,6 +644,7 @@ impl OuterLoop {
         outer_step: usize,
         promptgram: &Promptgram,
         result: &InnerRunResult,
+        ctx: &RunContext,
         start_time: &std::time::Instant,
     ) -> Result<OuterEpisodeSummary, String> {
         let now = std::time::SystemTime::now()
@@ -634,6 +690,19 @@ impl OuterLoop {
             .filter(|w| (w[1] > w[0] && w[2] < w[1]) || (w[1] < w[0] && w[2] > w[1]))
             .count();
 
+        // Get the path where trained params were saved
+        let trained_params = ctx.config.output_dir().join("results.trained.json");
+        let final_params_path = if trained_params.exists() {
+            Some(trained_params.to_str().unwrap().to_string())
+        } else {
+            None
+        };
+
+        // Extract final params from the inner scratchpad's last episode
+        // This gives us inline access to the learned values without needing to load files
+        let final_params = result.scratchpad.episodes.last()
+            .map(|e| e.params.clone());
+
         Ok(OuterEpisodeSummary {
             outer_step,
             prompt_id: promptgram.id.clone(),
@@ -655,6 +724,9 @@ impl OuterLoop {
             timestamp: now,
             proposal: None, // Will be set after L2 reasoning
             selection_mode: String::new(), // Will be set by caller
+            warm_started_from_step: None, // Will be set by caller if warm-started
+            final_params_path,
+            final_params,
         })
     }
 

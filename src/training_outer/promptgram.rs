@@ -200,16 +200,18 @@ impl Promptgram {
                 section.content.push_str(&edit.content);
             }
             "replace" => {
-                if edit.target.is_empty() {
+                let target = edit.target.as_deref().unwrap_or("");
+                if target.is_empty() {
                     // Replace entire section
                     section.content = edit.content.clone();
                 } else {
                     // Replace specific target text
-                    section.content = section.content.replace(&edit.target, &edit.content);
+                    section.content = section.content.replace(target, &edit.content);
                 }
             }
             "delete" => {
-                section.content = section.content.replace(&edit.target, "");
+                let target = edit.target.as_deref().unwrap_or("");
+                section.content = section.content.replace(target, "");
             }
             _ => return Err(format!("Unknown edit type: {}", edit.edit_type)),
         }
@@ -470,7 +472,7 @@ mod tests {
         let edit = super::super::PromptEdit {
             section: sections::ROLE.to_string(),
             edit_type: "replace".to_string(),
-            target: String::new(),
+            target: Some(String::new()),
             content: "Modified".to_string(),
             rationale: "test".to_string(),
         };

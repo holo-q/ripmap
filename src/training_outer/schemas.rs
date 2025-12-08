@@ -3,7 +3,19 @@
 //! These types define the interface between inner runs (L1) and the outer
 //! promptgram optimizer (L2).
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+
+use crate::training::ParameterPoint;
+
+/// Custom deserializer that handles both null and missing string fields.
+/// Gemini sometimes outputs `"target": null` for append operations.
+fn deserialize_nullable_string<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    // Deserialize as Option<String>, which naturally handles null → None
+    Option::<String>::deserialize(deserializer)
+}
 
 /// Meta-levers: latent axes describing optimization behavior.
 ///
@@ -147,6 +159,22 @@ pub struct OuterEpisodeSummary {
     /// Selection mode that chose this promptgram (explore/exploit/best)
     #[serde(default)]
     pub selection_mode: String,
+
+    /// Step from which we warm-started params (None = started from defaults)
+    /// Critical diagnostic: if always None, we're not accumulating learning
+    #[serde(default)]
+    pub warm_started_from_step: Option<usize>,
+
+    /// Path to final trained params from this run
+    /// Used for tracking parameter trajectory across outer steps
+    #[serde(default)]
+    pub final_params_path: Option<String>,
+
+    /// Actual final parameter values from this run.
+    /// Stored inline for rich diagnostics - allows analyzing what parameters
+    /// the inner loop settled on without loading external files.
+    #[serde(default)]
+    pub final_params: Option<ParameterPoint>,
 }
 
 /// Core metrics for a run.
@@ -199,9 +227,10 @@ pub struct PromptEdit {
     /// Type of edit: "append", "replace", "delete"
     pub edit_type: String,
 
-    /// For replace/delete: target text or rule to modify
-    #[serde(default)]
-    pub target: String,
+    /// For replace/delete: target text or rule to modify.
+    /// None or empty for append, or to replace entire section.
+    #[serde(default, deserialize_with = "deserialize_nullable_string")]
+    pub target: Option<String>,
 
     /// New content (for append/replace)
     pub content: String,
@@ -258,6 +287,18 @@ pub struct OuterScratchpad {
 
     /// Meta-insights about promptgram optimization
     pub meta_insights: Vec<String>,
+
+    /// Path to best parameters found so far (for continuation/warm start).
+    /// This enables L2 to build on learned params rather than starting from scratch.
+    /// Diagnosis: Without this, each inner run starts from default params, and
+    /// the outer loop shows no mean improvement (σ=0.0018 baseline vs 0.0032 final,
+    /// mean unchanged at 0.8269).
+    #[serde(default)]
+    pub best_params_path: Option<String>,
+
+    /// Step at which best params were found
+    #[serde(default)]
+    pub best_params_step: usize,
 }
 
 impl OuterScratchpad {
@@ -352,6 +393,165 @@ impl OuterScratchpad {
         ids.sort();
         ids.dedup();
         ids
+    }
+
+    /// Compute parameter deltas between consecutive steps.
+    ///
+    /// Returns Vec of (step, param_name, old_value, new_value, delta).
+    /// Critical diagnostic: shows what actually changed between runs.
+    pub fn parameter_deltas(&self) -> Vec<(usize, String, f64, f64, f64)> {
+        let mut deltas = Vec::new();
+
+        for window in self.episodes.windows(2) {
+            let prev = &window[0];
+            let curr = &window[1];
+
+            if let (Some(p1), Some(p2)) = (&prev.final_params, &curr.final_params) {
+                let fields = [
+                    ("pagerank_alpha", p1.pagerank_alpha, p2.pagerank_alpha),
+                    ("pagerank_chat_multiplier", p1.pagerank_chat_multiplier, p2.pagerank_chat_multiplier),
+                    ("depth_weight_root", p1.depth_weight_root, p2.depth_weight_root),
+                    ("depth_weight_moderate", p1.depth_weight_moderate, p2.depth_weight_moderate),
+                    ("depth_weight_deep", p1.depth_weight_deep, p2.depth_weight_deep),
+                    ("depth_weight_vendor", p1.depth_weight_vendor, p2.depth_weight_vendor),
+                    ("boost_mentioned_ident", p1.boost_mentioned_ident, p2.boost_mentioned_ident),
+                    ("boost_mentioned_file", p1.boost_mentioned_file, p2.boost_mentioned_file),
+                    ("boost_chat_file", p1.boost_chat_file, p2.boost_chat_file),
+                    ("boost_temporal_coupling", p1.boost_temporal_coupling, p2.boost_temporal_coupling),
+                    ("boost_focus_expansion", p1.boost_focus_expansion, p2.boost_focus_expansion),
+                    ("git_recency_decay_days", p1.git_recency_decay_days, p2.git_recency_decay_days),
+                    ("git_recency_max_boost", p1.git_recency_max_boost, p2.git_recency_max_boost),
+                    ("git_churn_threshold", p1.git_churn_threshold, p2.git_churn_threshold),
+                    ("git_churn_max_boost", p1.git_churn_max_boost, p2.git_churn_max_boost),
+                    ("focus_decay", p1.focus_decay, p2.focus_decay),
+                    ("focus_max_hops", p1.focus_max_hops, p2.focus_max_hops),
+                ];
+
+                for (name, v1, v2) in fields {
+                    let delta = v2 - v1;
+                    if delta.abs() > 1e-6 {
+                        deltas.push((curr.outer_step, name.to_string(), v1, v2, delta));
+                    }
+                }
+            }
+        }
+
+        deltas
+    }
+
+    /// Generate a statistical summary of the entire L2 run.
+    ///
+    /// Prints human-readable diagnostics for understanding learning trajectory:
+    /// - NDCG trajectory (start/end/best/variance)
+    /// - Parameter evolution (which params changed most)
+    /// - Warm-start diagnostics (how many steps leveraged previous learning)
+    /// - Convergence analysis
+    pub fn statistical_summary(&self) -> String {
+        let mut summary = String::new();
+        summary.push_str("\n╔══════════════════════════════════════════════════════════════╗\n");
+        summary.push_str("║                    L2 RUN STATISTICAL SUMMARY                ║\n");
+        summary.push_str("╚══════════════════════════════════════════════════════════════╝\n\n");
+
+        if self.episodes.is_empty() {
+            summary.push_str("No episodes recorded.\n");
+            return summary;
+        }
+
+        // NDCG trajectory
+        let ndcgs: Vec<f64> = self.episodes.iter().map(|e| e.final_metrics.ndcg).collect();
+        let first_ndcg = ndcgs.first().copied().unwrap_or(0.0);
+        let last_ndcg = ndcgs.last().copied().unwrap_or(0.0);
+        let best_ndcg = ndcgs.iter().cloned().fold(0.0_f64, f64::max);
+        let worst_ndcg = ndcgs.iter().cloned().fold(1.0_f64, f64::min);
+        let mean_ndcg = ndcgs.iter().sum::<f64>() / ndcgs.len() as f64;
+        let variance = ndcgs.iter().map(|v| (v - mean_ndcg).powi(2)).sum::<f64>() / ndcgs.len() as f64;
+        let std_dev = variance.sqrt();
+
+        summary.push_str("═══ NDCG TRAJECTORY ═══\n");
+        summary.push_str(&format!("  Episodes:     {}\n", self.episodes.len()));
+        summary.push_str(&format!("  First:        {:.4}\n", first_ndcg));
+        summary.push_str(&format!("  Last:         {:.4}\n", last_ndcg));
+        summary.push_str(&format!("  Best:         {:.4} (step {})\n", best_ndcg, self.best_params_step));
+        summary.push_str(&format!("  Worst:        {:.4}\n", worst_ndcg));
+        summary.push_str(&format!("  Mean:         {:.4}\n", mean_ndcg));
+        summary.push_str(&format!("  Std Dev:      {:.4}\n", std_dev));
+        summary.push_str(&format!("  Total Δ:      {:+.4} ({:+.1}%)\n",
+            last_ndcg - first_ndcg,
+            (last_ndcg - first_ndcg) / first_ndcg * 100.0));
+        summary.push_str("\n");
+
+        // Learning diagnosis
+        summary.push_str("═══ LEARNING DIAGNOSIS ═══\n");
+        let warm_started: usize = self.episodes.iter()
+            .filter(|e| e.warm_started_from_step.is_some())
+            .count();
+        summary.push_str(&format!("  Warm-started:  {} / {} ({:.0}%)\n",
+            warm_started, self.episodes.len(),
+            warm_started as f64 / self.episodes.len() as f64 * 100.0));
+
+        if warm_started == 0 && self.episodes.len() > 1 {
+            summary.push_str("  ⚠️  NO WARM STARTS - each step started from defaults!\n");
+            summary.push_str("      Learning may not accumulate across steps.\n");
+        }
+
+        // Check for actual improvement
+        if (last_ndcg - first_ndcg).abs() < std_dev * 0.5 {
+            summary.push_str("  ⚠️  PLATEAU - final NDCG within 0.5σ of initial\n");
+        } else if last_ndcg > first_ndcg {
+            summary.push_str(&format!("  ✓  IMPROVED by {:.4} ({:.1}σ)\n",
+                last_ndcg - first_ndcg, (last_ndcg - first_ndcg) / std_dev));
+        } else {
+            summary.push_str(&format!("  ✗  REGRESSED by {:.4} ({:.1}σ)\n",
+                first_ndcg - last_ndcg, (first_ndcg - last_ndcg) / std_dev));
+        }
+        summary.push_str("\n");
+
+        // Parameter evolution
+        let deltas = self.parameter_deltas();
+        if !deltas.is_empty() {
+            summary.push_str("═══ PARAMETER EVOLUTION ═══\n");
+
+            // Aggregate deltas per parameter
+            use std::collections::HashMap;
+            let mut param_totals: HashMap<&str, (f64, usize)> = HashMap::new();
+            for (_, name, _, _, delta) in &deltas {
+                let entry = param_totals.entry(name.as_str()).or_insert((0.0, 0));
+                entry.0 += delta.abs();
+                entry.1 += 1;
+            }
+
+            // Sort by total movement
+            let mut sorted: Vec<_> = param_totals.into_iter().collect();
+            sorted.sort_by(|a, b| b.1.0.partial_cmp(&a.1.0).unwrap());
+
+            summary.push_str("  Most changed params (cumulative absolute Δ):\n");
+            for (name, (total, count)) in sorted.iter().take(5) {
+                summary.push_str(&format!("    {}: Δ{:.2} ({} changes)\n", name, total, count));
+            }
+            summary.push_str("\n");
+        }
+
+        // Stability
+        let collapse_total: usize = self.episodes.iter().map(|e| e.stability.collapse_events).sum();
+        let oscillation_total: usize = self.episodes.iter().map(|e| e.stability.oscillations).sum();
+        let converged_count = self.episodes.iter().filter(|e| e.stability.converged).count();
+
+        summary.push_str("═══ STABILITY ═══\n");
+        summary.push_str(&format!("  Collapses:    {} total\n", collapse_total));
+        summary.push_str(&format!("  Oscillations: {} total\n", oscillation_total));
+        summary.push_str(&format!("  Converged:    {} / {} runs\n", converged_count, self.episodes.len()));
+        summary.push_str("\n");
+
+        // Best config location
+        summary.push_str("═══ BEST CONFIGURATION ═══\n");
+        summary.push_str(&format!("  NDCG:   {:.4}\n", self.best_ndcg));
+        summary.push_str(&format!("  Step:   {}\n", self.best_params_step));
+        if let Some(ref path) = self.best_params_path {
+            summary.push_str(&format!("  Path:   {}\n", path));
+        }
+        summary.push_str("\n");
+
+        summary
     }
 
     /// Find episodes where a specific meta-lever was extreme (>0.8 or <0.2).
@@ -496,6 +696,9 @@ mod tests {
                 timestamp: 0,
                 proposal: None,
                 selection_mode: "best".to_string(),
+                warm_started_from_step: None,
+                final_params_path: None,
+                final_params: None,
             });
         }
 
@@ -523,6 +726,9 @@ mod tests {
             timestamp: 0,
             proposal: None,
             selection_mode: "explore".to_string(),
+            warm_started_from_step: None,
+            final_params_path: None,
+            final_params: None,
         });
 
         // Search should find matches

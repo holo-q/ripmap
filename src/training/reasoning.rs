@@ -305,12 +305,18 @@ pub fn call_agent(agent: Agent, prompt: &str, model: Option<&str>) -> Result<Str
 /// This is where the LLM acts as a universal function approximator:
 /// f(failures, params, history) -> (reasoning, proposals, insights)
 ///
-/// The `prompt_template` should contain placeholders:
-/// - `{current_ndcg:.4}` - current NDCG score
-/// - `{episode_num}` - current episode number
-/// - `{episode_history}` - formatted history of recent episodes
-/// - `{params_desc}` - current parameter values
-/// - `{failure_desc}` - formatted failure cases
+/// The `prompt_template` should contain:
+/// - Role, Policy, Heuristics, Style sections (editable by L2)
+/// - Placeholders for dynamic context:
+///   - `{current_ndcg:.4}` - current NDCG score
+///   - `{episode_num}` - current episode number
+///   - `{episode_history}` - formatted history of recent episodes
+///   - `{params_desc}` - current parameter values
+///   - `{failure_desc}` - formatted failure cases
+///
+/// The immutable output schema (API_contract + Output_schema) is injected
+/// at runtime from `training/prompts/protocol/inner_output_schema.md` to prevent
+/// L2 from corrupting the structured output format during meta-optimization.
 ///
 /// Supports multiple agents via the `agent` parameter.
 /// Optionally specify a model (e.g., "opus", "o3", "gemini-2.0-flash").
@@ -462,13 +468,26 @@ Repo: {} ({} files)"#,
         history
     };
 
-    // Inject dynamic context into the prompt template
-    let prompt = prompt_template
+    // Load the immutable output schema protocol
+    // This is separate from the evolved policy to prevent L2 from corrupting the structured output
+    let protocol_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("training/prompts/protocol/inner_output_schema.md");
+    let protocol = std::fs::read_to_string(&protocol_path)
+        .map_err(|e| format!("Failed to load protocol from {}: {}", protocol_path.display(), e))?;
+
+    // Inject dynamic context into the prompt template (evolved policy)
+    let evolved_policy = prompt_template
         .replace("{current_ndcg:.4}", &format!("{:.4}", current_ndcg))
         .replace("{episode_num}", &(scratchpad.episodes.len() + 1).to_string())
         .replace("{episode_history}", &episode_history)
         .replace("{params_desc}", &params_desc)
         .replace("{failure_desc}", &failure_desc);
+
+    // Assemble final prompt: {protocol} + {evolved_policy} + {context}
+    // The protocol is immutable and defines the output format
+    // The evolved_policy contains Role, Policy, Heuristics, Style that L2 can evolve
+    // The context (episode_history, params, failures) is dynamically injected
+    let prompt = format!("{}\n\n{}", evolved_policy, protocol);
 
     let response = call_agent(agent, &prompt, model)?;
 
