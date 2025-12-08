@@ -233,11 +233,40 @@ fn run_join_mode(cli: &Cli) -> Result<()> {
 
     if cli.verbose {
         eprintln!("🔗 ripmap join mode");
-        eprintln!("📂 Scanning: {}", root.display());
+        eprintln!("📂 Root: {}", root.display());
     }
 
-    // Discover files
-    let all_files = find_source_files(&root, false)?;
+    // Discover files - respect input paths if provided
+    let all_files = if cli.files.is_empty() {
+        // No paths specified: scan entire root
+        if cli.verbose {
+            eprintln!("📂 Scanning entire directory");
+        }
+        find_source_files(&root, false)?
+    } else {
+        // Paths specified: expand each (files pass through, directories get scanned)
+        let mut files = Vec::new();
+        for input in &cli.files {
+            let path = std::path::Path::new(input);
+            let abs_path = if path.is_absolute() {
+                path.to_path_buf()
+            } else {
+                root.join(path)
+            };
+
+            if abs_path.is_file() {
+                files.push(abs_path);
+            } else if abs_path.is_dir() {
+                if cli.verbose {
+                    eprintln!("📂 Scanning: {}", abs_path.display());
+                }
+                files.extend(find_source_files(&abs_path, false)?);
+            } else {
+                eprintln!("⚠️  Skipping non-existent path: {}", input);
+            }
+        }
+        files
+    };
 
     // Filter by extension if specified
     let files: Vec<_> = if cli.extensions.is_empty() {

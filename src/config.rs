@@ -115,7 +115,11 @@ fn sparkle_banner(msg: &str, highlight: &str) {
         .collect();
     let suffix: String = (0..12)
         .rev()
-        .map(|i| colors[(i + 2) % colors.len()](&sparkle_chars[(i + 3) % sparkle_chars.len()].to_string()))
+        .map(|i| {
+            colors[(i + 2) % colors.len()](
+                &sparkle_chars[(i + 3) % sparkle_chars.len()].to_string(),
+            )
+        })
         .collect();
     eprintln!(
         "   {} {} use {} instead {}",
@@ -183,7 +187,8 @@ fn extract_mypy(v: &JsonValue) -> Option<ExtractedConfig> {
 fn extract_black(v: &JsonValue) -> Option<ExtractedConfig> {
     let black = v.get("tool")?.get("black")?;
     let cfg = ExtractedConfig {
-        include: json_string_array(black.get("include")).into_iter()
+        include: json_string_array(black.get("include"))
+            .into_iter()
             .chain(std::iter::once(black.get("include")?.as_str()?.to_string()))
             .filter(|s| !s.is_empty())
             .collect(),
@@ -292,7 +297,11 @@ fn extract_deno(v: &JsonValue) -> Option<ExtractedConfig> {
         exclude.extend(json_string_array(f.get("exclude")));
     }
 
-    let cfg = ExtractedConfig { include, exclude, ..Default::default() };
+    let cfg = ExtractedConfig {
+        include,
+        exclude,
+        ..Default::default()
+    };
     if cfg.is_empty() { None } else { Some(cfg) }
 }
 
@@ -344,38 +353,120 @@ fn toml_to_json(content: &str) -> Option<JsonValue> {
 
 /// Adapters for pyproject.toml (checked in order)
 const PYPROJECT_ADAPTERS: &[ToolAdapter] = &[
-    ToolAdapter { name: "ripmap", snark: None, extract: extract_ripmap },
-    ToolAdapter { name: "ty", snark: None, extract: extract_ty },
-    ToolAdapter { name: "ruff", snark: None, extract: extract_ruff },
+    ToolAdapter {
+        name: "ripmap",
+        snark: None,
+        extract: extract_ripmap,
+    },
+    ToolAdapter {
+        name: "ty",
+        snark: None,
+        extract: extract_ty,
+    },
+    ToolAdapter {
+        name: "ruff",
+        snark: None,
+        extract: extract_ruff,
+    },
     ToolAdapter {
         name: "pyright",
         snark: Some(|| sparkle_banner("pyright is now banned under international law.", "ty")),
-        extract: extract_pyright
+        extract: extract_pyright,
     },
-    ToolAdapter { name: "mypy", snark: None, extract: extract_mypy },
-    ToolAdapter { name: "black", snark: None, extract: extract_black },
-    ToolAdapter { name: "isort", snark: None, extract: extract_isort },
-    ToolAdapter { name: "pytest", snark: None, extract: extract_pytest },
+    ToolAdapter {
+        name: "mypy",
+        snark: None,
+        extract: extract_mypy,
+    },
+    ToolAdapter {
+        name: "black",
+        snark: None,
+        extract: extract_black,
+    },
+    ToolAdapter {
+        name: "isort",
+        snark: None,
+        extract: extract_isort,
+    },
+    ToolAdapter {
+        name: "pytest",
+        snark: None,
+        extract: extract_pytest,
+    },
 ];
 
 /// Adapters for package.json
 const PACKAGE_JSON_ADAPTERS: &[ToolAdapter] = &[
-    ToolAdapter { name: "ripmap", snark: None, extract: extract_pkg_ripmap },
-    ToolAdapter { name: "eslint", snark: None, extract: extract_pkg_eslint },
-    ToolAdapter { name: "prettier", snark: None, extract: extract_pkg_prettier },
+    ToolAdapter {
+        name: "ripmap",
+        snark: None,
+        extract: extract_pkg_ripmap,
+    },
+    ToolAdapter {
+        name: "eslint",
+        snark: None,
+        extract: extract_pkg_eslint,
+    },
+    ToolAdapter {
+        name: "prettier",
+        snark: None,
+        extract: extract_pkg_prettier,
+    },
 ];
 
 /// Config files to check (in priority order)
 const CONFIG_FILES: &[(&str, &[ToolAdapter])] = &[
-    ("ripmap.toml", &[]),  // Special case: direct config
+    ("ripmap.toml", &[]), // Special case: direct config
     ("pyproject.toml", PYPROJECT_ADAPTERS),
     ("package.json", PACKAGE_JSON_ADAPTERS),
-    ("tsconfig.json", &[ToolAdapter { name: "tsconfig", snark: None, extract: extract_tsconfig }]),
-    ("biome.json", &[ToolAdapter { name: "biome", snark: None, extract: extract_biome }]),
-    ("biome.jsonc", &[ToolAdapter { name: "biome", snark: None, extract: extract_biome }]),
-    ("deno.json", &[ToolAdapter { name: "deno", snark: None, extract: extract_deno }]),
-    ("deno.jsonc", &[ToolAdapter { name: "deno", snark: None, extract: extract_deno }]),
-    ("Cargo.toml", &[ToolAdapter { name: "cargo", snark: None, extract: extract_cargo }]),
+    (
+        "tsconfig.json",
+        &[ToolAdapter {
+            name: "tsconfig",
+            snark: None,
+            extract: extract_tsconfig,
+        }],
+    ),
+    (
+        "biome.json",
+        &[ToolAdapter {
+            name: "biome",
+            snark: None,
+            extract: extract_biome,
+        }],
+    ),
+    (
+        "biome.jsonc",
+        &[ToolAdapter {
+            name: "biome",
+            snark: None,
+            extract: extract_biome,
+        }],
+    ),
+    (
+        "deno.json",
+        &[ToolAdapter {
+            name: "deno",
+            snark: None,
+            extract: extract_deno,
+        }],
+    ),
+    (
+        "deno.jsonc",
+        &[ToolAdapter {
+            name: "deno",
+            snark: None,
+            extract: extract_deno,
+        }],
+    ),
+    (
+        "Cargo.toml",
+        &[ToolAdapter {
+            name: "cargo",
+            snark: None,
+            extract: extract_cargo,
+        }],
+    ),
 ];
 
 impl Config {
