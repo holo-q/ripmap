@@ -295,6 +295,92 @@ impl Promptgram {
     }
 }
 
+/// Diff two promptgrams section by section.
+///
+/// Returns a list of differences for L2 to understand what changed.
+/// This helps L2 reason about which mutations were effective.
+pub fn diff_prompts(a: &Promptgram, b: &Promptgram) -> Vec<PromptDiff> {
+    let mut diffs = Vec::new();
+
+    // Check all sections in A
+    for (name, section_a) in &a.sections {
+        match b.sections.get(name) {
+            Some(section_b) => {
+                if section_a.content != section_b.content {
+                    diffs.push(PromptDiff {
+                        section: name.clone(),
+                        diff_type: DiffType::Modified,
+                        before: Some(section_a.content.clone()),
+                        after: Some(section_b.content.clone()),
+                        lines_added: count_lines(&section_b.content).saturating_sub(count_lines(&section_a.content)),
+                        lines_removed: count_lines(&section_a.content).saturating_sub(count_lines(&section_b.content)),
+                    });
+                }
+            }
+            None => {
+                diffs.push(PromptDiff {
+                    section: name.clone(),
+                    diff_type: DiffType::Removed,
+                    before: Some(section_a.content.clone()),
+                    after: None,
+                    lines_added: 0,
+                    lines_removed: count_lines(&section_a.content),
+                });
+            }
+        }
+    }
+
+    // Check for sections in B but not in A
+    for (name, section_b) in &b.sections {
+        if !a.sections.contains_key(name) {
+            diffs.push(PromptDiff {
+                section: name.clone(),
+                diff_type: DiffType::Added,
+                before: None,
+                after: Some(section_b.content.clone()),
+                lines_added: count_lines(&section_b.content),
+                lines_removed: 0,
+            });
+        }
+    }
+
+    diffs
+}
+
+/// A difference between two promptgram sections.
+#[derive(Debug, Clone)]
+pub struct PromptDiff {
+    pub section: String,
+    pub diff_type: DiffType,
+    pub before: Option<String>,
+    pub after: Option<String>,
+    pub lines_added: usize,
+    pub lines_removed: usize,
+}
+
+impl PromptDiff {
+    /// Format as a compact summary string.
+    pub fn summary(&self) -> String {
+        match self.diff_type {
+            DiffType::Added => format!("[+{}] {} (+{} lines)", self.section, "added", self.lines_added),
+            DiffType::Removed => format!("[-{}] {} (-{} lines)", self.section, "removed", self.lines_removed),
+            DiffType::Modified => format!("[~{}] modified (+{}/-{})", self.section, self.lines_added, self.lines_removed),
+        }
+    }
+}
+
+/// Type of difference between sections.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiffType {
+    Added,
+    Removed,
+    Modified,
+}
+
+fn count_lines(s: &str) -> usize {
+    s.lines().count()
+}
+
 /// Create baseline inner promptgram (L1 v001).
 ///
 /// This is the seed promptgram - L2 will mutate it over time.

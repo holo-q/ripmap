@@ -217,6 +217,27 @@ pub trait MesaOptimizer {
     fn evaluate(&self, state: &Self::State) -> Result<(f64, Vec<Self::Observation>), String>;
 }
 
+/// Selection mode for choosing promptgram from population.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SelectionMode {
+    /// Always pick the best-performing promptgram
+    Best,
+    /// Randomly explore a non-best promptgram
+    Explore,
+    /// Pick the most recently created (newest mutations)
+    Recent,
+}
+
+impl SelectionMode {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SelectionMode::Best => "best",
+            SelectionMode::Explore => "explore",
+            SelectionMode::Recent => "recent",
+        }
+    }
+}
+
 /// Outer loop: wraps inner loop, evolves promptgrams.
 pub struct OuterLoop {
     /// Configuration for inner runs
@@ -227,25 +248,152 @@ pub struct OuterLoop {
 
     /// The meta-promptgram (P_outer) for L2 reasoning
     pub meta_promptgram: Promptgram,
+
+    /// Directory where evolved promptgrams are persisted
+    pub promptgram_dir: PathBuf,
 }
 
 impl OuterLoop {
     /// Create a new outer loop with default configuration.
     pub fn new() -> Self {
+        let promptgram_dir = PathBuf::from("training-outer/prompts/inner");
         OuterLoop {
             inner_config: OuterConfig::default(),
             population: vec![super::promptgram::baseline_promptgram()],
             meta_promptgram: create_meta_promptgram(),
+            promptgram_dir,
         }
+    }
+
+    /// Select a promptgram from the population.
+    ///
+    /// Selection strategy balances exploitation (best performers) with exploration
+    /// (trying newer or less-tested prompts). The exploration_quota in config
+    /// controls how often we explore vs exploit.
+    pub fn select_promptgram(
+        &self,
+        outer_scratchpad: &OuterScratchpad,
+    ) -> (Promptgram, SelectionMode) {
+        use rand::Rng;
+
+        if self.population.is_empty() {
+            panic!("Population is empty - cannot select promptgram");
+        }
+
+        if self.population.len() == 1 {
+            // Only one option
+            return (self.population[0].clone(), SelectionMode::Best);
+        }
+
+        let mut rng = rand::thread_rng();
+        let should_explore = rng.r#gen::<f64>() < self.inner_config.exploration_quota;
+
+        if should_explore {
+            // Exploration: pick from non-best candidates
+            // Prefer less-tested promptgrams or recent mutations
+            let best_id = &outer_scratchpad.best_prompt_id;
+            let candidates: Vec<&Promptgram> = self.population
+                .iter()
+                .filter(|p| &p.id != best_id)
+                .collect();
+
+            if candidates.is_empty() {
+                // All are "best" (only one promptgram evaluated so far)
+                return (self.population.last().unwrap().clone(), SelectionMode::Recent);
+            }
+
+            // Weight by recency and inverse run count
+            let weights: Vec<f64> = candidates.iter().map(|p| {
+                let stats = outer_scratchpad.promptgram_stats(&p.id);
+                let run_count = stats.map(|s| s.run_count).unwrap_or(0);
+                // Never-run prompts get high weight, heavily-run get low weight
+                1.0 / (run_count as f64 + 1.0)
+            }).collect();
+
+            let total: f64 = weights.iter().sum();
+            let mut pick = rng.r#gen::<f64>() * total;
+
+            for (i, w) in weights.iter().enumerate() {
+                pick -= w;
+                if pick <= 0.0 {
+                    return (candidates[i].clone(), SelectionMode::Explore);
+                }
+            }
+
+            // Fallback to last candidate
+            (candidates.last().unwrap().clone().clone(), SelectionMode::Explore)
+        } else {
+            // Exploitation: pick the best-performing promptgram
+            let best_id = &outer_scratchpad.best_prompt_id;
+            let best = self.population
+                .iter()
+                .find(|p| &p.id == best_id)
+                .or_else(|| self.population.first())
+                .unwrap();
+            (best.clone(), SelectionMode::Best)
+        }
+    }
+
+    /// Persist a promptgram to disk as markdown.
+    ///
+    /// Promptgrams are saved to `training-outer/prompts/inner/<id>.md`.
+    pub fn persist_promptgram(&self, promptgram: &Promptgram) -> Result<PathBuf, String> {
+        std::fs::create_dir_all(&self.promptgram_dir)
+            .map_err(|e| format!("Failed to create promptgram dir: {}", e))?;
+
+        let filename = format!("{}.md", promptgram.id);
+        let path = self.promptgram_dir.join(&filename);
+
+        std::fs::write(&path, promptgram.render())
+            .map_err(|e| format!("Failed to write promptgram: {}", e))?;
+
+        // Also save TOML metadata alongside
+        let meta_path = self.promptgram_dir.join(format!("{}.toml", promptgram.id));
+        promptgram.save(&meta_path)?;
+
+        Ok(path)
+    }
+
+    /// Load all promptgrams from disk into the population.
+    pub fn load_promptgrams(&mut self) -> Result<usize, String> {
+        if !self.promptgram_dir.exists() {
+            return Ok(0);
+        }
+
+        let mut loaded = 0;
+        for entry in std::fs::read_dir(&self.promptgram_dir)
+            .map_err(|e| format!("Failed to read promptgram dir: {}", e))?
+        {
+            let entry = entry.map_err(|e| format!("Failed to read dir entry: {}", e))?;
+            let path = entry.path();
+
+            // Load from TOML files (they have full metadata)
+            if path.extension().map(|e| e == "toml").unwrap_or(false) {
+                match Promptgram::load(&path) {
+                    Ok(pg) => {
+                        // Check if already in population
+                        if !self.population.iter().any(|p| p.id == pg.id) {
+                            self.population.push(pg);
+                            loaded += 1;
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Warning: Failed to load promptgram {:?}: {}", path, e);
+                    }
+                }
+            }
+        }
+
+        Ok(loaded)
     }
 
     /// Run one outer episode.
     ///
-    /// 1. Select a promptgram from population
+    /// 1. Select a promptgram from population (explore/exploit)
     /// 2. Run K inner episodes with that promptgram
     /// 3. Summarize the inner run
     /// 4. Invoke L2 to propose promptgram edits
-    /// 5. Update population
+    /// 5. Update population and persist new promptgrams
     pub fn run_outer_episode(
         &mut self,
         outer_step: usize,
@@ -254,10 +402,9 @@ impl OuterLoop {
     ) -> Result<OuterEpisodeSummary, String> {
         let episode_start = std::time::Instant::now();
 
-        // 1. Select promptgram (for now, just use first/best)
-        let promptgram = self.population.first()
-            .ok_or("No promptgrams in population")?
-            .clone();
+        // 1. Select promptgram using selection strategy
+        let (promptgram, selection_mode) = self.select_promptgram(outer_scratchpad);
+        println!("  📋 Selected promptgram: {} (mode: {})", promptgram.id, selection_mode.as_str());
 
         // 2. Create inner run config
         let inner_ctx = RunContext {
@@ -272,11 +419,11 @@ impl OuterLoop {
         // For Stage 0, we'll shell out to the existing binary
         let inner_result = self.run_inner_loop(&promptgram, &inner_ctx)?;
 
-        // 4. Summarize the run
+        // 4. Summarize the run (includes selection mode)
         let mut summary = self.summarize_inner_run(outer_step, &promptgram, &inner_result, &episode_start)?;
+        summary.selection_mode = selection_mode.as_str().to_string();
 
         // 5. Update scratchpad first (so L2 can see this episode)
-        outer_scratchpad.episodes.push(summary.clone());
         if summary.final_metrics.ndcg > outer_scratchpad.best_ndcg {
             outer_scratchpad.best_ndcg = summary.final_metrics.ndcg;
             outer_scratchpad.best_prompt_id = promptgram.id.clone();
@@ -306,30 +453,48 @@ impl OuterLoop {
                             if edit.target.is_empty() { "(new)" } else { &edit.target });
                     }
 
+                    // Track proposal in summary
+                    summary.proposal = Some(proposal.clone());
+
                     // Apply edits to create new promptgram
                     if !proposal.edits.is_empty() {
                         let new_id = format!("inner_v{:03}", self.population.len() + 1);
                         let mut new_promptgram = promptgram.fork(&new_id);
 
+                        let mut edits_applied = 0;
                         for edit in &proposal.edits {
                             if let Err(e) = new_promptgram.apply_edit(edit) {
                                 println!("     ⚠️ Edit failed: {}", e);
+                            } else {
+                                edits_applied += 1;
                             }
                         }
 
-                        // Add to population
-                        self.population.push(new_promptgram);
-                        println!("     ✓ Created new promptgram: {}", new_id);
-                    }
+                        if edits_applied > 0 {
+                            // Persist the new promptgram to disk
+                            match self.persist_promptgram(&new_promptgram) {
+                                Ok(path) => {
+                                    println!("     💾 Persisted to {:?}", path);
+                                }
+                                Err(e) => {
+                                    println!("     ⚠️ Failed to persist: {}", e);
+                                }
+                            }
 
-                    // Store proposal info in summary (for later analysis)
-                    // Note: We'd need to add a field for this, for now just log
+                            // Add to population
+                            self.population.push(new_promptgram);
+                            println!("     ✓ Created new promptgram: {}", new_id);
+                        }
+                    }
                 }
                 Err(e) => {
                     println!("  ⚠️ L2 reasoning failed: {}", e);
                 }
             }
         }
+
+        // 7. Push summary to scratchpad (after L2 proposal is attached)
+        outer_scratchpad.episodes.push(summary.clone());
 
         Ok(summary)
     }
@@ -488,6 +653,8 @@ impl OuterLoop {
             inner_episodes: result.episodes,
             duration_secs: start_time.elapsed().as_secs_f64(),
             timestamp: now,
+            proposal: None, // Will be set after L2 reasoning
+            selection_mode: String::new(), // Will be set by caller
         })
     }
 

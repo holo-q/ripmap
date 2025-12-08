@@ -139,6 +139,14 @@ pub struct OuterEpisodeSummary {
 
     /// Timestamp when this outer episode completed
     pub timestamp: i64,
+
+    /// L2 proposal that was made (if any) - tracks what L2 decided
+    #[serde(default)]
+    pub proposal: Option<OuterProposal>,
+
+    /// Selection mode that chose this promptgram (explore/exploit/best)
+    #[serde(default)]
+    pub selection_mode: String,
 }
 
 /// Core metrics for a run.
@@ -283,6 +291,107 @@ impl OuterScratchpad {
 
         last_ndcg < first_ndcg - threshold
     }
+
+    /// Search for failure patterns across all episodes.
+    ///
+    /// Returns episodes where the pattern appears in notable_failures or strategy_capsules.
+    /// L2 can use this to scavenge its own history for recurring issues.
+    pub fn search_failures(&self, pattern: &str) -> Vec<(usize, &OuterEpisodeSummary)> {
+        let pattern_lower = pattern.to_lowercase();
+        self.episodes
+            .iter()
+            .enumerate()
+            .filter(|(_, ep)| {
+                // Check notable failures
+                ep.notable_failures.iter().any(|f| f.to_lowercase().contains(&pattern_lower))
+                    // Check strategy capsules (sometimes failures appear here)
+                    || ep.strategy_capsules.iter().any(|c| c.to_lowercase().contains(&pattern_lower))
+                    // Check structural insights
+                    || ep.structural_insights.iter().any(|i| i.to_lowercase().contains(&pattern_lower))
+            })
+            .collect()
+    }
+
+    /// Get episodes that used a specific promptgram.
+    pub fn episodes_with_prompt(&self, prompt_id: &str) -> Vec<&OuterEpisodeSummary> {
+        self.episodes
+            .iter()
+            .filter(|ep| ep.prompt_id == prompt_id)
+            .collect()
+    }
+
+    /// Compute mean NDCG for a promptgram across all its runs.
+    pub fn promptgram_stats(&self, prompt_id: &str) -> Option<PromptgramStats> {
+        let episodes: Vec<_> = self.episodes_with_prompt(prompt_id);
+        if episodes.is_empty() {
+            return None;
+        }
+
+        let ndcgs: Vec<f64> = episodes.iter().map(|e| e.final_metrics.ndcg).collect();
+        let mean_ndcg = ndcgs.iter().sum::<f64>() / ndcgs.len() as f64;
+        let best_ndcg = ndcgs.iter().cloned().fold(0.0, f64::max);
+        let worst_ndcg = ndcgs.iter().cloned().fold(1.0, f64::min);
+
+        Some(PromptgramStats {
+            prompt_id: prompt_id.to_string(),
+            run_count: episodes.len(),
+            mean_ndcg,
+            best_ndcg,
+            worst_ndcg,
+            first_step: episodes.first().map(|e| e.outer_step).unwrap_or(0),
+            last_step: episodes.last().map(|e| e.outer_step).unwrap_or(0),
+        })
+    }
+
+    /// Get all unique promptgram IDs used so far.
+    pub fn unique_promptgrams(&self) -> Vec<String> {
+        let mut ids: Vec<String> = self.episodes
+            .iter()
+            .map(|e| e.prompt_id.clone())
+            .collect();
+        ids.sort();
+        ids.dedup();
+        ids
+    }
+
+    /// Find episodes where a specific meta-lever was extreme (>0.8 or <0.2).
+    ///
+    /// Useful for L2 to understand when certain strategies were tried.
+    pub fn extreme_lever_episodes(&self, lever: &str) -> Vec<(usize, f64, &OuterEpisodeSummary)> {
+        self.episodes
+            .iter()
+            .enumerate()
+            .filter_map(|(i, ep)| {
+                let ml = &ep.meta_levers_estimate;
+                let value = match lever {
+                    "structural_trust" => ml.structural_trust,
+                    "temporal_horizon" => ml.temporal_horizon,
+                    "exploration_bias" => ml.exploration_bias,
+                    "depth_sensitivity" => ml.depth_sensitivity,
+                    "hub_damping" => ml.hub_damping,
+                    "focus_locality" => ml.focus_locality,
+                    _ => return None,
+                };
+                if value > 0.8 || value < 0.2 {
+                    Some((i, value, ep))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+}
+
+/// Statistics for a promptgram's performance across runs.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromptgramStats {
+    pub prompt_id: String,
+    pub run_count: usize,
+    pub mean_ndcg: f64,
+    pub best_ndcg: f64,
+    pub worst_ndcg: f64,
+    pub first_step: usize,
+    pub last_step: usize,
 }
 
 /// Configuration for an outer loop run.
@@ -385,10 +494,40 @@ mod tests {
                 inner_episodes: 10,
                 duration_secs: 60.0,
                 timestamp: 0,
+                proposal: None,
+                selection_mode: "best".to_string(),
             });
         }
 
         assert!(pad.is_plateau(3, 0.01));
         assert!(!pad.is_collapse(3, 0.01));
+    }
+
+    #[test]
+    fn test_search_failures() {
+        let mut pad = OuterScratchpad::default();
+
+        pad.episodes.push(OuterEpisodeSummary {
+            outer_step: 1,
+            prompt_id: "v001".to_string(),
+            baseline_metrics: RunMetrics::default(),
+            final_metrics: RunMetrics::default(),
+            delta: RunMetrics::default(),
+            stability: StabilityMetrics::default(),
+            meta_levers_estimate: MetaLevers::default(),
+            strategy_capsules: vec!["boost was too high".to_string()],
+            notable_failures: vec!["depth penalty issue".to_string()],
+            structural_insights: vec![],
+            inner_episodes: 10,
+            duration_secs: 60.0,
+            timestamp: 0,
+            proposal: None,
+            selection_mode: "explore".to_string(),
+        });
+
+        // Search should find matches
+        assert_eq!(pad.search_failures("depth").len(), 1);
+        assert_eq!(pad.search_failures("boost").len(), 1);
+        assert_eq!(pad.search_failures("nonexistent").len(), 0);
     }
 }
