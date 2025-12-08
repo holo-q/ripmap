@@ -216,11 +216,36 @@ impl Config {
         // (but really, you should be using ty by now)
         if let Some(pyright) = tool.pyright {
             if pyright.include.is_some() || pyright.exclude.is_some() {
+                // Generate schizo sparkle prefix algorithmically
+                let sparkle_chars = ['~', '*', '`', '.', '+', '^'];
+                let colors = [
+                    |s: &str| s.bright_magenta().to_string(),
+                    |s: &str| s.bright_cyan().to_string(),
+                    |s: &str| s.bright_yellow().to_string(),
+                    |s: &str| s.bright_green().to_string(),
+                    |s: &str| s.bright_red().to_string(),
+                    |s: &str| s.bright_blue().to_string(),
+                ];
+                let prefix: String = (0..12)
+                    .map(|i| {
+                        let c = sparkle_chars[i % sparkle_chars.len()];
+                        colors[i % colors.len()](&c.to_string())
+                    })
+                    .collect();
+                let suffix: String = (0..12)
+                    .rev()
+                    .map(|i| {
+                        let c = sparkle_chars[(i + 3) % sparkle_chars.len()];
+                        colors[(i + 2) % colors.len()](&c.to_string())
+                    })
+                    .collect();
+
                 eprintln!(
-                    "   {} pyright is now banned under international law. use {} instead {}",
-                    "~*~".magenta(),
-                    "ty".cyan().bold(),
-                    "~*~".magenta()
+                    "   {} {} is now banned under international law. use {} instead {}",
+                    prefix,
+                    "pyright".bright_red().strikethrough(),
+                    "ty".bright_cyan().bold().underline(),
+                    suffix
                 );
 
                 return Some(Self {
