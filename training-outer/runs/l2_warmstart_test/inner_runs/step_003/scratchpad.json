@@ -1,0 +1,371 @@
+{
+  "episodes": [
+    {
+      "timestamp": 1765186657,
+      "duration_secs": 44.279737937,
+      "failures": [
+        {
+          "query": "crates/printer/src/util.rs",
+          "seed_file": "crates/printer/src/util.rs",
+          "expected_top": [
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "src/distractor_5.rs",
+            "src/distractor_0.rs",
+            "lib/mod_3.rs",
+            "src/utils/helper_6.rs",
+            "lib/mod_8.rs"
+          ],
+          "ndcg": 0.3010299956639812,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        }
+      ],
+      "params": {
+        "pagerank_alpha": 0.85,
+        "pagerank_chat_multiplier": 100.0,
+        "depth_weight_root": 1.0,
+        "depth_weight_moderate": 0.5,
+        "depth_weight_deep": 0.1,
+        "depth_weight_vendor": 0.01,
+        "boost_mentioned_ident": 10.0,
+        "boost_mentioned_file": 5.0,
+        "boost_chat_file": 20.0,
+        "boost_temporal_coupling": 3.0,
+        "boost_focus_expansion": 5.0,
+        "git_recency_decay_days": 30.0,
+        "git_recency_max_boost": 10.0,
+        "git_churn_threshold": 5.0,
+        "git_churn_max_boost": 6.0,
+        "focus_decay": 0.5,
+        "focus_max_hops": 2.0
+      },
+      "ndcg_before": 0.8593831821555974,
+      "reasoning": "Now I understand the context. This is a meta-optimization prompt for ripmap's inner optimizer. You're asking me to play the role of the L2 optimizer analyzing the failure and proposing parameter changes.\n\nLet me analyze and respond:\n\n---\n\n\n\n**Analyzing the failure case:**\n- Query: `crates/printer/src/util.rs` (seed file)\n- Expected: `tests/regression.rs`\n- Actual: All distractor files (`distractor_5.rs`, `distractor_0.rs`, `mod_3.rs`, `helper_6.rs`, `mod_8.rs`)\n- NDCG: 0.301 (very poor)\n- Context: Debug intent\n\n**The problem is clear:** The ranking system is completely failing to surface the test file (`tests/regression.rs`) that should logically be associated with a utility file in printer.\n\n**Why are distractors winning?**\n1. The distractors are likely in shallower paths (root `src/` vs nested `crates/printer/src/`)\n2. `depth_weight_root: 1.00` vs `depth_weight_deep: 0.10` - 10x penalty on deep files\n3. The seed file is at depth 3 (`crates/printer/src/`), so its structural connections are penalized\n\n**The test connection is being missed because:**\n1. `tests/regression.rs` likely references `crates/printer/src/util.rs` but this reference signal is weak\n2. Debug intent should prioritize test files, but there's no intent-specific boost\n3. `boost_mentioned_ident: 10.0` may not be triggering if the util functions aren't explicitly named in the test\n\n**Key insight:** In a curated 100-file test repo, the distractors are deliberately placed to test if the ranker can find semantic connections over structural proximity. Current params favor structural locality too heavily.\n\n**Parameter interactions:**\n- `depth_weight_*` heavily penalizes the expected result path\n- `pagerank_alpha: 0.85` is high (global diffusion), but if the graph doesn't connect util→regression.rs strongly, it won't help\n- `boost_mentioned_file: 5.0` might be too weak to overcome depth penalties\n- No coupling signal (`boost_temporal_coupling`) would help here if they co-change\n\n**Proposed direction:** \n- Reduce depth penalties (the 10:1 ratio between root and deep is too aggressive)\n- Increase identifier/reference boosting to surface semantic connections\n- The Debug intent hints tests matter more - but we can't add intent-specific params, so we work with what we have\n\n---",
+      "strategy_capsule": "Flatten depth penalties, amplify semantic reference signals to overcome structural locality bias in monorepo-like structures",
+      "proposed_changes": {},
+      "param_interactions": [
+        "depth_weight_deep × boost_mentioned_ident: 0.10 × 10.0 = effective 1.0, while root distractors get 1.0 baseline - no discrimination",
+        "pagerank_alpha=0.85 spreads signal too globally when graph is sparse on util→test edges",
+        "boost_mentioned_file=5.0 is weaker than depth penalty differential (10x)"
+      ],
+      "structural_insights": [
+        "Curated test repos with distractors test semantic over structural - current params are structure-biased",
+        "Debug intent implies test relevance but we lack intent-specific parameter routing",
+        "The 'crates/' monorepo pattern needs flatter depth curves - most real connections cross depth boundaries"
+      ],
+      "confidence": 0.65
+    },
+    {
+      "timestamp": 1765186696,
+      "duration_secs": 39.656557302,
+      "failures": [
+        {
+          "query": "crates/core/flags/defs.rs",
+          "seed_file": "crates/core/flags/defs.rs",
+          "expected_top": [
+            "tests/binary.rs",
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "lib/mod_3.rs",
+            "src/utils/helper_1.rs",
+            "src/distractor_0.rs",
+            "tests/binary.rs",
+            "src/core/internal/deep_2.rs"
+          ],
+          "ndcg": 0.4339146686577629,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/core/flags/defs.rs",
+          "seed_file": "crates/core/flags/defs.rs",
+          "expected_top": [
+            "crates/core/flags/hiargs.rs",
+            "crates/printer/src/standard.rs",
+            "crates/searcher/src/searcher/core.rs",
+            "crates/searcher/src/searcher/glue.rs",
+            "crates/searcher/src/searcher/mod.rs"
+          ],
+          "actual_top": [
+            "src/core/internal/deep_7.rs",
+            "tests/regression.rs",
+            "src/distractor_15.rs",
+            "src/utils/helper_16.rs",
+            "tests/test_9.rs"
+          ],
+          "ndcg": 0.4415251578033292,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/printer/src/lib.rs",
+          "seed_file": "crates/printer/src/lib.rs",
+          "expected_top": [
+            "crates/core/flags/defs.rs",
+            "crates/printer/src/hyperlink/aliases.rs",
+            "crates/printer/src/hyperlink/mod.rs",
+            "crates/printer/src/hyperlink_aliases.rs"
+          ],
+          "actual_top": [
+            "crates/core/flags/defs.rs",
+            "crates/printer/src/hyperlink/mod.rs",
+            "src/distractor_10.rs",
+            "lib/mod_8.rs",
+            "src/utils/helper_6.rs"
+          ],
+          "ndcg": 0.4908325066482894,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        }
+      ],
+      "params": {
+        "pagerank_alpha": 0.85,
+        "pagerank_chat_multiplier": 100.0,
+        "depth_weight_root": 1.0,
+        "depth_weight_moderate": 0.5,
+        "depth_weight_deep": 0.1,
+        "depth_weight_vendor": 0.01,
+        "boost_mentioned_ident": 10.0,
+        "boost_mentioned_file": 5.0,
+        "boost_chat_file": 20.0,
+        "boost_temporal_coupling": 3.0,
+        "boost_focus_expansion": 5.0,
+        "git_recency_decay_days": 30.0,
+        "git_recency_max_boost": 10.0,
+        "git_churn_threshold": 5.0,
+        "git_churn_max_boost": 6.0,
+        "focus_decay": 0.5,
+        "focus_max_hops": 2.0
+      },
+      "ndcg_before": 0.860959742094406,
+      "reasoning": "Now I understand the context. This is an inner optimizer prompt for a meta-learning system training ripmap's ranking parameters. The prompt is asking me to analyze the failures and propose parameter changes. Let me analyze the situation:\n\n**REASONING:**\n\nLooking at the failures:\n\n1. **All failures are on a curated test repo (100 files)** - This is designed with distractors to test semantic over structural signals. The key insight mentions \"current params are structure-biased.\"\n\n2. **Failure pattern analysis:**\n   - Failure 1 & 2: Query is `crates/core/flags/defs.rs`, but actual top files are generic distractors like `lib/mod_3.rs`, `src/distractor_0.rs`, etc. The expected files are either tests (Failure 1) or semantically related files in crates/ (Failure 2).\n   - Failure 3: Query is `crates/printer/src/lib.rs`, it correctly gets `crates/core/flags/defs.rs` and `crates/printer/src/hyperlink/mod.rs`, but then gets distractors.\n\n3. **The core problem:** Distractors (`src/distractor_*`, `lib/mod_*`, `src/utils/helper_*`) are outranking semantically related files. This suggests:\n   - Depth penalties are working against the `crates/` monorepo structure (as noted in insights)\n   - PageRank is spreading too much signal to unrelated files\n   - The semantic/reference signals (`boost_mentioned_ident`, `boost_mentioned_file`) aren't strong enough to overcome structural noise\n\n4. **Episode 1 strategy was:** \"Flatten depth penalties, amplify semantic reference signals to overcome structural locality bias\" - This is the right direction but the improvements may not have been aggressive enough.\n\n5. **Current trajectory:** E1: 0.859 → E2: 0.861 = slight improvement (+0.002). We're moving in the right direction but slowly.\n\n**Key interactions:**\n- `depth_weight_root: 1.0` vs `depth_weight_moderate: 0.5` vs `depth_weight_deep: 0.1` creates a 10x penalty for deep files - catastrophic for `crates/` structure where everything is \"deep\"\n- `pagerank_alpha: 0.85` is standard, but with weak personalization the random jumps spread to distractors\n- `boost_focus_expansion: 5.0` may be too weak when distractors have similar depth\n\n**Proposed changes:**\n1. **Flatten depth curve more aggressively** - The 10x penalty from root to deep is killing monorepo performance\n2. **Increase semantic reference boosts** - Need to overcome the structural noise\n3. **Lower alpha slightly** - More personalization stickiness to fight distractor spread\n4. **Increase focus expansion** - Better leverage the semantic query matching\n\n```json",
+      "strategy_capsule": "Aggressive depth flattening + semantic boost amplification to drown distractor noise",
+      "proposed_changes": {},
+      "param_interactions": [
+        "depth_weight_deep vs crates/ structure - 0.1 weight devastates deep monorepo files",
+        "pagerank_alpha vs distractor density - high alpha spreads signal to noise",
+        "boost_mentioned_ident vs depth penalties - boosts can't overcome 10x depth disadvantage"
+      ],
+      "structural_insights": [
+        "Curated repos with distractors expose structure-bias - need semantic-first ranking",
+        "crates/ pattern has minimum 3-4 depth levels - current 0.1 deep weight is punitive",
+        "Distractor files at src/*, lib/* benefit from moderate depth while semantic targets suffer at deep levels"
+      ],
+      "confidence": 0.75
+    },
+    {
+      "timestamp": 1765186733,
+      "duration_secs": 36.228154,
+      "failures": [
+        {
+          "query": "crates/core/flags/hiargs.rs",
+          "seed_file": "crates/core/flags/hiargs.rs",
+          "expected_top": [
+            "crates/ignore/src/dir.rs",
+            "crates/ignore/src/gitignore.rs",
+            "crates/ignore/src/walk.rs",
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "tests/test_9.rs",
+            "src/utils/helper_11.rs",
+            "src/core/internal/deep_2.rs",
+            "src/core/internal/deep_7.rs",
+            "crates/ignore/src/gitignore.rs"
+          ],
+          "ndcg": 0.36167418351239056,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/ignore/src/walk.rs",
+          "seed_file": "crates/ignore/src/walk.rs",
+          "expected_top": [
+            "crates/core/flags/hiargs.rs",
+            "crates/ignore/src/dir.rs",
+            "crates/ignore/src/gitignore.rs",
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "crates/core/flags/hiargs.rs",
+            "src/utils/helper_1.rs",
+            "lib/mod_3.rs",
+            "crates/ignore/src/dir.rs",
+            "src/core/internal/deep_7.rs"
+          ],
+          "ndcg": 0.4744390936001332,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/printer/src/json.rs",
+          "seed_file": "crates/printer/src/json.rs",
+          "expected_top": [
+            "crates/core/flags/hiargs.rs",
+            "crates/printer/src/summary.rs"
+          ],
+          "actual_top": [
+            "src/distractor_5.rs",
+            "tests/test_4.rs",
+            "crates/core/flags/hiargs.rs",
+            "lib/mod_3.rs",
+            "crates/printer/src/summary.rs"
+          ],
+          "ndcg": 0.45424360534547853,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/printer/src/summary.rs",
+          "seed_file": "crates/printer/src/summary.rs",
+          "expected_top": [
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "src/distractor_0.rs",
+            "lib/mod_8.rs",
+            "src/utils/helper_6.rs",
+            "tests/regression.rs",
+            "tests/test_4.rs"
+          ],
+          "ndcg": 0.43067655807339306,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/printer/src/standard.rs",
+          "seed_file": "crates/printer/src/standard.rs",
+          "expected_top": [
+            "crates/core/flags/defs.rs",
+            "crates/core/flags/hiargs.rs",
+            "crates/searcher/src/searcher/core.rs",
+            "crates/searcher/src/searcher/glue.rs",
+            "crates/searcher/src/searcher/mod.rs"
+          ],
+          "actual_top": [
+            "src/distractor_5.rs",
+            "tests/test_14.rs",
+            "crates/searcher/src/searcher/core.rs",
+            "tests/test_4.rs",
+            "src/distractor_15.rs"
+          ],
+          "ndcg": 0.3133040251627179,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/core/flags/doc/man.rs",
+          "seed_file": "crates/core/flags/doc/man.rs",
+          "expected_top": [
+            "crates/core/flags/defs.rs"
+          ],
+          "actual_top": [
+            "tests/test_4.rs",
+            "lib/mod_3.rs",
+            "src/utils/helper_6.rs",
+            "tests/test_9.rs",
+            "src/distractor_0.rs"
+          ],
+          "ndcg": 0.0,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/printer/src/color.rs",
+          "seed_file": "crates/printer/src/color.rs",
+          "expected_top": [
+            "crates/core/flags/defs.rs",
+            "crates/printer/src/standard.rs"
+          ],
+          "actual_top": [
+            "src/core/internal/deep_2.rs",
+            "src/distractor_0.rs",
+            "crates/core/flags/defs.rs",
+            "crates/printer/src/standard.rs",
+            "src/distractor_5.rs"
+          ],
+          "ndcg": 0.4916093370300506,
+          "commit_context": "intent: Extend",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        }
+      ],
+      "params": {
+        "pagerank_alpha": 0.85,
+        "pagerank_chat_multiplier": 100.0,
+        "depth_weight_root": 1.0,
+        "depth_weight_moderate": 0.5,
+        "depth_weight_deep": 0.1,
+        "depth_weight_vendor": 0.01,
+        "boost_mentioned_ident": 10.0,
+        "boost_mentioned_file": 5.0,
+        "boost_chat_file": 20.0,
+        "boost_temporal_coupling": 3.0,
+        "boost_focus_expansion": 5.0,
+        "git_recency_decay_days": 30.0,
+        "git_recency_max_boost": 10.0,
+        "git_churn_threshold": 5.0,
+        "git_churn_max_boost": 6.0,
+        "focus_decay": 0.5,
+        "focus_max_hops": 2.0
+      },
+      "ndcg_before": 0.8600336442457613,
+      "reasoning": "Now I understand the context. This is the inner optimizer prompt that proposes parameter changes during your L2 training loop for ripmap's ranking system. Looking at this failure analysis:\n\n****\n\nLooking at the trajectory: NDCG is plateauing around 0.86 (E1: 0.859 → E2: 0.861 → E3: 0.860). The previous \"aggressive depth flattening + semantic boost amplification\" strategy moved in the right direction but didn't solve the core problem.\n\n**Key failure patterns:**\n\n1. **Distractor dominance**: In all 5 failures, `src/distractor_*.rs`, `src/utils/helper_*.rs`, `tests/test_*.rs` files are ranking above semantic targets. These shallow files are winning despite depth flattening attempts.\n\n2. **The monorepo depth problem**: All expected files are in `crates/` which has minimum depth 4 (crates/X/src/Y.rs). With `depth_weight_deep: 0.10`, these are still being penalized 10x compared to root files.\n\n3. **Parameter interaction problem**: \n   - `depth_weight_root: 1.00` gives `src/*` files maximum weight\n   - `depth_weight_deep: 0.10` punishes the `crates/` files we actually want\n   - High `boost_chat_file: 20.0` and `boost_mentioned_file: 5.0` can't overcome this 10x structural penalty\n\n4. **Semantic signals aren't propagating**: The PageRank should be connecting `crates/ignore/src/*.rs` files to each other via cross-references, but structural locality bias overwhelms this signal.\n\n**The key insight**: We're trying to fix a structural bias problem by boosting semantic signals, but the depth penalty creates a floor that semantic signals can't overcome. We need to either:\n- Make depth penalties much flatter (near-uniform across depths)\n- OR dramatically increase semantic/reference boosts to overcome structural penalty\n\n**",
+      "strategy_capsule": "Near-uniform depth weights + aggressive PageRank alpha for global semantic flow",
+      "proposed_changes": {},
+      "param_interactions": [
+        "depth_weight_deep (0.1) * pagerank creates insurmountable penalty floor for crates/ files",
+        "High pagerank_alpha (0.85) should globalize but depth weighting applies before PageRank",
+        "boost_mentioned_ident (10x) can't overcome depth_weight_root/depth_weight_deep (10x) ratio"
+      ],
+      "structural_insights": [
+        "The curated repo has intentional shallow distractors testing whether semantic signals can override structural locality",
+        "Near-uniform depth weights (1.0/0.85/0.70) should let PageRank's semantic edges determine ranking",
+        "Higher alpha (0.92) increases random jumps, spreading influence to semantically related but structurally distant files",
+        "Temporal coupling boost increase may help when files co-change across crates/"
+      ],
+      "confidence": 0.65
+    }
+  ],
+  "param_interactions": [
+    "depth_weight_deep × boost_mentioned_ident: 0.10 × 10.0 = effective 1.0, while root distractors get 1.0 baseline - no discrimination",
+    "pagerank_alpha=0.85 spreads signal too globally when graph is sparse on util→test edges",
+    "boost_mentioned_file=5.0 is weaker than depth penalty differential (10x)",
+    "depth_weight_deep vs crates/ structure - 0.1 weight devastates deep monorepo files",
+    "pagerank_alpha vs distractor density - high alpha spreads signal to noise",
+    "boost_mentioned_ident vs depth penalties - boosts can't overcome 10x depth disadvantage",
+    "depth_weight_deep (0.1) * pagerank creates insurmountable penalty floor for crates/ files",
+    "High pagerank_alpha (0.85) should globalize but depth weighting applies before PageRank",
+    "boost_mentioned_ident (10x) can't overcome depth_weight_root/depth_weight_deep (10x) ratio"
+  ],
+  "failure_patterns": [],
+  "success_patterns": [],
+  "structural_proposals": [
+    "Curated test repos with distractors test semantic over structural - current params are structure-biased",
+    "Debug intent implies test relevance but we lack intent-specific parameter routing",
+    "The 'crates/' monorepo pattern needs flatter depth curves - most real connections cross depth boundaries",
+    "Curated repos with distractors expose structure-bias - need semantic-first ranking",
+    "crates/ pattern has minimum 3-4 depth levels - current 0.1 deep weight is punitive",
+    "Distractor files at src/*, lib/* benefit from moderate depth while semantic targets suffer at deep levels",
+    "The curated repo has intentional shallow distractors testing whether semantic signals can override structural locality",
+    "Near-uniform depth weights (1.0/0.85/0.70) should let PageRank's semantic edges determine ranking",
+    "Higher alpha (0.92) increases random jumps, spreading influence to semantically related but structurally distant files",
+    "Temporal coupling boost increase may help when files co-change across crates/"
+  ],
+  "presets": {},
+  "heuristics": [],
+  "warnings": []
+}

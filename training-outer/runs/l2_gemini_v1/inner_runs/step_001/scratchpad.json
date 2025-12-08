@@ -1,0 +1,423 @@
+{
+  "episodes": [
+    {
+      "timestamp": 1765176301,
+      "duration_secs": 48.331461371,
+      "failures": [
+        {
+          "query": "crates/ignore/src/walk.rs",
+          "seed_file": "crates/ignore/src/walk.rs",
+          "expected_top": [
+            "crates/core/flags/hiargs.rs",
+            "crates/ignore/src/dir.rs",
+            "crates/ignore/src/gitignore.rs",
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "crates/core/flags/hiargs.rs",
+            "src/utils/helper_1.rs",
+            "src/distractor_5.rs",
+            "src/distractor_10.rs",
+            "crates/ignore/src/dir.rs"
+          ],
+          "ndcg": 0.4519004935913775,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "tests/regression.rs",
+          "seed_file": "tests/regression.rs",
+          "expected_top": [
+            "crates/printer/src/util.rs"
+          ],
+          "actual_top": [
+            "tests/test_4.rs",
+            "src/utils/helper_6.rs",
+            "src/distractor_5.rs",
+            "src/core/internal/deep_7.rs",
+            "crates/printer/src/util.rs"
+          ],
+          "ndcg": 0.3868528072345416,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/ignore/src/overrides.rs",
+          "seed_file": "crates/ignore/src/overrides.rs",
+          "expected_top": [
+            "crates/globset/src/glob.rs",
+            "crates/ignore/src/gitignore.rs",
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "src/distractor_0.rs",
+            "tests/regression.rs",
+            "crates/ignore/src/gitignore.rs",
+            "lib/mod_3.rs",
+            "lib/mod_8.rs"
+          ],
+          "ndcg": 0.45140190199646896,
+          "commit_context": "intent: Extend",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/core/flags/defs.rs",
+          "seed_file": "crates/core/flags/defs.rs",
+          "expected_top": [
+            "crates/core/flags/doc/man.rs"
+          ],
+          "actual_top": [
+            "src/utils/helper_6.rs",
+            "src/distractor_0.rs",
+            "lib/mod_8.rs",
+            "lib/mod_3.rs",
+            "src/utils/helper_1.rs"
+          ],
+          "ndcg": 0.0,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/printer/src/hyperlink/aliases.rs",
+          "seed_file": "crates/printer/src/hyperlink/aliases.rs",
+          "expected_top": [
+            "crates/core/flags/defs.rs",
+            "crates/printer/src/hyperlink/mod.rs",
+            "crates/printer/src/hyperlink_aliases.rs",
+            "crates/printer/src/lib.rs"
+          ],
+          "actual_top": [
+            "src/distractor_10.rs",
+            "src/distractor_0.rs",
+            "tests/test_4.rs",
+            "crates/printer/src/hyperlink_aliases.rs",
+            "crates/printer/src/hyperlink/mod.rs"
+          ],
+          "ndcg": 0.4525359838583152,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        }
+      ],
+      "params": {
+        "pagerank_alpha": 0.85,
+        "pagerank_chat_multiplier": 100.0,
+        "depth_weight_root": 1.0,
+        "depth_weight_moderate": 0.5,
+        "depth_weight_deep": 0.1,
+        "depth_weight_vendor": 0.01,
+        "boost_mentioned_ident": 10.0,
+        "boost_mentioned_file": 5.0,
+        "boost_chat_file": 20.0,
+        "boost_temporal_coupling": 3.0,
+        "boost_focus_expansion": 5.0,
+        "git_recency_decay_days": 30.0,
+        "git_recency_max_boost": 10.0,
+        "git_churn_threshold": 5.0,
+        "git_churn_max_boost": 6.0,
+        "focus_decay": 0.5,
+        "focus_max_hops": 2.0
+      },
+      "ndcg_before": 0.8292373136117808,
+      "reasoning": "Looking at this optimization task, I need to analyze the failures and propose parameter changes. Let me examine the patterns:\n\n\n\n**Episode 1 Analysis - First Episode, Cold Start**\n\nThis is the initial episode with NDCG 0.8292 - a reasonable baseline but with clear room for improvement.\n\n**Failure Pattern Analysis:**\n\n1. **Distractor Pollution** - All 5 failures show distractors (`src/distractor_*.rs`, `src/utils/helper_*.rs`, `lib/mod_*.rs`, `tests/test_*.rs`) ranking above expected files. This is a synthetic \"curated\" repo (100 files) with injected noise files.\n\n2. **Structural Signal Loss** - In Failure 4 (`crates/core/flags/defs.rs` → expected `crates/core/flags/doc/man.rs`), NDCG=0.000. The expected file is in a sibling directory (`flags/doc/`) but ranks below random distractors. The structural relationship (same crate, same module hierarchy) isn't being captured.\n\n3. **Cross-Crate Blindness** - Failure 1 & 2 involve `crates/ignore/` needing to surface related files in `crates/printer/` and `crates/core/`. The graph connection exists (these are real ripgrep crates with cross-crate dependencies) but distractors drown it out.\n\n4. **Depth Penalty Mismatch** - The `crates/` structure has files at depth 4+ (`crates/ignore/src/walk.rs`). Current `depth_weight_moderate=0.5` and `depth_weight_deep=0.1` may be penalizing the legitimate crate structure while not penalizing the shallow distractors enough.\n\n**Parameter Interaction Hypothesis:**\n\n- `boost_chat_file=20.0` is high, but irrelevant here (no chat context in these cases)\n- `boost_mentioned_ident=10.0` and `boost_mentioned_file=5.0` could be insufficient when distractors exist\n- `depth_weight_vendor=0.01` is good for vendor exclusion but doesn't help with distractor files that aren't in vendor paths\n- The PageRank `alpha=0.85` is standard but with `pagerank_chat_multiplier=100` (irrelevant for seed-only queries)\n\n**Key Insight:** The distractors likely have LOW PageRank (they're not called by anything meaningful) but they're somehow ranking high. This means either:\n1. The base personalization weight is too strong relative to graph signal\n2. Depth penalties aren't discriminating properly between legitimate deep files and shallow noise\n3. Focus expansion (`boost_focus_expansion=5.0`) might be pulling in wrong neighbors\n\n**Proposed Direction:**\n\n1. **Increase depth penalties for shallow distractors** - But wait, the distractors ARE shallow (`src/distractor_*.rs`). Current `depth_weight_root=1.0` gives them MAXIMUM weight. This is backwards!\n\n2. **Re-examine depth semantics** - In a monorepo with `crates/*/src/` structure, root-level `src/` files should actually be LESS trusted than `crates/*/src/` files. The depth heuristic assumes shallow=important, but that's wrong for these repos.\n\n3. **Boost temporal coupling** - Real files that change together should surface. `boost_temporal_coupling=3.0` might be too weak.\n\n4. **Consider git recency** - Distractors might have recent commits (test setup) while real code is older. Need to verify if recency boost is helping or hurting.\n\n**Conservative First Move:**\nSince this is episode 1, make targeted adjustments:\n- Reduce `depth_weight_root` - stop rewarding shallow files so much\n- Increase `boost_temporal_coupling` - trust git history more\n- Slightly increase `boost_mentioned_file` - when a file is mentioned, trust that signal more",
+      "strategy_capsule": "Reduce root-depth privilege; trust git coupling more; penalize orphan shallow files",
+      "proposed_changes": {},
+      "param_interactions": [
+        "depth_weight_root vs depth_weight_moderate: Root=1.0 rewards src/distractor_*.rs over crates/*/src/*.rs at moderate depth",
+        "boost_temporal_coupling vs pagerank: Weak coupling (3.0) can't overcome noisy graph signal",
+        "focus_expansion vs distractor density: Expansion may pull in neighboring distractors"
+      ],
+      "structural_insights": [
+        "Curated test repo has intentional distractors at root level - depth heuristic inverted",
+        "Cross-crate relationships (ignore→printer, core→flags/doc) need stronger structural linking",
+        "NDCG=0.000 on Failure 4 indicates complete signal loss for sibling-directory relationships"
+      ],
+      "confidence": 0.65
+    },
+    {
+      "timestamp": 1765176351,
+      "duration_secs": 49.504897995,
+      "failures": [
+        {
+          "query": "tests/regression.rs",
+          "seed_file": "tests/regression.rs",
+          "expected_top": [
+            "crates/printer/src/util.rs"
+          ],
+          "actual_top": [
+            "tests/test_4.rs",
+            "src/utils/helper_1.rs",
+            "src/core/internal/deep_7.rs",
+            "crates/printer/src/util.rs",
+            "src/utils/helper_6.rs"
+          ],
+          "ndcg": 0.4306765580733931,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/printer/src/util.rs",
+          "seed_file": "crates/printer/src/util.rs",
+          "expected_top": [
+            "crates/printer/src/standard.rs"
+          ],
+          "actual_top": [
+            "lib/mod_3.rs",
+            "src/distractor_5.rs",
+            "lib/mod_8.rs",
+            "src/core/internal/deep_7.rs",
+            "crates/printer/src/standard.rs"
+          ],
+          "ndcg": 0.38685280723454163,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/printer/src/color.rs",
+          "seed_file": "crates/printer/src/color.rs",
+          "expected_top": [
+            "crates/core/flags/defs.rs",
+            "crates/printer/src/standard.rs"
+          ],
+          "actual_top": [
+            "src/utils/helper_1.rs",
+            "src/distractor_5.rs",
+            "src/distractor_0.rs",
+            "crates/printer/src/standard.rs",
+            "src/core/internal/deep_2.rs"
+          ],
+          "ndcg": 0.3581448301153981,
+          "commit_context": "intent: Extend",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        }
+      ],
+      "params": {
+        "pagerank_alpha": 0.85,
+        "pagerank_chat_multiplier": 100.0,
+        "depth_weight_root": 1.0,
+        "depth_weight_moderate": 0.5,
+        "depth_weight_deep": 0.1,
+        "depth_weight_vendor": 0.01,
+        "boost_mentioned_ident": 10.0,
+        "boost_mentioned_file": 5.0,
+        "boost_chat_file": 20.0,
+        "boost_temporal_coupling": 3.0,
+        "boost_focus_expansion": 5.0,
+        "git_recency_decay_days": 30.0,
+        "git_recency_max_boost": 10.0,
+        "git_churn_threshold": 5.0,
+        "git_churn_max_boost": 6.0,
+        "focus_decay": 0.5,
+        "focus_max_hops": 2.0
+      },
+      "ndcg_before": 0.8257093746670318,
+      "reasoning": "Now let me analyze the inner optimizer training problem. Looking at this systematically:\n\n****\n\n**Trajectory Analysis:**\n- E1 → E2: NDCG dropped from 0.829 → 0.8257 (≈0.4% decline)\n- This is mild degradation but within noise margin\n- E1 strategy was: \"Reduce root-depth privilege; trust git coupling more; penalize orphan shallow files\"\n\n**Failure Pattern Analysis:**\n\nAll 3 failures share a pattern: files in `crates/printer/src/` and `crates/core/` are expected but ranked poorly. The actual top files are dominated by:\n- `tests/test_*.rs` - shallow root-level test files\n- `src/utils/helper_*.rs` - utility files \n- `src/distractor_*.rs` - intentional distractors at root\n- `lib/mod_*.rs` - library modules\n\n**Key Observations:**\n\n1. **The curated repo problem**: This is a synthetic test repo with intentional distractors. The previous strategy to \"reduce root-depth privilege\" may have been correct in direction but insufficient in magnitude.\n\n2. **Cross-crate blindness**: When querying `crates/printer/src/util.rs`, the expected file `crates/printer/src/standard.rs` is in the same crate subdirectory but ranks 5th. The system is not leveraging directory locality enough.\n\n3. **Structural signals missing**: The failures suggest the system relies too heavily on global signals (PageRank, depth) and not enough on local structural proximity (same directory, same crate).\n\n4. **Current depth weights may be inverted for monorepo**:\n   - `depth_weight_root: 1.00` - root files get HIGHEST personalization\n   - `depth_weight_moderate: 0.50` - moderate depth gets half\n   - `depth_weight_deep: 0.10` - deep files (like crates/printer/src/) get 1/10th\n\n   This is exactly backwards for a monorepo where the interesting code lives in deep crate directories.\n\n5. **Git coupling underutilized**: `boost_temporal_coupling: 3.00` may be too low if git history shows crate files change together.\n\n**Diagnosis:**\nThe depth heuristic is creating a strong bias toward root-level files (distractors, shallow tests) when the signal should favor same-directory and same-crate relationships. The monorepo structure where meaningful code lives in `crates/*/src/` is being penalized by the depth weights.\n\n**Proposed Parameter Changes:**\n\n1. **Invert depth weights for monorepo**: Deep files in organized crate structures should get higher base weight\n   - `depth_weight_root: 0.30` (was 1.00) - penalize root-level flotsam\n   - `depth_weight_moderate: 0.70` (was 0.50) - moderate boost for src/\n   - `depth_weight_deep: 1.00` (was 0.10) - reward deep crate structure\n\n2. **Amplify local structure signals**:\n   - `boost_focus_expansion: 8.00` (was 5.00) - same-directory files more strongly linked\n   - `focus_decay: 0.30` (was 0.50) - slower decay = broader local influence\n\n3. **Trust git coupling more**:\n   - `boost_temporal_coupling: 5.00` (was 3.00) - files that change together should rank together\n\n4. **Reduce PageRank globalization** (localizes more):\n   - `pagerank_alpha: 0.75` (was 0.85) - lower alpha = more local structure influence\n\n**",
+      "strategy_capsule": "Invert depth heuristic for monorepo; amplify directory-local and temporal coupling signals",
+      "proposed_changes": {},
+      "param_interactions": [
+        "depth_weight_* controls initial personalization distribution - inverting these directly shifts mass from root to deep",
+        "pagerank_alpha at 0.85 spreads influence globally; lowering to 0.75 keeps more local structure",
+        "focus_decay and boost_focus_expansion work together: lower decay + higher boost = stronger directory-local gravity",
+        "boost_temporal_coupling amplifies git co-change signal which is crate-local in monorepos"
+      ],
+      "structural_insights": [
+        "Monorepo crate structures (crates/X/src/) have inverted depth semantics vs flat repos",
+        "NDCG=0.358-0.431 on these failures suggests 60-65% of signal is misdirected to distractors",
+        "Same-crate sibling files (util.rs↔standard.rs, color.rs↔defs.rs) need same-directory affinity",
+        "The 'intentional distractors at root level' note in training hints confirms depth inversion needed"
+      ],
+      "confidence": 0.75
+    },
+    {
+      "timestamp": 1765176403,
+      "duration_secs": 52.102778959,
+      "failures": [
+        {
+          "query": "crates/core/flags/hiargs.rs",
+          "seed_file": "crates/core/flags/hiargs.rs",
+          "expected_top": [
+            "crates/ignore/src/dir.rs",
+            "crates/ignore/src/gitignore.rs",
+            "crates/ignore/src/walk.rs",
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "lib/mod_8.rs",
+            "tests/test_9.rs",
+            "src/distractor_5.rs",
+            "crates/ignore/src/gitignore.rs",
+            "src/utils/helper_1.rs"
+          ],
+          "ndcg": 0.45306464234450855,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "tests/regression.rs",
+          "seed_file": "tests/regression.rs",
+          "expected_top": [
+            "crates/ignore/src/dir.rs"
+          ],
+          "actual_top": [
+            "src/core/internal/deep_7.rs",
+            "src/core/internal/deep_2.rs",
+            "src/utils/helper_6.rs",
+            "lib/mod_3.rs",
+            "crates/ignore/src/dir.rs"
+          ],
+          "ndcg": 0.38685280723454163,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/core/flags/hiargs.rs",
+          "seed_file": "crates/core/flags/hiargs.rs",
+          "expected_top": [
+            "crates/printer/src/json.rs",
+            "crates/printer/src/summary.rs"
+          ],
+          "actual_top": [
+            "src/utils/helper_6.rs",
+            "lib/mod_8.rs",
+            "src/utils/helper_1.rs",
+            "crates/printer/src/summary.rs",
+            "src/core/internal/deep_2.rs"
+          ],
+          "ndcg": 0.4320771360668017,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "tests/binary.rs",
+          "seed_file": "tests/binary.rs",
+          "expected_top": [
+            "crates/core/flags/defs.rs",
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "tests/test_4.rs",
+            "lib/mod_8.rs",
+            "src/utils/helper_1.rs",
+            "crates/core/flags/defs.rs",
+            "tests/regression.rs"
+          ],
+          "ndcg": 0.49660177441866854,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "tests/regression.rs",
+          "seed_file": "tests/regression.rs",
+          "expected_top": [
+            "crates/printer/src/summary.rs"
+          ],
+          "actual_top": [
+            "src/distractor_0.rs",
+            "lib/mod_8.rs",
+            "tests/test_4.rs",
+            "src/utils/helper_1.rs",
+            "src/distractor_5.rs"
+          ],
+          "ndcg": 0.33333333333333337,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/core/flags/doc/man.rs",
+          "seed_file": "crates/core/flags/doc/man.rs",
+          "expected_top": [
+            "crates/core/flags/defs.rs"
+          ],
+          "actual_top": [
+            "tests/test_9.rs",
+            "lib/mod_3.rs",
+            "src/core/internal/deep_2.rs",
+            "crates/core/flags/defs.rs",
+            "tests/test_4.rs"
+          ],
+          "ndcg": 0.4306765580733931,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        }
+      ],
+      "params": {
+        "pagerank_alpha": 0.85,
+        "pagerank_chat_multiplier": 100.0,
+        "depth_weight_root": 1.0,
+        "depth_weight_moderate": 0.5,
+        "depth_weight_deep": 0.1,
+        "depth_weight_vendor": 0.01,
+        "boost_mentioned_ident": 10.0,
+        "boost_mentioned_file": 5.0,
+        "boost_chat_file": 20.0,
+        "boost_temporal_coupling": 3.0,
+        "boost_focus_expansion": 5.0,
+        "git_recency_decay_days": 30.0,
+        "git_recency_max_boost": 10.0,
+        "git_churn_threshold": 5.0,
+        "git_churn_max_boost": 6.0,
+        "focus_decay": 0.5,
+        "focus_max_hops": 2.0
+      },
+      "ndcg_before": 0.8266672610602435,
+      "reasoning": "Now I have enough context to perform the gradient analysis. The key insight from the failures is the **curated repo with 100 files** has intentional distractors at shallow depths (root level) while the real code is in deeper `crates/*/src/` paths.\n\n\n\n**Trajectory Analysis:**\n- E1→E2: NDCG dropped slightly 0.829 → 0.826 (essentially flat, within noise)\n- Current E3: NDCG 0.8267 (continued plateau)\n- Previous strategies targeted depth inversion but haven't addressed the root cause\n\n**Failure Pattern Analysis:**\n\nAll 5 failures share a common pattern:\n1. **Seed files**: All in `crates/*/src/*.rs` or `tests/*.rs` (depth 3-4)\n2. **Expected files**: All in `crates/*/src/*.rs` or `tests/*.rs` \n3. **Actual top files**: Dominated by shallow distractors: `lib/mod_*.rs`, `src/utils/helper_*.rs`, `src/distractor_*.rs`, `tests/test_*.rs`\n\nThe distractors are at:\n- `lib/` (depth 1) \n- `src/utils/` (depth 2)\n- `src/distractor_` (depth 1)\n- `src/core/internal/` (depth 3)\n\nThe expected files are at:\n- `crates/ignore/src/` (depth 3)\n- `crates/core/flags/` (depth 3)\n- `crates/printer/src/` (depth 3)\n- `tests/` (depth 1, but intentional tests)\n\n**Critical Insight:**\n\nThe current depth weighting treats `depth <= 2` as \"root\" (weight=1.0). But in monorepos:\n- `lib/mod_8.rs` (depth=1) is a distractor getting `depth_weight_root = 1.0`\n- `crates/ignore/src/gitignore.rs` (depth=3) gets `depth_weight_moderate = 0.5`\n\nThis is **backwards** for crate-based repos. The `crates/*/src/` pattern indicates depth 3 is actually the \"semantic root\" of real code.\n\n**Parameter Interaction Analysis:**\n\n1. `depth_weight_root = 1.0` and `depth_weight_moderate = 0.5` creates a 2x penalty on the actual code\n2. `boost_temporal_coupling = 3.0` isn't strong enough to overcome the depth penalty\n3. `boost_focus_expansion = 5.0` can't help when the call graph hasn't been built for these synthetic distractors\n\n**Missing Signal: Same-Directory Affinity**\n\nLooking at Failure 4 (`tests/binary.rs` → expects `tests/regression.rs`):\n- Both in `tests/` directory\n- Both are test files\n- Current parameters don't have a same-directory boost\n\n**Proposed Fix Direction:**\n\n1. **Invert depth ratio** for monorepo detection: When seed is deep, penalize shallow files\n2. **Add same-directory boost** parameter (new or repurpose existing)\n3. **Amplify temporal coupling** to let git history override structural heuristics",
+      "strategy_capsule": "Path-aware depth inversion: penalize shallow files when seed is deep; amplify same-directory and temporal signals",
+      "proposed_changes": {},
+      "param_interactions": [
+        "depth_weight_root vs depth_weight_moderate: 2x ratio favors distractors",
+        "boost_temporal_coupling (3.0) is too weak to overcome 2x depth penalty",
+        "boost_focus_expansion (5.0) requires call graph edges that distractors don't have"
+      ],
+      "structural_insights": [
+        "Monorepo pattern: 'crates/X/src/' means depth 3 is semantic root, not filesystem root",
+        "Same-directory files need explicit affinity signal - temporal coupling is proxy but insufficient",
+        "Distractors are nameless (mod_N, helper_N, distractor_N) - no semantic hooks for focus matching",
+        "tests/*.rs files need test↔test coupling not just test↔source"
+      ],
+      "confidence": 0.65
+    }
+  ],
+  "param_interactions": [
+    "depth_weight_root vs depth_weight_moderate: Root=1.0 rewards src/distractor_*.rs over crates/*/src/*.rs at moderate depth",
+    "boost_temporal_coupling vs pagerank: Weak coupling (3.0) can't overcome noisy graph signal",
+    "focus_expansion vs distractor density: Expansion may pull in neighboring distractors",
+    "depth_weight_* controls initial personalization distribution - inverting these directly shifts mass from root to deep",
+    "pagerank_alpha at 0.85 spreads influence globally; lowering to 0.75 keeps more local structure",
+    "focus_decay and boost_focus_expansion work together: lower decay + higher boost = stronger directory-local gravity",
+    "boost_temporal_coupling amplifies git co-change signal which is crate-local in monorepos",
+    "depth_weight_root vs depth_weight_moderate: 2x ratio favors distractors",
+    "boost_temporal_coupling (3.0) is too weak to overcome 2x depth penalty",
+    "boost_focus_expansion (5.0) requires call graph edges that distractors don't have"
+  ],
+  "failure_patterns": [],
+  "success_patterns": [],
+  "structural_proposals": [
+    "Curated test repo has intentional distractors at root level - depth heuristic inverted",
+    "Cross-crate relationships (ignore→printer, core→flags/doc) need stronger structural linking",
+    "NDCG=0.000 on Failure 4 indicates complete signal loss for sibling-directory relationships",
+    "Monorepo crate structures (crates/X/src/) have inverted depth semantics vs flat repos",
+    "NDCG=0.358-0.431 on these failures suggests 60-65% of signal is misdirected to distractors",
+    "Same-crate sibling files (util.rs↔standard.rs, color.rs↔defs.rs) need same-directory affinity",
+    "The 'intentional distractors at root level' note in training hints confirms depth inversion needed",
+    "Monorepo pattern: 'crates/X/src/' means depth 3 is semantic root, not filesystem root",
+    "Same-directory files need explicit affinity signal - temporal coupling is proxy but insufficient",
+    "Distractors are nameless (mod_N, helper_N, distractor_N) - no semantic hooks for focus matching",
+    "tests/*.rs files need test↔test coupling not just test↔source"
+  ],
+  "presets": {},
+  "heuristics": [],
+  "warnings": []
+}

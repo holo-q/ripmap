@@ -1,0 +1,236 @@
+{
+  "episodes": [
+    {
+      "timestamp": 1765205459,
+      "duration_secs": 36.416932429,
+      "failures": [
+        {
+          "query": "crates/ignore/src/dir.rs",
+          "seed_file": "crates/ignore/src/dir.rs",
+          "expected_top": [
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "src/core/internal/deep_2.rs",
+            "src/core/internal/deep_7.rs",
+            "lib/mod_8.rs",
+            "src/utils/helper_1.rs",
+            "tests/regression.rs"
+          ],
+          "ndcg": 0.38685280723454163,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/printer/src/summary.rs",
+          "seed_file": "crates/printer/src/summary.rs",
+          "expected_top": [
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "src/core/internal/deep_7.rs",
+            "tests/test_9.rs",
+            "src/distractor_5.rs",
+            "tests/regression.rs",
+            "src/core/internal/deep_2.rs"
+          ],
+          "ndcg": 0.43067655807339306,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/core/flags/defs.rs",
+          "seed_file": "crates/core/flags/defs.rs",
+          "expected_top": [
+            "crates/core/flags/doc/man.rs"
+          ],
+          "actual_top": [
+            "src/utils/helper_1.rs",
+            "lib/mod_3.rs",
+            "tests/test_9.rs",
+            "src/utils/helper_6.rs",
+            "crates/core/flags/doc/man.rs"
+          ],
+          "ndcg": 0.38685280723454163,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        }
+      ],
+      "params": {
+        "pagerank_alpha": 0.26531049999999995,
+        "pagerank_chat_multiplier": 70.0,
+        "depth_weight_root": 0.3429999999999999,
+        "depth_weight_moderate": 0.41405,
+        "depth_weight_deep": 0.199927,
+        "depth_weight_vendor": 0.01,
+        "boost_mentioned_ident": 10.0,
+        "boost_mentioned_file": 5.0,
+        "boost_chat_file": 14.0,
+        "boost_temporal_coupling": 4.198467,
+        "boost_focus_expansion": 2.4499999999999997,
+        "git_recency_decay_days": 30.0,
+        "git_recency_max_boost": 7.0,
+        "git_churn_threshold": 5.0,
+        "git_churn_max_boost": 6.0,
+        "focus_decay": 0.22295,
+        "focus_max_hops": 2.1530599999999995
+      },
+      "ndcg_before": 0.8850163843377475,
+      "reasoning": "Now let me reason about the optimization problem presented:\n\n\n\n**Episode 1 Analysis - Baseline Assessment**\n\nLooking at the three failures:\n\n1. **Failure 1 & 2**: Both are \"Debug\" intent queries where the expected top result is `tests/regression.rs`, but the actual results are scattered deep internal files (`src/core/internal/deep_*.rs`), helpers, and distractors. The regression test eventually appears but ranked 5th and 4th respectively.\n\n2. **Failure 3**: An \"Explore\" intent query for `crates/core/flags/defs.rs` expecting sibling file `crates/core/flags/doc/man.rs`. Again, unrelated helpers and tests ranked higher.\n\n**Pattern Diagnosis:**\n\n- The \"curated (100 files)\" repo seems to have synthetic noise files (`deep_*.rs`, `distractor_*.rs`, `helper_*.rs`, `mod_*.rs`) that are outcompeting the structurally meaningful files.\n- **Depth penalty issue**: Files like `src/core/internal/deep_*.rs` are being ranked highly despite being deep. This suggests `depth_weight_moderate: 0.41` and `depth_weight_deep: 0.20` are still allowing these through.\n- **Missing semantic coupling signal**: The expected files (`tests/regression.rs`, sibling `man.rs`) likely have actual code relationships (imports, calls) to the seed files, but generic \"helper\" and \"internal\" files are winning on PageRank alone.\n- **Structural signal weak**: `boost_mentioned_ident: 10.0` and `boost_mentioned_file: 5.0` should lift directly referenced files, but these boosts seem insufficient against the PageRank flood.\n\n**Key Observations:**\n\n1. `pagerank_chat_multiplier: 70.0` is very high - this amplifies seed file influence massively in the graph walk, possibly causing PageRank to wash into high-degree nodes (helpers, internal modules) rather than staying semantically tight.\n\n2. `pagerank_alpha: 0.265` is moderately low (localizing), but combined with the 70x multiplier might create a \"splash radius\" that hits noisy files first.\n\n3. For Debug intent, test files should be strongly boosted. The current temporal/structural boosts don't seem to account for intent-specific weighting.\n\n4. `boost_temporal_coupling: 4.20` may not be enough if the regression.rs file co-changes with the seed files in the git history.\n\n**Proposed Changes (Conservative First Episode):**\n\nSince this is episode 1 with no history, I'll make targeted adjustments rather than large swings:\n\n1. **Reduce pagerank_chat_multiplier** (70→50): Less splash, tighter focus around seed\n2. **Increase boost_mentioned_ident** (10→14): Stronger lift for directly referenced symbols\n3. **Decrease depth_weight_moderate** (0.41→0.35): Penalize deeper files more\n4. **Decrease depth_weight_deep** (0.20→0.12): Significant penalty for very deep files\n5. **Increase boost_temporal_coupling** (4.20→5.50): If regression.rs co-changes, lift it higher",
+      "strategy_capsule": "Tighten focus radius and boost structural signals over PageRank diffusion",
+      "proposed_changes": {},
+      "param_interactions": [
+        "pagerank_chat_multiplier × pagerank_alpha: high multiplier + low alpha creates wide splash into local neighborhood noise",
+        "depth_weight_deep × boost_mentioned_ident: weak depth penalty lets deep files compete despite no direct mention",
+        "boost_temporal_coupling × git_recency_decay_days: if test files are temporally coupled but decay too fast, signal lost"
+      ],
+      "structural_insights": [
+        "Debug intent queries should prioritize test files - consider intent-aware boosting if not already implemented",
+        "Synthetic repos with distractor files stress-test the balance between graph centrality and structural signals",
+        "Sibling file relationships (same directory) may need dedicated boost separate from depth weighting"
+      ],
+      "confidence": 0.65
+    },
+    {
+      "timestamp": 1765205493,
+      "duration_secs": 33.506366082,
+      "failures": [
+        {
+          "query": "tests/binary.rs",
+          "seed_file": "tests/binary.rs",
+          "expected_top": [
+            "crates/core/flags/defs.rs",
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "src/distractor_0.rs",
+            "tests/regression.rs",
+            "src/distractor_5.rs",
+            "lib/mod_3.rs",
+            "src/utils/helper_1.rs"
+          ],
+          "ndcg": 0.36129219617463276,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "tests/regression.rs",
+          "seed_file": "tests/regression.rs",
+          "expected_top": [
+            "crates/core/flags/defs.rs",
+            "tests/binary.rs"
+          ],
+          "actual_top": [
+            "src/core/internal/deep_7.rs",
+            "lib/mod_3.rs",
+            "src/utils/helper_1.rs",
+            "tests/binary.rs",
+            "crates/core/flags/defs.rs"
+          ],
+          "ndcg": 0.4655559452990044,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/ignore/src/overrides.rs",
+          "seed_file": "crates/ignore/src/overrides.rs",
+          "expected_top": [
+            "crates/globset/src/glob.rs",
+            "crates/ignore/src/gitignore.rs",
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "src/distractor_5.rs",
+            "tests/regression.rs",
+            "crates/globset/src/glob.rs",
+            "tests/test_4.rs",
+            "tests/test_9.rs"
+          ],
+          "ndcg": 0.48450194724907863,
+          "commit_context": "intent: Extend",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/core/flags/defs.rs",
+          "seed_file": "crates/core/flags/defs.rs",
+          "expected_top": [
+            "crates/printer/src/color.rs",
+            "crates/printer/src/standard.rs"
+          ],
+          "actual_top": [
+            "src/core/internal/deep_7.rs",
+            "tests/test_9.rs",
+            "src/utils/helper_6.rs",
+            "src/distractor_5.rs",
+            "crates/printer/src/color.rs"
+          ],
+          "ndcg": 0.4450350016786239,
+          "commit_context": "intent: Extend",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        }
+      ],
+      "params": {
+        "pagerank_alpha": 0.26531049999999995,
+        "pagerank_chat_multiplier": 70.0,
+        "depth_weight_root": 0.3429999999999999,
+        "depth_weight_moderate": 0.41405,
+        "depth_weight_deep": 0.199927,
+        "depth_weight_vendor": 0.01,
+        "boost_mentioned_ident": 10.0,
+        "boost_mentioned_file": 5.0,
+        "boost_chat_file": 14.0,
+        "boost_temporal_coupling": 4.198467,
+        "boost_focus_expansion": 2.4499999999999997,
+        "git_recency_decay_days": 30.0,
+        "git_recency_max_boost": 7.0,
+        "git_churn_threshold": 5.0,
+        "git_churn_max_boost": 6.0,
+        "focus_decay": 0.22295,
+        "focus_max_hops": 2.1530599999999995
+      },
+      "ndcg_before": 0.8817119123382574,
+      "reasoning": "Now I understand the training system. This is a meta-learning outer loop for tuning ripmap's ranking parameters. Let me analyze the failures and propose parameter changes.\n\n\n\nLooking at the failure patterns:\n\n1. **Distractor dominance**: All failures show distractor files (src/distractor_*.rs, src/core/internal/deep_*.rs, lib/mod_*.rs, src/utils/helper_*.rs) appearing in top positions. These are synthetic noise files.\n\n2. **Test file relationships**: The failing queries are test files (tests/binary.rs, tests/regression.rs) that should surface related test files and the production code they test (crates/core/flags/defs.rs, crates/printer/*).\n\n3. **Graph structure issue**: Distractor files are likely well-connected in the synthetic graph (many refs), while the semantic relationship between test files and their targets is weaker in pure graph terms.\n\n4. **Current parameter analysis**:\n   - `pagerank_alpha: 0.265` - Low, meaning PageRank stays localized. This should help but isn't enough\n   - `depth_weight_root: 0.34` is moderate - distractor files at various depths still getting through\n   - `boost_focus_expansion: 2.45` - The focus from seed file isn't pushing through strongly enough\n   - `focus_decay: 0.22` and `focus_max_hops: 2.2` - Focus decays quickly but the wrong files are within range\n\n5. **Key insight**: The problem is that distractors are in src/* which gets moderate depth weighting. Test files querying test files should strongly surface other test files AND the crates they test. The coupling between tests/binary.rs and crates/core/flags/defs.rs needs to come from:\n   - Temporal coupling (if they change together)\n   - Import/symbol references\n   - Explicit boost for test→tested relationships\n\n**Diagnosis**: The structural signals (test↔crate relationships) are being overwhelmed by PageRank-central distractor files. Need to:\n1. Reduce PageRank influence overall (lower `pagerank_chat_multiplier`)\n2. Increase structural boosts that would connect test files to their targets\n3. Boost sibling relationships (files in same directory like tests/*)",
+      "strategy_capsule": "Dampen PageRank centrality, amplify structural co-location and focus expansion for test→crate relationships",
+      "proposed_changes": {},
+      "param_interactions": [
+        "pagerank_chat_multiplier × boost_focus_expansion: lower PR means focus boost becomes more decisive",
+        "depth_weight_moderate vs depth_weight_root: distractors in src/ get moderate weight, competing with crates/"
+      ],
+      "structural_insights": [
+        "Test files need stronger affinity to other test files (sibling directory relationship)",
+        "crates/ structure should have higher weight relative to src/ since these are the real modules being tested",
+        "Intent=Explore on test files should emphasize the tested code, not random central nodes",
+        "Consider adding explicit test_file_boost or sibling_directory_boost parameter in future"
+      ],
+      "confidence": 0.65
+    }
+  ],
+  "param_interactions": [
+    "pagerank_chat_multiplier × pagerank_alpha: high multiplier + low alpha creates wide splash into local neighborhood noise",
+    "depth_weight_deep × boost_mentioned_ident: weak depth penalty lets deep files compete despite no direct mention",
+    "boost_temporal_coupling × git_recency_decay_days: if test files are temporally coupled but decay too fast, signal lost",
+    "pagerank_chat_multiplier × boost_focus_expansion: lower PR means focus boost becomes more decisive",
+    "depth_weight_moderate vs depth_weight_root: distractors in src/ get moderate weight, competing with crates/"
+  ],
+  "failure_patterns": [],
+  "success_patterns": [],
+  "structural_proposals": [
+    "Debug intent queries should prioritize test files - consider intent-aware boosting if not already implemented",
+    "Synthetic repos with distractor files stress-test the balance between graph centrality and structural signals",
+    "Sibling file relationships (same directory) may need dedicated boost separate from depth weighting",
+    "Test files need stronger affinity to other test files (sibling directory relationship)",
+    "crates/ structure should have higher weight relative to src/ since these are the real modules being tested",
+    "Intent=Explore on test files should emphasize the tested code, not random central nodes",
+    "Consider adding explicit test_file_boost or sibling_directory_boost parameter in future"
+  ],
+  "presets": {},
+  "heuristics": [],
+  "warnings": []
+}

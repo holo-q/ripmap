@@ -1,0 +1,602 @@
+{
+  "episodes": [
+    {
+      "timestamp": 1765204876,
+      "duration_secs": 47.643041435,
+      "failures": [
+        {
+          "query": "crates/core/flags/hiargs.rs",
+          "seed_file": "crates/core/flags/hiargs.rs",
+          "expected_top": [
+            "crates/printer/src/json.rs",
+            "crates/printer/src/summary.rs"
+          ],
+          "actual_top": [
+            "tests/test_9.rs",
+            "src/core/internal/deep_2.rs",
+            "src/distractor_0.rs",
+            "lib/mod_8.rs",
+            "src/distractor_5.rs"
+          ],
+          "ndcg": 0.4187530135733442,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/core/flags/defs.rs",
+          "seed_file": "crates/core/flags/defs.rs",
+          "expected_top": [
+            "crates/core/flags/doc/man.rs"
+          ],
+          "actual_top": [
+            "lib/mod_8.rs",
+            "src/distractor_5.rs",
+            "lib/mod_3.rs",
+            "src/utils/helper_1.rs",
+            "src/core/internal/deep_2.rs"
+          ],
+          "ndcg": 0.33333333333333337,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        }
+      ],
+      "params": {
+        "pagerank_alpha": 0.26531049999999995,
+        "pagerank_chat_multiplier": 70.0,
+        "depth_weight_root": 0.3429999999999999,
+        "depth_weight_moderate": 0.41405,
+        "depth_weight_deep": 0.199927,
+        "depth_weight_vendor": 0.01,
+        "boost_mentioned_ident": 10.0,
+        "boost_mentioned_file": 5.0,
+        "boost_chat_file": 14.0,
+        "boost_temporal_coupling": 4.198467,
+        "boost_focus_expansion": 2.4499999999999997,
+        "git_recency_decay_days": 30.0,
+        "git_recency_max_boost": 7.0,
+        "git_churn_threshold": 5.0,
+        "git_churn_max_boost": 6.0,
+        "focus_decay": 0.22295,
+        "focus_max_hops": 2.1530599999999995
+      },
+      "ndcg_before": 0.8803153544185559,
+      "reasoning": "Now I understand the context - this is about `ripmap`, a tool for ranking/surfacing relevant files based on PageRank and various signals. The user is presenting a first-episode training prompt asking for parameter adjustments based on two ranking failures.\n\nLet me analyze the failures:\n\n\n\n**Episode 1 Analysis - First Episode, No History**\n\nThis is the initial episode with NDCG 0.8803 (overall), with two failures showing very poor ranking:\n\n**Failure 1**: Query on `crates/core/flags/hiargs.rs`\n- Expected: `crates/printer/src/json.rs`, `crates/printer/src/summary.rs` (printer-related)\n- Got: test files, distractors, random modules\n- NDCG: 0.419\n\n**Failure 2**: Query on `crates/core/flags/defs.rs`  \n- Expected: `crates/core/flags/doc/man.rs` (same module, documentation generation)\n- Got: random files with no apparent connection\n- NDCG: 0.333\n\nBoth queries are on `crates/core/flags/*` files with intent \"Explore\", yet the system returns noise.\n\n**Diagnosis**:\n\n1. **Path similarity not being captured**: `defs.rs` should connect to `man.rs` in the same flags module - structural proximity signals are weak\n\n2. **Cross-crate connections missed**: `hiargs.rs` (likely \"highlight args\" or \"high-level args\") should connect to printer modules - this is a semantic/call-graph connection\n\n3. **Distractor pollution**: Test files and unrelated modules rank highly - suggesting:\n   - Depth weighting may be too aggressive at root level (0.34)\n   - PageRank diffusing to well-connected nodes regardless of relevance\n   - Focus expansion not doing enough (only 2.45 boost)\n\n**Parameter Interactions**:\n\n- `boost_mentioned_file: 5.0` and `boost_chat_file: 14.0` - the seed file boost might be insufficient\n- `focus_max_hops: 2.2` + `focus_decay: 0.22` - decays too aggressively, not reaching related files\n- `depth_weight_root: 0.34` is giving moderate weight to root-level files, which often include tests/distractors\n- `pagerank_alpha: 0.265` is fairly local - maybe too local to diffuse properly\n\n**Strategy**: \n\nSince expected files are **structurally related** (same module or caller/callee):\n1. Increase focus expansion to better capture related files in the graph\n2. Reduce root-level noise by lowering depth_weight_root slightly\n3. Increase focus_decay slightly so relevance spreads further\n4. Bump boost_mentioned_file to anchor better on nearby files",
+      "strategy_capsule": "Strengthen structural proximity signals while damping root-level noise",
+      "proposed_changes": {},
+      "param_interactions": [
+        "focus_decay (0.22) + focus_max_hops (2.2) = steep dropoff limiting related file discovery",
+        "depth_weight_root (0.34) allows test files to compete with real code",
+        "boost_focus_expansion (2.45) may be insufficient to override PageRank noise"
+      ],
+      "structural_insights": [
+        "crates/core/flags/* files should have strong intra-module coupling - focus expansion should capture this",
+        "printer modules likely have call-graph edges to flags - need more hop depth to reach cross-crate",
+        "Test files in root/tests/ directories are stealing rank - reduce root weight"
+      ],
+      "confidence": 0.65
+    },
+    {
+      "timestamp": 1765204917,
+      "duration_secs": 41.269178475,
+      "failures": [
+        {
+          "query": "tests/regression.rs",
+          "seed_file": "tests/regression.rs",
+          "expected_top": [
+            "crates/printer/src/util.rs"
+          ],
+          "actual_top": [
+            "src/utils/helper_1.rs",
+            "tests/test_4.rs",
+            "src/utils/helper_6.rs",
+            "crates/printer/src/util.rs",
+            "src/core/internal/deep_7.rs"
+          ],
+          "ndcg": 0.4306765580733931,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        }
+      ],
+      "params": {
+        "pagerank_alpha": 0.26531049999999995,
+        "pagerank_chat_multiplier": 70.0,
+        "depth_weight_root": 0.3429999999999999,
+        "depth_weight_moderate": 0.41405,
+        "depth_weight_deep": 0.199927,
+        "depth_weight_vendor": 0.01,
+        "boost_mentioned_ident": 10.0,
+        "boost_mentioned_file": 5.0,
+        "boost_chat_file": 14.0,
+        "boost_temporal_coupling": 4.198467,
+        "boost_focus_expansion": 2.4499999999999997,
+        "git_recency_decay_days": 30.0,
+        "git_recency_max_boost": 7.0,
+        "git_churn_threshold": 5.0,
+        "git_churn_max_boost": 6.0,
+        "focus_decay": 0.22295,
+        "focus_max_hops": 2.1530599999999995
+      },
+      "ndcg_before": 0.8811388682207247,
+      "reasoning": "Now I understand the context. You're presenting me with an **inner optimizer prompt** from a meta-learning/mesa-optimization system for ripmap's ranking algorithm. You're asking me to act as the inner optimizer and propose parameter changes.\n\nLet me analyze the optimization problem:\n\n---\n\n**REASONING:**\n\n**Trajectory Analysis:**\n- E1→E2: NDCG 0.880 → 0.8811 (+0.0011) - Very slight improvement\n- Status: **Plateaued** - marginal gains suggest we're near local optimum or signal saturation\n\n**Failure Analysis (the only failure with NDCG 0.431):**\nQuery: `tests/regression.rs` → Expected: `crates/printer/src/util.rs`\nActual top results: helper files and test files dominated\n\nKey observations:\n1. **Test file seeding is poisoning results** - when seed is a test file in root `tests/`, the depth weighting favors other root-level and test files\n2. **Cross-crate call-graph edges aren't surfacing** - `printer/src/util.rs` should have structural connections via call graph from regression tests, but `focus_max_hops: 2.2` may not reach across crate boundaries\n3. **The intent \"Debug\" should favor utility files** - but the current boost configuration gives too much weight to directory-local files\n\n**Parameter Interaction Analysis:**\n- `depth_weight_root: 0.34` is still too high for test-seeded queries - root test files attract other root files\n- `focus_max_hops: 2.2` truncates at 2 hops - cross-crate resolution (tests → printer/util.rs) likely needs 3+ hops\n- `boost_focus_expansion: 2.45` combined with short hop distance means expansion stays local\n\n**Structural Insight:**\nThe failure pattern shows: `tests/regression.rs` → `src/utils/*`, `tests/*` when it should reach `crates/printer/src/util.rs`. This is a **hop distance problem**, not a weight problem. The `printer` crate is structurally distant from root tests.\n\n**Proposed Changes:**\n1. Increase `focus_max_hops` to 3.5 - allow deeper traversal across crate boundaries\n2. Decrease `depth_weight_root` further to 0.28 - continuing to dampen root-level noise\n3. Increase `boost_focus_expansion` to 3.0 - amplify signal once we reach distant relevant files\n4. Slight decrease to `focus_decay` to 0.18 - preserve signal strength across the longer hop chain\n\n---\n\n```json",
+      "strategy_capsule": "Extend hop reach for cross-crate resolution while damping root-level test file interference",
+      "proposed_changes": {},
+      "param_interactions": [
+        "focus_max_hops * focus_decay determines effective reach - need both higher hops AND lower decay",
+        "depth_weight_root competes with boost_focus_expansion at hop boundaries",
+        "Low focus_max_hops + high boost_mentioned_file = local tunnel vision"
+      ],
+      "structural_insights": [
+        "tests/regression.rs → crates/printer/src/util.rs requires traversing: test → imported module → printer crate → util.rs (minimum 3 hops)",
+        "Root-level test directories form a 'gravity well' that traps ranking when depth_weight_root > 0.3",
+        "The 'Debug' intent should bias toward util/helper files but current signal doesn't discriminate between src/utils (wrong) and crates/*/util.rs (correct)"
+      ],
+      "confidence": 0.72
+    },
+    {
+      "timestamp": 1765204973,
+      "duration_secs": 56.037196562,
+      "failures": [
+        {
+          "query": "tests/binary.rs",
+          "seed_file": "tests/binary.rs",
+          "expected_top": [
+            "crates/core/flags/defs.rs",
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "tests/test_9.rs",
+            "lib/mod_8.rs",
+            "tests/test_4.rs",
+            "src/distractor_0.rs",
+            "lib/mod_3.rs"
+          ],
+          "ndcg": 0.19087819424666147,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        }
+      ],
+      "params": {
+        "pagerank_alpha": 0.26531049999999995,
+        "pagerank_chat_multiplier": 70.0,
+        "depth_weight_root": 0.3429999999999999,
+        "depth_weight_moderate": 0.41405,
+        "depth_weight_deep": 0.199927,
+        "depth_weight_vendor": 0.01,
+        "boost_mentioned_ident": 10.0,
+        "boost_mentioned_file": 5.0,
+        "boost_chat_file": 14.0,
+        "boost_temporal_coupling": 4.198467,
+        "boost_focus_expansion": 2.4499999999999997,
+        "git_recency_decay_days": 30.0,
+        "git_recency_max_boost": 7.0,
+        "git_churn_threshold": 5.0,
+        "git_churn_max_boost": 6.0,
+        "focus_decay": 0.22295,
+        "focus_max_hops": 2.1530599999999995
+      },
+      "ndcg_before": 0.8785280103715231,
+      "reasoning": "Now I understand the context. This is the **inner optimizer prompt** for the L1 loop - it receives ranking failures and proposes parameter changes. Let me analyze this failure case carefully:\n\n**Failure Analysis:**\n\n```\nQuery: \"tests/binary.rs\"\nSeed file: tests/binary.rs\nExpected: crates/core/flags/defs.rs, tests/regression.rs\nActual: tests/test_9.rs, lib/mod_8.rs, tests/test_4.rs, src/distractor_0.rs, lib/mod_3.rs\nNDCG: 0.191\n```\n\nThis is a **cross-crate traversal failure** on a test file. The seed is `tests/binary.rs` but the expected targets are in `crates/core/flags/` - a completely different module. The actual results show tests staying trapped in `tests/` or random distractors.\n\nLet me think through the parameter mechanics:\n\n\n\n1. **The Core Problem**: This failure pattern shows a **test-to-crate traversal gap**. The seed file `tests/binary.rs` needs to reach `crates/core/flags/defs.rs`. This requires:\n   - Following imports/references from the test file\n   - Traversing across module boundaries (tests → crates/core)\n   - Landing in the correct subdirectory (flags/)\n\n2. **Current Parameter Assessment**:\n   - `focus_max_hops: 2.2` - Too shallow! tests/binary.rs → (import) → crates/printer → flags → defs.rs could be 3+ hops\n   - `depth_weight_root: 0.34` - Still trapping in root-level tests/\n   - `pagerank_alpha: 0.265` - Low alpha means PageRank stays local, which is bad for cross-crate\n   - `boost_focus_expansion: 2.45` - May not be enough to escape test directory gravity\n\n3. **Trajectory Analysis**:\n   - E1→E2: NDCG improved slightly (0.880→0.881), failures dropped from 2→1\n   - E2→E3: NDCG improved to 0.8785 but this specific failure persists with very low NDCG (0.191)\n   - The strategies mention \"root-level test file interference\" and \"cross-crate resolution\" - we're on the right track but not aggressive enough\n\n4. **Key Insight from Training Notes**:\n   - \"tests/regression.rs → crates/printer/src/util.rs requires traversing: test → imported module → printer crate → util.rs (minimum 3 hops)\"\n   - Current `focus_max_hops: 2.2` is literally 0.8 hops short of the minimum needed!\n\n5. **Parameter Interactions**:\n   - `focus_max_hops` × `focus_decay` controls how far signal reaches\n   - With `focus_decay: 0.22`, signal at hop 3 is: 1.0 × 0.78³ = 0.47 (half strength)\n   - Need to either increase hops OR decrease decay\n\n6. **Proposed Strategy**:\n   - Increase `focus_max_hops` to 3.5 (beyond minimum 3-hop requirement)\n   - Reduce `depth_weight_root` further to escape test directory trap\n   - Slightly increase `pagerank_alpha` for better global flow",
+      "strategy_capsule": "Extend hop reach to 3.5 for cross-crate traversal while crushing root test directory weight",
+      "proposed_changes": {
+        "pagerank_alpha": [
+          "+",
+          "",
+          "0.30 allows slightly more global flow toward crates/"
+        ],
+        "depth_weight_root": [
+          "-",
+          "",
+          "reduce from 0.34→0.20 to escape root tests/ gravity"
+        ],
+        "focus_max_hops": [
+          "+",
+          "",
+          "3.5 hops guarantees reaching 3-hop test→printer→flags path"
+        ],
+        "boost_focus_expansion": [
+          "+",
+          "",
+          "2.95 amplifies signal that escapes test directory"
+        ]
+      },
+      "param_interactions": [
+        "focus_max_hops × focus_decay: at 2.2 hops, decay=0.22 kills signal before reaching cross-crate targets",
+        "depth_weight_root × pagerank_alpha: low alpha localizes to root tests instead of flowing to crates/"
+      ],
+      "structural_insights": [
+        "Test files import modules from crates/ but PageRank flow is trapped before reaching them",
+        "The 'curated' corpus may have intentionally placed distractors at root level to test this failure mode",
+        "Cross-crate resolution requires treating tests/→crates/ edges as high-priority expansion paths"
+      ],
+      "confidence": 0.75
+    },
+    {
+      "timestamp": 1765205028,
+      "duration_secs": 54.833680552,
+      "failures": [
+        {
+          "query": "crates/core/flags/defs.rs",
+          "seed_file": "crates/core/flags/defs.rs",
+          "expected_top": [
+            "tests/binary.rs",
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "lib/mod_3.rs",
+            "lib/mod_8.rs",
+            "tests/binary.rs",
+            "src/core/internal/deep_7.rs",
+            "src/core/internal/deep_2.rs"
+          ],
+          "ndcg": 0.48184256485979726,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        }
+      ],
+      "params": {
+        "pagerank_alpha": 0.18571734999999995,
+        "pagerank_chat_multiplier": 70.0,
+        "depth_weight_root": 0.24009999999999992,
+        "depth_weight_moderate": 0.41405,
+        "depth_weight_deep": 0.199927,
+        "depth_weight_vendor": 0.01,
+        "boost_mentioned_ident": 10.0,
+        "boost_mentioned_file": 5.0,
+        "boost_chat_file": 14.0,
+        "boost_temporal_coupling": 4.198467,
+        "boost_focus_expansion": 1.7149999999999996,
+        "git_recency_decay_days": 30.0,
+        "git_recency_max_boost": 7.0,
+        "git_churn_threshold": 5.0,
+        "git_churn_max_boost": 6.0,
+        "focus_decay": 0.22295,
+        "focus_max_hops": 1.5071419999999995
+      },
+      "ndcg_before": 0.8804118718452909,
+      "reasoning": "Now I understand this is an inner optimizer for a PageRank-based ranking system. Let me provide my analysis of this optimization step:\n\n---\n\n## Analysis: Inner Optimizer Response for Episode 4\n\nLooking at the trajectory and the failure:\n\n****\n\nThe core problem is clear from the failure: querying `crates/core/flags/defs.rs` should surface `tests/binary.rs` and `tests/regression.rs`, but instead surfaces `lib/mod_*.rs` files and `src/core/internal/deep_*.rs` files.\n\n**Trajectory state: PLATEAU** - NDCG oscillating around 0.879-0.881 for 3 episodes. The system has found a local optimum but can't break through the 0.88 barrier.\n\n**Failure analysis:**\n1. **Seed → Tests disconnection**: The seed file is in `crates/core/flags/defs.rs`. The expected files are in `tests/`. This is a classic cross-crate resolution failure - test files *import* from crates but the PageRank flow doesn't flow *back* to them.\n\n2. **Root-level `lib/` interference**: The actual top files (`lib/mod_3.rs`, `lib/mod_8.rs`) suggest the ranking is being dominated by files at root depth rather than files that actually *use* the seed.\n\n3. **The `focus_max_hops` at 1.5 is insufficient**: To reach from `crates/core/flags/defs.rs` → `tests/binary.rs`, you need to traverse: definition → import edge → test file. With hops at 1.5, the decay is crushing the signal before it reaches the tests.\n\n4. **Key insight from history**: \"Root-level test directories form a 'gravity well' that traps ranking when `depth_weight_root > 0.3`\" - but we're at 0.24. The problem might be that `lib/` is at root level AND getting PageRank flow without being penalized enough.\n\n**Parameter interactions:**\n- `depth_weight_root` (0.24) vs `pagerank_alpha` (0.186): Low alpha localizes flow, which should help, but the depth weights aren't differentiating between `lib/` (noise) and `tests/` (signal)\n- `focus_max_hops` (1.5) is too conservative for cross-crate resolution\n- `boost_focus_expansion` (1.71) needs to be higher to carry signal through longer hops\n\n**The orthogonal move needed:**\nThe previous strategies tried to extend hop reach and crush root-level weight. But the real issue is *directionality*: we need to boost files that *import from* the seed, not files that the seed path *resembles*. This is a \"reverse PageRank\" signal - callers/importers of the seed should rank higher.\n\n**",
+      "strategy_capsule": "Reverse flow: boost importers over path-similar files via focus_expansion + alpha balance",
+      "proposed_changes": {
+        "depth_weight_root": [
+          "-",
+          "",
+          "Reduce to 0.16 - lib/ and tests/ both at root; need other signals to differentiate"
+        ],
+        "focus_max_hops": [
+          "+",
+          "",
+          "Extend to 2.3 hops to reach test files importing from crates/"
+        ],
+        "pagerank_alpha": [
+          "+",
+          "",
+          "Slight globalization to 0.21 - helps cross-crate flow"
+        ],
+        "focus_decay": [
+          "-",
+          "",
+          "Reduce to 0.18 - slower decay preserves signal across longer hop chains"
+        ],
+        "boost_focus_expansion": [
+          "+",
+          "",
+          "Increase to 2.5 - importers need stronger signal to overcome lib/ noise"
+        ]
+      },
+      "param_interactions": [],
+      "structural_insights": [
+        "The 'curated' corpus likely has lib/ as noise and tests/ as signal - both at root depth. Depth alone cannot distinguish.",
+        "File-to-file queries without chat context rely entirely on structural edges. The import graph IS the signal.",
+        "Consider whether 'Explore' intent should weight callers (importers) > callees (dependencies)"
+      ],
+      "confidence": 0.65
+    },
+    {
+      "timestamp": 1765205099,
+      "duration_secs": 71.108844221,
+      "failures": [
+        {
+          "query": "crates/printer/src/util.rs",
+          "seed_file": "crates/printer/src/util.rs",
+          "expected_top": [
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "lib/mod_8.rs",
+            "src/utils/helper_1.rs",
+            "tests/test_9.rs",
+            "src/distractor_5.rs",
+            "src/core/internal/deep_7.rs"
+          ],
+          "ndcg": 0.3154648767857287,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/printer/src/summary.rs",
+          "seed_file": "crates/printer/src/summary.rs",
+          "expected_top": [
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "src/utils/helper_6.rs",
+            "src/utils/helper_1.rs",
+            "tests/test_9.rs",
+            "src/core/internal/deep_2.rs",
+            "src/core/internal/deep_7.rs"
+          ],
+          "ndcg": 0.3562071871080222,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        }
+      ],
+      "params": {
+        "pagerank_alpha": 0.13000214499999996,
+        "pagerank_chat_multiplier": 70.0,
+        "depth_weight_root": 0.16806999999999994,
+        "depth_weight_moderate": 0.41405,
+        "depth_weight_deep": 0.199927,
+        "depth_weight_vendor": 0.01,
+        "boost_mentioned_ident": 10.0,
+        "boost_mentioned_file": 5.0,
+        "boost_chat_file": 14.0,
+        "boost_temporal_coupling": 4.198467,
+        "boost_focus_expansion": 1.2004999999999997,
+        "git_recency_decay_days": 30.0,
+        "git_recency_max_boost": 7.0,
+        "git_churn_threshold": 5.0,
+        "git_churn_max_boost": 6.0,
+        "focus_decay": 0.156065,
+        "focus_max_hops": 1.0549993999999996
+      },
+      "ndcg_before": 0.8790200399004201,
+      "reasoning": "Now I have excellent context to analyze this optimization problem. Let me provide the inner optimizer's response:\n\n---\n\n\n\n**Trajectory State: PLATEAU**\nNDCG has oscillated in a narrow band (0.879-0.881) for 4 episodes. The recent parameter changes have been exploring the same dimension (depth_weight_root -, focus_max_hops +, pagerank_alpha +) without breaking out. This signals we're stuck in a local minimum.\n\n**Failure Analysis:**\nBoth failures share the same pattern:\n- Query: Deep `crates/printer/src/` file (util.rs, summary.rs)\n- Expected: `tests/regression.rs` (at root level)\n- Actual: Mix of lib/, src/utils/, src/core/internal/, and wrong tests/\n\nThe critical insight from the training notes is prescient:\n> \"The 'curated' corpus likely has lib/ as noise and tests/ as signal - both at root depth. Depth alone cannot distinguish.\"\n\nThis is a **structural navigation problem**, not a parameter tuning problem. The query is asking \"given this crate implementation file, what tests it?\" This requires understanding that:\n1. `tests/regression.rs` likely *imports* symbols from `crates/printer/`\n2. The current expansion is following *dependencies* (what util.rs uses) rather than *importers* (what uses util.rs)\n\n**Why current params fail:**\n- `focus_max_hops = 1.1` - We're expanding to callees but the signal is in callers\n- `boost_focus_expansion = 1.20` - Low, but direction is wrong anyway\n- `depth_weight_root = 0.17` - We're penalizing root-level files, but tests/regression.rs IS at root!\n- `pagerank_alpha = 0.13` - Low alpha localizes rank (good for finding neighbors), but we need to reach across the crate boundary\n\n**The Structural Insight:**\nFor \"Debug\" intent queries seeded with implementation files, we want to boost files that *import* the seed, not files that the seed *imports*. The import graph direction matters crucially here.\n\nThe current `expand_via_graph` in focus.rs treats the graph as *undirected* (lines 224-234), so it should find importers. But:\n1. The expansion decay is too aggressive (focus_decay=0.16 means 1-hop weight is 0.84^1 = 0.84)\n2. Wait - focus_decay is separate from expand_via_graph's decay parameter\n3. The key issue: `boost_focus_expansion = 1.20` is barely amplifying these graph neighbors\n\n**Orthogonal Move Required:**\nStop tuning depth/pagerank and instead:\n1. **Dramatically increase `boost_focus_expansion`** - The graph expansion IS finding tests/regression.rs but it's not being boosted enough to overcome the structural noise\n2. **Increase `focus_max_hops`** - Cross-crate resolution (crates/printer/src/*.rs → tests/*.rs) needs to traverse: util.rs → (exported symbols) → tests/regression.rs, which may be 2+ hops\n3. **Restore `depth_weight_root`** - We're killing the signal we want (tests/ at root)\n\n**Parameter Interactions:**\n- `boost_focus_expansion × focus_decay^hops` determines how much graph neighbors contribute\n- Low boost_focus_expansion (1.2) × aggressive decay (0.16) = neighbors get minimal boost\n- Meanwhile `depth_weight_root = 0.17` is killing root-level files including our target\n\n**Confidence Assessment:**\nThis is a qualitative shift in strategy (from \"tune locality params\" to \"fix the expansion signal\"). Moderate confidence because:\n- The diagnosis is clear (wrong files at top)\n- The mechanism is understood (expansion not boosting enough)\n- But we haven't verified that tests/regression.rs actually imports from crates/printer/",
+      "strategy_capsule": "Amplify graph expansion to surface importers (tests) over depth-based noise discrimination",
+      "proposed_changes": {},
+      "param_interactions": [
+        "boost_focus_expansion × focus_decay^hops = effective neighbor contribution; currently ~1.2 × 0.84 = 1.0 (no boost)",
+        "depth_weight_root punishes tests/regression.rs which is at root level - actively counterproductive",
+        "focus_max_hops at 1.1 may not reach tests/ if the import chain is: util.rs → (module) → (crate export) → tests/regression.rs"
+      ],
+      "structural_insights": [
+        "Debug intent queries need REVERSE edge following: 'what imports me?' not 'what do I import?'",
+        "The curated corpus intentionally places tests at root to test depth discrimination vs structural signal",
+        "Cross-crate test→implementation links require at least 2 hops in symbol graph traversal",
+        "Current approach is fighting itself: expanding graph but penalizing where graph leads"
+      ],
+      "confidence": 0.6
+    },
+    {
+      "timestamp": 1765205130,
+      "duration_secs": 30.908272011,
+      "failures": [
+        {
+          "query": "tests/regression.rs",
+          "seed_file": "tests/regression.rs",
+          "expected_top": [
+            "crates/printer/src/util.rs"
+          ],
+          "actual_top": [
+            "src/distractor_0.rs",
+            "src/distractor_5.rs",
+            "src/utils/helper_6.rs",
+            "crates/printer/src/util.rs",
+            "src/core/internal/deep_7.rs"
+          ],
+          "ndcg": 0.4306765580733931,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/core/flags/doc/man.rs",
+          "seed_file": "crates/core/flags/doc/man.rs",
+          "expected_top": [
+            "crates/core/flags/defs.rs"
+          ],
+          "actual_top": [
+            "tests/test_4.rs",
+            "src/distractor_5.rs",
+            "src/core/internal/deep_2.rs",
+            "src/core/internal/deep_7.rs",
+            "crates/core/flags/defs.rs"
+          ],
+          "ndcg": 0.38685280723454163,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        }
+      ],
+      "params": {
+        "pagerank_alpha": 0.13000214499999996,
+        "pagerank_chat_multiplier": 70.0,
+        "depth_weight_root": 0.16806999999999994,
+        "depth_weight_moderate": 0.41405,
+        "depth_weight_deep": 0.199927,
+        "depth_weight_vendor": 0.01,
+        "boost_mentioned_ident": 10.0,
+        "boost_mentioned_file": 5.0,
+        "boost_chat_file": 14.0,
+        "boost_temporal_coupling": 4.198467,
+        "boost_focus_expansion": 1.2004999999999997,
+        "git_recency_decay_days": 30.0,
+        "git_recency_max_boost": 7.0,
+        "git_churn_threshold": 5.0,
+        "git_churn_max_boost": 6.0,
+        "focus_decay": 0.156065,
+        "focus_max_hops": 1.0549993999999996
+      },
+      "ndcg_before": 0.8766159242690231,
+      "reasoning": "Let me analyze the optimization trajectory and failures to propose meaningful parameter changes.\n\n\n\n**Trajectory Analysis:**\n- Episode 6 NDCG: 0.8766 - slight regression from E5 (0.879)\n- We're in a plateau state - NDCG has oscillated between 0.879-0.881 for 5 episodes\n- The key insight from training is critical: \"Current approach is fighting itself: expanding graph but penalizing where graph leads\"\n\n**Failure Analysis:**\n\n**Failure 1: tests/regression.rs → expected crates/printer/src/util.rs**\n- Intent: Debug\n- Distractors are winning: root-level files (distractor_0, distractor_5) and shallow helpers\n- The test file needs to find its implementation target (util.rs in printer crate)\n- This is a cross-crate link requiring REVERSE graph traversal: \"what does this test exercise?\"\n- Current depth_weight_root=0.17 is suppressing root files but distractors still dominate\n- focus_max_hops=1.1 is too shallow for cross-crate traversal (need ~2 hops minimum)\n\n**Failure 2: crates/core/flags/doc/man.rs → expected crates/core/flags/defs.rs**\n- Intent: Explore\n- Again, distractors win: tests/test_4.rs, distractor_5.rs, deep internal files\n- These are sibling files in the same crate - should be connected via symbol graph\n- The man.rs likely imports types from defs.rs - this is a FORWARD graph link\n- Current pagerank_alpha=0.130 is quite localized but not localizing to the RIGHT neighborhood\n\n**Key Insight:**\nThe problem isn't the magnitude of penalties - it's that we're not strengthening the RIGHT signals:\n1. focus_expansion boost (1.20) is too weak relative to other signals\n2. focus_max_hops (1.1) can't reach cross-crate targets\n3. The graph signal is being drowned by temporal/depth noise\n\n**Parameter Interactions:**\n- depth_weight_root (0.17) suppresses root BUT distractors are often NOT at root (src/distractor_0.rs is depth=1)\n- focus_decay (0.16) × focus_max_hops (1.1) = effective reach is tiny\n- boost_focus_expansion (1.20) is trivial compared to boost_chat_file (14.0)\n\n**Proposed Strategy: Dramatically strengthen graph-based signals**\n\nInstead of penalizing more, BOOST the correct signal harder:\n- focus_max_hops: 1.1 → 2.2 (double to reach cross-crate)\n- boost_focus_expansion: 1.20 → 3.5 (make graph signal matter vs noise)\n- focus_decay: 0.16 → 0.35 (slower decay = longer reach with meaningful weight)\n- pagerank_alpha: 0.130 → 0.11 (slightly more local to avoid diffusing too far)",
+      "strategy_capsule": "Amplify graph expansion signal: boost_focus_expansion 3x, extend hops to 2.2, slow decay to preserve signal strength",
+      "proposed_changes": {},
+      "param_interactions": [
+        "focus_decay × focus_max_hops determines effective graph reach - both were too restrictive",
+        "boost_focus_expansion << boost_chat_file means graph signal loses to chat context noise",
+        "depth penalties aren't the issue - distractors at depth=1 bypass root penalty"
+      ],
+      "structural_insights": [
+        "Distractors winning suggests our graph isn't reaching OR isn't weighted strongly enough",
+        "Cross-crate test→impl links need ≥2 hops in symbol graph",
+        "The 'Explore' intent should follow graph strongly; current boost_focus_expansion (1.2) is noise-level",
+        "depth_weight penalties don't help when distractors are at same depth as targets"
+      ],
+      "confidence": 0.7
+    },
+    {
+      "timestamp": 1765205183,
+      "duration_secs": 52.837115893,
+      "failures": [
+        {
+          "query": "crates/printer/src/util.rs",
+          "seed_file": "crates/printer/src/util.rs",
+          "expected_top": [
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "tests/test_4.rs",
+            "src/distractor_5.rs",
+            "src/distractor_0.rs",
+            "src/core/internal/deep_2.rs",
+            "src/core/internal/deep_7.rs"
+          ],
+          "ndcg": 0.3333333333333333,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/ignore/src/dir.rs",
+          "seed_file": "crates/ignore/src/dir.rs",
+          "expected_top": [
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "tests/test_4.rs",
+            "src/distractor_0.rs",
+            "src/core/internal/deep_7.rs",
+            "src/core/internal/deep_2.rs",
+            "tests/regression.rs"
+          ],
+          "ndcg": 0.38685280723454163,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "tests/regression.rs",
+          "seed_file": "tests/regression.rs",
+          "expected_top": [
+            "crates/printer/src/summary.rs"
+          ],
+          "actual_top": [
+            "src/distractor_0.rs",
+            "lib/mod_8.rs",
+            "src/utils/helper_1.rs",
+            "crates/printer/src/summary.rs",
+            "lib/mod_3.rs"
+          ],
+          "ndcg": 0.43067655807339306,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        }
+      ],
+      "params": {
+        "pagerank_alpha": 0.13000214499999996,
+        "pagerank_chat_multiplier": 70.0,
+        "depth_weight_root": 0.16806999999999994,
+        "depth_weight_moderate": 0.41405,
+        "depth_weight_deep": 0.199927,
+        "depth_weight_vendor": 0.01,
+        "boost_mentioned_ident": 10.0,
+        "boost_mentioned_file": 5.0,
+        "boost_chat_file": 14.0,
+        "boost_temporal_coupling": 4.198467,
+        "boost_focus_expansion": 1.2004999999999997,
+        "git_recency_decay_days": 30.0,
+        "git_recency_max_boost": 7.0,
+        "git_churn_threshold": 5.0,
+        "git_churn_max_boost": 6.0,
+        "focus_decay": 0.156065,
+        "focus_max_hops": 1.0549993999999996
+      },
+      "ndcg_before": 0.8802762911244736,
+      "reasoning": "Now I have context. Let me analyze this inner optimizer promptgram request and provide my gradient approximation in concept space.\n\n\n\n**Trajectory Analysis:**\n- Episodes 1-7 show a clear plateau oscillating around NDCG 0.877-0.881\n- Recent moves (E4-E6) tried amplifying graph expansion signals - but NDCG hasn't broken through\n- The trajectory insight is correct: \"fighting itself: expanding graph but penalizing where graph leads\"\n\n**Failure Pattern Analysis:**\n\nAll 3 failures share a critical structure:\n1. **Failure 1 & 2**: Seed = crate source file → Expected = `tests/regression.rs` (root-level test)\n2. **Failure 3**: Seed = `tests/regression.rs` → Expected = `crates/printer/src/summary.rs`\n\nThe bidirectional test↔impl relationship is **not being captured**. The distractors winning (`test_4.rs`, `distractor_*.rs`, `deep_*.rs`) tells us:\n- Graph expansion IS happening (we see `deep_*.rs` files)\n- But it's expanding to the **wrong neighbors**\n\n**Root Cause Hypothesis:**\n\nThe problem isn't hop distance or decay - it's **edge directionality and edge quality**:\n- `boost_focus_expansion: 1.2` is essentially noise (as noted in insights)\n- `focus_max_hops: 1.1` means we barely go beyond immediate neighbors\n- But more critically: **PageRank with α=0.13 is extremely localized**\n\nAt α=0.13, PageRank concentrates almost entirely on direct neighbors. For cross-crate test→impl links, you need the random walk to actually *traverse* those edges.\n\n**The Key Insight:**\n\nThe failures show `tests/regression.rs` should link to `crates/printer/src/util.rs` and `crates/printer/src/summary.rs`. This is likely a **use/import relationship** in the symbol graph. But:\n- If the test file *imports* from the crate, there's an edge test→impl\n- PageRank would give weight to files the test points TO\n- But low alpha + low hops = we never collect that signal back\n\n**Orthogonal Move Required:**\n\nPrevious episodes tweaked the same knobs (alpha, hops, decay, depth_weight). Time for a **different signal entirely**:\n\n1. **Temporal coupling** (`boost_temporal_coupling: 4.2`) - tests and impl files often change together in commits. This is an orthogonal signal path that doesn't rely on symbol graph topology.\n\n2. **Chat/mentioned boosts** are high but irrelevant here (no chat context in these queries)\n\n3. The **PageRank chat multiplier (70.0)** is extreme but only applies to chat files\n\n**Proposed Strategy:**\n\n1. **Dramatically increase focus_expansion** (1.2 → 4.0+): Make the graph signal actually matter\n2. **Increase focus_max_hops** (1.1 → 2.5): Allow 2+ hop traversal for crate boundaries  \n3. **Increase temporal coupling boost** (4.2 → 8.0): Leverage the fact that test files change with their impl files\n4. **Reduce depth_weight penalties slightly**: Root tests shouldn't be penalized when they're targets\n5. **Slightly increase alpha** (0.13 → 0.20): Allow PageRank to globalize slightly more",
+      "strategy_capsule": "Orthogonal pivot: amplify temporal coupling + actual graph traversal rather than tuning penalties",
+      "proposed_changes": {},
+      "param_interactions": [
+        "focus_max_hops × focus_decay: high hops with high decay = signal dies before reaching target",
+        "boost_focus_expansion × focus_max_hops: both must increase together for graph to actually contribute",
+        "temporal_coupling: orthogonal to graph topology - captures behavioral co-change",
+        "alpha × focus_expansion: global vs local trade-off, both too low = tunnel vision on wrong neighbors"
+      ],
+      "structural_insights": [
+        "Test files import impl → edge goes test→impl, but we need impl→test for 'Debug' intent",
+        "Reverse flow requires either: (a) inverted graph, (b) enough hops to find bidirectional paths, or (c) orthogonal signal like temporal coupling",
+        "Distractors at similar depth means depth_weight is a blunt instrument here",
+        "The 'Debug' intent pattern: seed impl file → want test file. This is reverse of import direction.",
+        "Consider: should 'Debug' intent apply a reverse-edge bonus? (structural change, not param change)"
+      ],
+      "confidence": 0.55
+    }
+  ],
+  "param_interactions": [
+    "focus_decay (0.22) + focus_max_hops (2.2) = steep dropoff limiting related file discovery",
+    "depth_weight_root (0.34) allows test files to compete with real code",
+    "boost_focus_expansion (2.45) may be insufficient to override PageRank noise",
+    "focus_max_hops * focus_decay determines effective reach - need both higher hops AND lower decay",
+    "depth_weight_root competes with boost_focus_expansion at hop boundaries",
+    "Low focus_max_hops + high boost_mentioned_file = local tunnel vision",
+    "focus_max_hops × focus_decay: at 2.2 hops, decay=0.22 kills signal before reaching cross-crate targets",
+    "depth_weight_root × pagerank_alpha: low alpha localizes to root tests instead of flowing to crates/",
+    "boost_focus_expansion × focus_decay^hops = effective neighbor contribution; currently ~1.2 × 0.84 = 1.0 (no boost)",
+    "depth_weight_root punishes tests/regression.rs which is at root level - actively counterproductive",
+    "focus_max_hops at 1.1 may not reach tests/ if the import chain is: util.rs → (module) → (crate export) → tests/regression.rs",
+    "focus_decay × focus_max_hops determines effective graph reach - both were too restrictive",
+    "boost_focus_expansion << boost_chat_file means graph signal loses to chat context noise",
+    "depth penalties aren't the issue - distractors at depth=1 bypass root penalty",
+    "focus_max_hops × focus_decay: high hops with high decay = signal dies before reaching target",
+    "boost_focus_expansion × focus_max_hops: both must increase together for graph to actually contribute",
+    "temporal_coupling: orthogonal to graph topology - captures behavioral co-change",
+    "alpha × focus_expansion: global vs local trade-off, both too low = tunnel vision on wrong neighbors"
+  ],
+  "failure_patterns": [],
+  "success_patterns": [],
+  "structural_proposals": [
+    "crates/core/flags/* files should have strong intra-module coupling - focus expansion should capture this",
+    "printer modules likely have call-graph edges to flags - need more hop depth to reach cross-crate",
+    "Test files in root/tests/ directories are stealing rank - reduce root weight",
+    "tests/regression.rs → crates/printer/src/util.rs requires traversing: test → imported module → printer crate → util.rs (minimum 3 hops)",
+    "Root-level test directories form a 'gravity well' that traps ranking when depth_weight_root > 0.3",
+    "The 'Debug' intent should bias toward util/helper files but current signal doesn't discriminate between src/utils (wrong) and crates/*/util.rs (correct)",
+    "Test files import modules from crates/ but PageRank flow is trapped before reaching them",
+    "The 'curated' corpus may have intentionally placed distractors at root level to test this failure mode",
+    "Cross-crate resolution requires treating tests/→crates/ edges as high-priority expansion paths",
+    "The 'curated' corpus likely has lib/ as noise and tests/ as signal - both at root depth. Depth alone cannot distinguish.",
+    "File-to-file queries without chat context rely entirely on structural edges. The import graph IS the signal.",
+    "Consider whether 'Explore' intent should weight callers (importers) > callees (dependencies)",
+    "Debug intent queries need REVERSE edge following: 'what imports me?' not 'what do I import?'",
+    "The curated corpus intentionally places tests at root to test depth discrimination vs structural signal",
+    "Cross-crate test→implementation links require at least 2 hops in symbol graph traversal",
+    "Current approach is fighting itself: expanding graph but penalizing where graph leads",
+    "Distractors winning suggests our graph isn't reaching OR isn't weighted strongly enough",
+    "Cross-crate test→impl links need ≥2 hops in symbol graph",
+    "The 'Explore' intent should follow graph strongly; current boost_focus_expansion (1.2) is noise-level",
+    "depth_weight penalties don't help when distractors are at same depth as targets",
+    "Test files import impl → edge goes test→impl, but we need impl→test for 'Debug' intent",
+    "Reverse flow requires either: (a) inverted graph, (b) enough hops to find bidirectional paths, or (c) orthogonal signal like temporal coupling",
+    "Distractors at similar depth means depth_weight is a blunt instrument here",
+    "The 'Debug' intent pattern: seed impl file → want test file. This is reverse of import direction.",
+    "Consider: should 'Debug' intent apply a reverse-edge bonus? (structural change, not param change)"
+  ],
+  "presets": {},
+  "heuristics": [],
+  "warnings": []
+}

@@ -1,0 +1,1945 @@
+
+[45m[1m RIPMAP L2 OUTER LOOP OPTIMIZER [0m[49m
+
+📄 Using default inner promptgram
+Configuration:
+  Run name:       l2_overnight_500ep
+  Outer steps:    50
+  Inner episodes: 10
+  Inner agent:    claude
+  Outer agent:    gemini
+  Corpus:         curated
+  L2 reasoning:   enabled
+  Output dir:     "training-outer/runs/l2_overnight_500ep"
+
+─────────────────────────────────────────────────────────────────
+Starting outer loop (50 steps)...
+
+[46m[1m OUTER STEP 1/50 [0m[49m
+  📋 Selected promptgram: inner_v001 (mode: best)
+     [2KE 1/10 NDCG[▁                   ]0.829 Fail[▁                   ]4
+     [2KE 2/10 NDCG[▁▆                  ]0.830 Fail[▁█                  ]8
+     [2KE 3/10 NDCG[▆█▁                 ]0.828 Fail[▁█▆                 ]7 ⚡CONVERGED
+     [2KE 4/10 NDCG[▄▅▁█                ]0.832 Fail[▃█▇▁                ]2 ⚡CONVERGED
+     [2KE 5/10 NDCG[▄▅▂█▁               ]0.827 Fail[▃█▇▁█               ]8 ⚡CONVERGED
+     [2KE 6/10 NDCG[▅▆▄█▃▁              ]0.825 Fail[▃█▇▁█▂              ]3 ⚡CONVERGED
+     [2KE 7/10 NDCG[▅▆▄█▃▁▂             ]0.826 Fail[▃█▇▁█▂▆             ]6 ⚡CONVERGED
+     [2KE 8/10 NDCG[▅▆▄█▃▁▂▅            ]0.829 Fail[▃█▇▁█▂▆▅            ]5 ⚡CONVERGED
+     [2KE 9/10 NDCG[▅▆▃█▃▁▂▅█           ]0.832 Fail[▃▆▅▁▆▂▅▄█           ]10 ⚡CONVERGED
+     [2KE10/10 NDCG[▅▅▃▇▃▁▂▅▇█          ]0.833 Fail[▃▆▅▁▆▂▅▄█▅          ]6 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8293 ↑ 0.8329  ([32m+0.0036[39m)
+     Final NDCG@10: 0.8275
+     Episodes: 8
+  🏆 New best! NDCG=0.8329 - params saved for warm start
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.60
+     1 edits proposed
+       • append: Heuristics in (new)
+     💾 Persisted to "training-outer/prompts/inner/inner_v002.md"
+     ✓ Created new promptgram: inner_v002
+
+  📈 Results:
+     NDCG: 0.8293 → 0.8329 (Δ+0.0036)
+     Failures: 10 → 6
+     Duration: 346.0s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.85 temp=0.00 explore=0.50 depth=0.10 hub=0.65 focus=0.36
+     Strategy capsules:
+       • localize and amplify structural affinity
+       • damp hub dominance, amplify local structure
+       • suppress hub attractors via degree penalty, reward path-dept
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 2/50 [0m[49m
+  📋 Selected promptgram: inner_v001 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_001/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.828 Fail[▁                   ]5
+     [2KE 2/10 NDCG[▁█                  ]0.829 Fail[▁▁                  ]5
+     [2KE 3/10 NDCG[▃█▁                 ]0.828 Fail[▁▁█                 ]9 ⚡CONVERGED
+     [2KE 4/10 NDCG[▃█▁▆                ]0.829 Fail[▁▁▇█                ]10 ⚡CONVERGED
+     [2KE 5/10 NDCG[▂▄▁▃█               ]0.831 Fail[▁▁▇█▅               ]8 ⚡CONVERGED
+     [2KE 6/10 NDCG[▂▄▁▃█▁              ]0.828 Fail[▂▂▇█▆▁              ]4 ⚡CONVERGED
+     [2KE 7/10 NDCG[▄▆▄▅█▄▁             ]0.825 Fail[▂▂▇█▆▁▆             ]8 ⚡CONVERGED
+     [2KE 8/10 NDCG[▄▆▄▅█▄▁▅            ]0.829 Fail[▂▂▇█▆▁▆▇            ]9 ⚡CONVERGED
+     [2KE 9/10 NDCG[▅▆▅▆█▅▃▆▁           ]0.823 Fail[▂▂▇█▆▁▆▇█           ]10 ⚡CONVERGED
+     [2KE10/10 NDCG[▅▆▅▆█▅▃▆▁▇          ]0.830 Fail[▂▂▇█▆▁▆▇█▆          ]8 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8282 ↑ 0.8300  ([32m+0.0018[39m)
+     Final NDCG@10: 0.8271
+     Episodes: 10
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=exploit, confidence=0.80
+     2 edits proposed
+       • append: Heuristics in (new)
+       • append: Policy in (new)
+     💾 Persisted to "training-outer/prompts/inner/inner_v003.md"
+     ✓ Created new promptgram: inner_v003
+
+  📈 Results:
+     NDCG: 0.8282 → 0.8300 (Δ+0.0018)
+     Failures: 10 → 8
+     Duration: 301.4s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.85 temp=0.00 explore=0.50 depth=0.10 hub=0.65 focus=0.36
+     Strategy capsules:
+       • Strengthen local signals, reduce global diffusion to combat 
+       • Rebalance depth penalties for monorepo structure, constrain 
+       • Rescue deep crate files: boost depth_weight_deep, extend foc
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 3/50 [0m[49m
+  📋 Selected promptgram: inner_v001 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_001/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.830 Fail[▁                   ]6
+     [2KE 2/10 NDCG[█▁                  ]0.826 Fail[█▁                  ]4
+     [2KE 3/10 NDCG[▇▁█                 ]0.831 Fail[▆▁█                 ]7 ⚡CONVERGED
+     [2KE 4/10 NDCG[▇▁█▃                ]0.828 Fail[▆▁█▃                ]5 ⚡CONVERGED
+     [2KE 5/10 NDCG[▇▁█▃▄               ]0.828 Fail[▆▃█▅▁               ]3 ⚡CONVERGED
+     [2KE 6/10 NDCG[▇▁█▃▄▆              ]0.829 Fail[▄▂▅▃▁█              ]10 ⚡CONVERGED
+     [2KE 7/10 NDCG[▇▁█▃▄▆▁             ]0.826 Fail[▄▂▅▃▁█▂             ]4 ⚡CONVERGED
+     [2KE 8/10 NDCG[▇▁█▃▄▆▁▇            ]0.830 Fail[▅▃▅▄▂█▃▁            ]2 ⚡CONVERGED
+     [2KE 9/10 NDCG[▇▁█▃▄▆▁▇▄           ]0.828 Fail[▅▃▅▄▂█▃▁▄           ]5 ⚡CONVERGED
+     [2KE10/10 NDCG[▇▃█▄▅▆▃▇▅▁          ]0.825 Fail[▅▃▅▄▂█▃▁▄▅          ]7 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8303 ↓ 0.8245  ([31m-0.0058[39m)
+     Final NDCG@10: 0.8265
+     Episodes: 9
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=exploit, confidence=0.85
+     2 edits proposed
+       • replace: Heuristics in Depth penalties break monorepos
+       • append: Policy in Parameter interactions
+     💾 Persisted to "training-outer/prompts/inner/inner_v004.md"
+     ✓ Created new promptgram: inner_v004
+
+  📈 Results:
+     NDCG: 0.8303 → 0.8245 (Δ-0.0058)
+     Failures: 10 → 7
+     Duration: 288.8s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.85 temp=0.00 explore=0.50 depth=0.10 hub=0.65 focus=0.36
+     Strategy capsules:
+       • Strengthen structural locality over temporal signals; distra
+       • Expand focus horizon and dampen temporal noise; distractors 
+       • Extend structural reach via focus_max_hops while aggressivel
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 4/50 [0m[49m
+  📋 Selected promptgram: inner_v001 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_001/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.830 Fail[▁                   ]5
+     [2KE 2/10 NDCG[▁█                  ]0.831 Fail[█▁                  ]4
+     • Failure 4 (NDCG=0) suggests doc/man.rs has weak/no import link to defs.rs - may need sibling-path heuristic
+     [2KE 3/10 NDCG[▆█▁                 ]0.826 Fail[▅▁█                 ]6 ⚡CONVERGED
+     [2KE 4/10 NDCG[▆█▂▁                ]0.825 Fail[▂▁▄█                ]9 ⚡CONVERGED
+     [2KE 5/10 NDCG[▆█▂▁▄               ]0.828 Fail[▂▁▄█▂               ]5 ⚡CONVERGED
+     [2KE 6/10 NDCG[▆█▃▂▅▁              ]0.824 Fail[▂▁▄█▂▇              ]8 ⚡CONVERGED
+     [2KE 7/10 NDCG[▆█▃▂▅▁▃             ]0.826 Fail[▂▁▄█▂▇▄             ]6 ⚡CONVERGED
+     [2KE 8/10 NDCG[▆█▃▂▅▁▃▅            ]0.828 Fail[▂▁▄█▂▇▄▄            ]6 ⚡CONVERGED
+     [2KE 9/10 NDCG[▆█▃▂▅▁▃▅▁           ]0.824 Fail[▂▁▄█▂▇▄▄▇           ]8 ⚡CONVERGED
+     [2KE10/10 NDCG[▆█▃▂▅▁▃▅▁█          ]0.832 Fail[▂▁▄█▂▇▄▄▇▅          ]7 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8296 ↑ 0.8317  ([32m+0.0021[39m)
+     Final NDCG@10: 0.8265
+     Episodes: 9
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.85
+     2 edits proposed
+       • replace: Policy in Analyze failures:
+- Missing signal vs overwhelming signal
+- Parameter interactions
+       • append: Heuristics in (new)
+     💾 Persisted to "training-outer/prompts/inner/inner_v005.md"
+     ✓ Created new promptgram: inner_v005
+
+  📈 Results:
+     NDCG: 0.8296 → 0.8317 (Δ+0.0021)
+     Failures: 10 → 7
+     Duration: 279.2s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.85 temp=0.00 explore=0.50 depth=0.10 hub=0.65 focus=0.36
+     Strategy capsules:
+       • Localize signal propagation - reduce PageRank diffusion, str
+       • Localize harder + remove depth prejudice - alpha down to 0.7
+       • Rescue deep monorepo structure: depth_weight_deep 0.10→0.65,
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 5/50 [0m[49m
+  📋 Selected promptgram: inner_v005 (mode: explore)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_001/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.831 Fail[▁                   ]3
+     [2KE 2/10 NDCG[▂▁                  ]0.831 Fail[█▁                  ]2
+     [2KE 3/10 NDCG[█▇▁                 ]0.829 Fail[▃▁█                 ]6 ⚡CONVERGED
+     • NDCG 0.126 on failure 4 is catastrophic - expected files not even in top results, suggesting complete signal misrouting
+     [2KE 4/10 NDCG[██▄▁                ]0.827 Fail[▃▁█▆                ]5 ⚡CONVERGED
+     [2KE 5/10 NDCG[██▄▁▇               ]0.830 Fail[▃▁█▆▁               ]2 ⚡CONVERGED
+     [2KE 6/10 NDCG[██▄▁▇▆              ]0.830 Fail[▃▁█▆▁▃              ]3 ⚡CONVERGED
+     [2KE 7/10 NDCG[▇▆▄▁▆▅█             ]0.832 Fail[▃▁█▆▁▃▁             ]2 ⚡CONVERGED
+     [2KE 8/10 NDCG[▇▆▄▁▆▅█▄            ]0.829 Fail[▃▁█▆▁▃▁▅            ]4 ⚡CONVERGED
+     [2KE 9/10 NDCG[▇▆▄▁▆▅█▄▃           ]0.828 Fail[▃▁█▆▁▃▁▅█           ]6 ⚡CONVERGED
+     [2KE10/10 NDCG[▇▆▄▁▆▅█▄▃▆          ]0.830 Fail[▃▁█▆▁▃▁▅█▆          ]5 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8309 ↓ 0.8305  ([31m-0.0005[39m)
+     Final NDCG@10: 0.8286
+     Episodes: 9
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.85
+     3 edits proposed
+       • replace: Policy in Analyze failures:
+- Classify: 'Distractor Intrusion' (often shallow/generic) vs 'Target Suppression' (often deep/specific).
+- Attribution: Link physical file traits (depth, connectivity) to corresponding parameters.
+       • replace: Heuristics in Low alpha localizes, high alpha globalizes
+       • append: Heuristics in Intent context must modulate exploration radius; 'Focus' requires low hops, 'Discovery' requires high hops.
+     💾 Persisted to "training-outer/prompts/inner/inner_v006.md"
+     ✓ Created new promptgram: inner_v006
+
+  📈 Results:
+     NDCG: 0.8309 → 0.8305 (Δ-0.0005)
+     Failures: 10 → 5
+     Duration: 319.9s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.85 temp=0.00 explore=0.50 depth=0.10 hub=0.76 focus=0.40
+     Strategy capsules:
+       • reduce_noise_sharpen_structure
+       • hub_damping_localization
+       • dampen_hubs_increase_locality
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 6/50 [0m[49m
+  📋 Selected promptgram: inner_v002 (mode: explore)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_001/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.826 Fail[▁                   ]8
+     [2KE 2/10 NDCG[▁█                  ]0.829 Fail[█▁                  ]4
+     [2KE 3/10 NDCG[▁██                 ]0.829 Fail[█▁▆                 ]7 ⚡CONVERGED
+     [2KE 4/10 NDCG[▁██▄                ]0.828 Fail[▆▁▅█                ]10 ⚡CONVERGED
+     [2KE 5/10 NDCG[▁██▄█               ]0.829 Fail[▆▁▅█▃               ]6 ⚡CONVERGED
+     [2KE 6/10 NDCG[▃██▅█▁              ]0.825 Fail[▆▁▅█▃▂              ]5 ⚡CONVERGED
+     [2KE 7/10 NDCG[▃██▅█▁▇             ]0.829 Fail[▆▁▅█▃▂▃             ]6 ⚡CONVERGED
+     [2KE 8/10 NDCG[▃██▅█▁▇▇            ]0.829 Fail[▆▁▅█▃▂▃▂            ]5 ⚡CONVERGED
+     [2KE 9/10 NDCG[▃██▅█▁▇▇▅           ]0.827 Fail[▆▁▅█▃▂▃▂▃           ]6 ⚡CONVERGED
+     [2KE10/10 NDCG[▃██▅█▁▇▇▅▄          ]0.827 Fail[▆▁▅█▃▂▃▂▃▃          ]6 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8264 ↑ 0.8269  ([32m+0.0005[39m)
+     Final NDCG@10: 0.8239
+     Episodes: 9
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.85
+     3 edits proposed
+       • append: Policy in null
+       • append: Heuristics in null
+       • replace: Heuristics in Depth penalties break monorepos
+     💾 Persisted to "training-outer/prompts/inner/inner_v007.md"
+     ✓ Created new promptgram: inner_v007
+
+  📈 Results:
+     NDCG: 0.8264 → 0.8269 (Δ+0.0005)
+     Failures: 10 → 6
+     Duration: 301.3s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.85 temp=0.00 explore=0.50 depth=0.10 hub=0.65 focus=0.36
+     Strategy capsules:
+       • Reduce PageRank globalization, strengthen local seed neighbo
+       • Localize PageRank harder, extend focus propagation, dampen t
+       • Localize PageRank (alpha 0.85→0.75), dampen test coupling, t
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 7/50 [0m[49m
+  📋 Selected promptgram: inner_v001 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_001/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.831 Fail[▁                   ]10
+     [2KE 2/10 NDCG[█▁                  ]0.825 Fail[█▁                  ]2
+     [2KE 3/10 NDCG[█▄▁                 ]0.822 Fail[█▁█                 ]10 ⚡CONVERGED
+     [2KE 4/10 NDCG[█▄▁▅                ]0.827 Fail[█▁█▅                ]6 ⚡CONVERGED
+     [2KE 5/10 NDCG[█▄▁▅▆               ]0.829 Fail[█▁█▅▄               ]5 ⚡CONVERGED
+     [2KE 6/10 NDCG[█▄▁▅▆▄              ]0.826 Fail[█▁█▅▄▄              ]5 ⚡CONVERGED
+     [2KE 7/10 NDCG[█▄▁▅▆▄▅             ]0.827 Fail[█▁█▅▄▄▅             ]6 ⚡CONVERGED
+     • CRITICAL: Add filename_pattern_dampening param with multiplier ~0.1 for regex /distractor|helper|mod_\d+|test_\d+/ - this single change would likely boost NDCG by 10-15%
+     [2KE 8/10 NDCG[█▄▁▅▆▄▅▇            ]0.829 Fail[█▁█▅▄▄▅▇            ]9 ⚡CONVERGED
+     [2KE 9/10 NDCG[█▄▁▅▆▄▅▇▇           ]0.830 Fail[█▁█▅▄▄▅▇▅           ]7 ⚡CONVERGED
+     [2KE10/10 NDCG[█▄▁▅▆▄▅▇▇▄          ]0.826 Fail[█▁█▅▄▄▅▇▅▅          ]7 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8309 ↓ 0.8259  ([31m-0.0050[39m)
+     Final NDCG@10: 0.8295
+     Episodes: 10
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.85
+     3 edits proposed
+       • append: Heuristics in (new)
+       • append: Heuristics in (new)
+       • append: Policy in (new)
+     💾 Persisted to "training-outer/prompts/inner/inner_v008.md"
+     ✓ Created new promptgram: inner_v008
+
+  📈 Results:
+     NDCG: 0.8309 → 0.8259 (Δ-0.0050)
+     Failures: 10 → 7
+     Duration: 335.4s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.85 temp=0.00 explore=0.50 depth=0.10 hub=0.65 focus=0.36
+     Strategy capsules:
+       • Localize PageRank, strengthen direct relationships, suppress
+       • Further localize PageRank, amplify same-crate proximity sign
+       • Partial revert alpha + lean into temporal coupling for test↔
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 8/50 [0m[49m
+  📋 Selected promptgram: inner_v001 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_001/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.827 Fail[▁                   ]5
+     [2KE 2/10 NDCG[▁█                  ]0.828 Fail[▁█                  ]6
+     [2KE 3/10 NDCG[▁▃█                 ]0.831 Fail[▁▂█                 ]10 ⚡CONVERGED
+     [2KE 4/10 NDCG[▁▃█▅                ]0.829 Fail[▁▂█▅                ]8 ⚡CONVERGED
+     [2KE 5/10 NDCG[▁▃█▅▄               ]0.829 Fail[▁▂█▅▁               ]5 ⚡CONVERGED
+     [2KE 6/10 NDCG[▃▄█▅▅▁              ]0.825 Fail[▁▂█▅▁▅              ]8 ⚡CONVERGED
+     [2KE 7/10 NDCG[▃▄█▅▅▁▃             ]0.827 Fail[▁▂█▅▁▅▇             ]9 ⚡CONVERGED
+     [2KE 8/10 NDCG[▃▄█▅▅▁▃▅            ]0.829 Fail[▁▂█▅▁▅▇█            ]10 ⚡CONVERGED
+     [2KE 9/10 NDCG[▃▄█▅▅▁▃▅█           ]0.832 Fail[▁▂█▅▁▅▇█▄           ]7 ⚡CONVERGED
+     [2KE10/10 NDCG[▃▄█▅▅▁▃▅██          ]0.831 Fail[▁▂█▅▁▅▇█▄▁          ]5 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8269 ↑ 0.8313  ([32m+0.0044[39m)
+     Final NDCG@10: 0.8273
+     Episodes: 10
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.85
+     3 edits proposed
+       • append: Heuristics in (new)
+       • replace: Policy in Analyze failures:
+- Missing signal vs overwhelming signal
+- Parameter interactions
+       • append: Style in (new)
+     💾 Persisted to "training-outer/prompts/inner/inner_v009.md"
+     ✓ Created new promptgram: inner_v009
+
+  📈 Results:
+     NDCG: 0.8269 → 0.8313 (Δ+0.0044)
+     Failures: 10 → 5
+     Duration: 273.5s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.85 temp=0.00 explore=0.50 depth=0.10 hub=0.65 focus=0.36
+     Strategy capsules:
+       • Amplify focus expansion to overcome distractor noise in cura
+       • Suppress temporal coupling noise, penalize root-level distra
+       • Invert depth penalty for monorepo structure: penalize shallo
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 9/50 [0m[49m
+  📋 Selected promptgram: inner_v003 (mode: explore)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_001/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.828 Fail[▁                   ]3
+     [2KE 2/10 NDCG[█▁                  ]0.826 Fail[▁█                  ]6
+     [2KE 3/10 NDCG[▄▁█                 ]0.831 Fail[▃█▁                 ]2 ⚡CONVERGED
+     [2KE 4/10 NDCG[▄▁█▂                ]0.826 Fail[▂▅▁█                ]9 ⚡CONVERGED
+     [2KE 5/10 NDCG[▄▁█▂▆               ]0.830 Fail[▂▅▁█▅               ]6 ⚡CONVERGED
+     [2KE 6/10 NDCG[▅▃█▃▇▁              ]0.824 Fail[▂▅▁█▅▅              ]6 ⚡CONVERGED
+     • Failure 5 (NDCG=0.000) shows complete signal loss - crates/core/flags/defs.rs → crates/core/flags/doc/man.rs should be 1 hop but distractors won
+     [2KE 7/10 NDCG[▅▃█▃▇▁▆             ]0.829 Fail[▂▅▁█▅▅▄             ]5 ⚡CONVERGED
+     [2KE 8/10 NDCG[▅▃█▃▇▁▆▅            ]0.828 Fail[▂▅▁█▅▅▄▄            ]5 ⚡CONVERGED
+     [2KE 9/10 NDCG[▅▃█▃▇▁▆▅▆           ]0.830 Fail[▂▅▁█▅▅▄▄▅           ]6 ⚡CONVERGED
+     [2KE10/10 NDCG[▅▃█▃▇▁▆▅▆▄          ]0.828 Fail[▂▅▁█▅▅▄▄▅▅          ]6 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8285 ↓ 0.8276  ([31m-0.0009[39m)
+     Final NDCG@10: 0.8250
+     Episodes: 9
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=exploit, confidence=0.90
+     2 edits proposed
+       • replace: Heuristics in Depth penalties break monorepos
+       • append: Policy in (new)
+     💾 Persisted to "training-outer/prompts/inner/inner_v010.md"
+     ✓ Created new promptgram: inner_v010
+
+  📈 Results:
+     NDCG: 0.8285 → 0.8276 (Δ-0.0009)
+     Failures: 10 → 6
+     Duration: 337.9s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.85 temp=0.00 explore=0.50 depth=0.10 hub=0.65 focus=0.36
+     Strategy capsules:
+       • Localize PageRank, soften depth penalties for monorepo crate
+       • Localize hard: lower alpha to 0.72, boost focus_expansion to
+       • Hub gravity suppression: lower alpha to 0.78, boost focus_ex
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 10/50 [0m[49m
+  📋 Selected promptgram: inner_v001 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_001/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.828 Fail[▁                   ]7
+     [2KE 2/10 NDCG[█▁                  ]0.827 Fail[▁█                  ]9
+     [2KE 3/10 NDCG[▃▁█                 ]0.831 Fail[▅█▁                 ]5 ⚡CONVERGED
+     [2KE 4/10 NDCG[▄▃█▁                ]0.826 Fail[▅█▁▃                ]6 ⚡CONVERGED
+     [2KE 5/10 NDCG[▄▃█▁▁               ]0.826 Fail[▅█▁▃▁               ]5 ⚡CONVERGED
+     [2KE 6/10 NDCG[▄▃█▁▁▂              ]0.827 Fail[▅█▁▃▁▆              ]8 ⚡CONVERGED
+     [2KE 7/10 NDCG[▄▃█▁▁▂█             ]0.831 Fail[▄▇▁▂▁▅█             ]10 ⚡CONVERGED
+     [2KE 8/10 NDCG[▅▃█▂▂▃█▁            ]0.825 Fail[▄▇▁▂▁▅█▁            ]5 ⚡CONVERGED
+     [2KE 9/10 NDCG[▅▃█▂▂▃█▁▇           ]0.830 Fail[▄▇▁▂▁▅█▁▄           ]7 ⚡CONVERGED
+     [2KE10/10 NDCG[▅▃█▂▂▃█▁▇▁          ]0.825 Fail[▅▇▂▃▂▆█▂▅▁          ]4 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8284 ↓ 0.8249  ([31m-0.0035[39m)
+     Final NDCG@10: 0.8286
+     Episodes: 9
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=exploit, confidence=0.85
+     2 edits proposed
+       • replace: Heuristics in Depth penalties break monorepos
+       • append: Heuristics in (new)
+     💾 Persisted to "training-outer/prompts/inner/inner_v011.md"
+     ✓ Created new promptgram: inner_v011
+
+  📈 Results:
+     NDCG: 0.8284 → 0.8249 (Δ-0.0035)
+     Failures: 10 → 4
+     Duration: 363.7s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.85 temp=0.00 explore=0.50 depth=0.10 hub=0.65 focus=0.36
+     Strategy capsules:
+       • Reduce PageRank dominance, amplify temporal coupling for tes
+       • Aggressive temporal coupling boost, suppress PageRank hub do
+       • Suppress distractor hub dominance via lower PageRank influen
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 11/50 [0m[49m
+  📋 Selected promptgram: inner_v001 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_001/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.829 Fail[▁                   ]10
+     [2KE 2/10 NDCG[▁█                  ]0.834 Fail[█▁                  ]7
+     [2KE 3/10 NDCG[▄█▁                 ]0.826 Fail[█▃▁                 ]6 ⚡CONVERGED
+     [2KE 4/10 NDCG[▄█▁▃                ]0.829 Fail[█▃▁▁                ]6 ⚡CONVERGED
+     [2KE 5/10 NDCG[▄█▁▃▁               ]0.827 Fail[█▃▁▁▅               ]8 ⚡CONVERGED
+     [2KE 6/10 NDCG[▄█▁▃▁▅              ]0.830 Fail[█▃▁▁▅▁              ]6 ⚡CONVERGED
+     [2KE 7/10 NDCG[▃▆▁▂▁▄█             ]0.837 Fail[█▃▁▁▅▁▁             ]6 ⚡CONVERGED
+     [2KE 8/10 NDCG[▃▆▁▂▁▄█▄            ]0.830 Fail[█▃▁▁▅▁▁▃            ]7 ⚡CONVERGED
+     [2KE 9/10 NDCG[▃▆▁▂▁▄█▄▂           ]0.828 Fail[█▃▁▁▅▁▁▃▃           ]7 ⚡CONVERGED
+     [2KE10/10 NDCG[▄▇▂▄▃▅█▅▄▁          ]0.824 Fail[█▃▁▁▅▁▁▃▃█          ]10 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8291 ↓ 0.8236  ([31m-0.0055[39m)
+     Final NDCG@10: 0.8230
+     Episodes: 9
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.85
+     3 edits proposed
+       • replace: Heuristics in Depth penalties break monorepos
+       • append: Heuristics in N/A
+       • append: Policy in N/A
+     💾 Persisted to "training-outer/prompts/inner/inner_v012.md"
+     ✓ Created new promptgram: inner_v012
+
+  📈 Results:
+     NDCG: 0.8291 → 0.8236 (Δ-0.0055)
+     Failures: 10 → 10
+     Duration: 310.9s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.85 temp=0.00 explore=0.50 depth=0.10 hub=0.65 focus=0.36
+     Strategy capsules:
+       • Reduce depth penalties crushing monorepo structures; tame Pa
+       • Elevate structural depth signals and temporal coupling to co
+       • Crush PageRank dominance; rehabilitate depth for crate struc
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 12/50 [0m[49m
+  📋 Selected promptgram: inner_v001 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_001/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.828 Fail[▁                   ]9
+     [2KE 2/10 NDCG[▁█                  ]0.830 Fail[▁█                  ]10
+     [2KE 3/10 NDCG[▁█▇                 ]0.830 Fail[▁█▁                 ]9 ⚡CONVERGED
+     [2KE 4/10 NDCG[▅██▁                ]0.824 Fail[▁█▁▁                ]9 ⚡CONVERGED
+     [2KE 5/10 NDCG[▅██▁▇               ]0.829 Fail[▁█▁▁█               ]10 ⚡CONVERGED
+     [2KE 6/10 NDCG[▅██▁▇▅              ]0.827 Fail[▇█▇▇█▁              ]5 ⚡CONVERGED
+     [2KE 7/10 NDCG[▅▇▇▁▆▄█             ]0.831 Fail[▇█▇▇█▁▅             ]8 ⚡CONVERGED
+     [2KE 8/10 NDCG[▅▇▇▃▇▅█▁            ]0.821 Fail[▇█▇▇█▁▅▅            ]8 ⚡CONVERGED
+     [2KE 9/10 NDCG[▅▇▇▃▇▅█▁▇           ]0.830 Fail[▇█▇▇█▃▆▆▁           ]3 ⚡CONVERGED
+     [2KE10/10 NDCG[▅▇▇▃▇▅█▁▇▄          ]0.826 Fail[▇█▇▇█▃▆▆▁▂          ]4 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8277 ↓ 0.8262  ([31m-0.0015[39m)
+     Final NDCG@10: 0.8272
+     Episodes: 9
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.85
+     3 edits proposed
+       • append: Policy in (new)
+       • append: Heuristics in (new)
+       • replace: Heuristics in Depth penalties break monorepos
+     💾 Persisted to "training-outer/prompts/inner/inner_v013.md"
+     ✓ Created new promptgram: inner_v013
+
+  📈 Results:
+     NDCG: 0.8277 → 0.8262 (Δ-0.0015)
+     Failures: 10 → 4
+     Duration: 402.1s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.85 temp=0.00 explore=0.50 depth=0.10 hub=0.65 focus=0.36
+     Strategy capsules:
+       • Dampen temporal signals overwhelming structural relationship
+       • Aggressive temporal signal suppression; structural signals a
+       • Flatten depth curve for monorepo structure; heavily suppress
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 13/50 [0m[49m
+  📋 Selected promptgram: inner_v001 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_001/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.827 Fail[▁                   ]9
+     [2KE 2/10 NDCG[█▁                  ]0.825 Fail[█▁                  ]5
+     [2KE 3/10 NDCG[▃▁█                 ]0.830 Fail[█▁▁                 ]5 ⚡CONVERGED
+     [2KE 4/10 NDCG[▃▁█▅                ]0.828 Fail[█▁▁█                ]9 ⚡CONVERGED
+     [2KE 5/10 NDCG[▃▁█▅▇               ]0.830 Fail[█▁▁█▃               ]6 ⚡CONVERGED
+     [2KE 6/10 NDCG[▃▁█▅▇▅              ]0.828 Fail[█▁▁█▃█              ]9 ⚡CONVERGED
+     [2KE 7/10 NDCG[▃▁█▅▇▅▇             ]0.830 Fail[█▁▁█▃█▁             ]5 ⚡CONVERGED
+     [2KE 8/10 NDCG[▃▁█▅▇▅▇█            ]0.830 Fail[█▁▁█▃█▁▃            ]6 ⚡CONVERGED
+     [2KE 9/10 NDCG[▃▁█▅▇▅▇█▆           ]0.829 Fail[█▁▁█▃█▁▃▃           ]6 ⚡CONVERGED
+     [2KE10/10 NDCG[▂▁▆▄▆▄▆▆▅█          ]0.832 Fail[▇▁▁▇▂▇▁▂▂█          ]10 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8265 ↑ 0.8317  ([32m+0.0052[39m)
+     Final NDCG@10: 0.8251
+     Episodes: 9
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.85
+     3 edits proposed
+       • append: Policy in Plateaued: orthogonal move
+       • append: Heuristics in Depth penalties break monorepos
+       • replace: Heuristics in Temporal and structural signals compete
+     💾 Persisted to "training-outer/prompts/inner/inner_v014.md"
+     ✓ Created new promptgram: inner_v014
+
+  📈 Results:
+     NDCG: 0.8265 → 0.8286 (Δ+0.0021)
+     Failures: 10 → 6
+     Duration: 328.7s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.85 temp=0.00 explore=0.50 depth=0.10 hub=0.65 focus=0.36
+     Strategy capsules:
+       • Suppress PageRank noise, elevate structural depth tolerance 
+       • Suppress distractor centrality via lower alpha, penalize sha
+       • Localize PageRank, amplify structural edges, suppress centra
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 14/50 [0m[49m
+  📋 Selected promptgram: inner_v001 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_001/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.830 Fail[▁                   ]8
+     [2KE 2/10 NDCG[▁█                  ]0.832 Fail[▁█                  ]9
+     [2KE 3/10 NDCG[▇█▁                 ]0.824 Fail[▅█▁                 ]7 ⚡CONVERGED
+     • NDCG=0.000 on failure 5 indicates complete signal collapse - target file has no path to receive any rank
+     [2KE 4/10 NDCG[▇█▂▁                ]0.823 Fail[▆█▅▁                ]5 ⚡CONVERGED
+     [2KE 5/10 NDCG[▇█▂▁▁               ]0.824 Fail[▆█▅▁▆               ]8 ⚡CONVERGED
+     [2KE 6/10 NDCG[▇█▂▁▁▅              ]0.828 Fail[▇█▅▂▇▁              ]4 ⚡CONVERGED
+     [2KE 7/10 NDCG[▇█▂▁▁▅▃             ]0.826 Fail[▇█▅▂▇▁▄             ]6 ⚡CONVERGED
+     [2KE 8/10 NDCG[▇█▂▁▁▅▃▃            ]0.825 Fail[▇█▅▂▇▁▄▄            ]6 ⚡CONVERGED
+     [2KE 9/10 NDCG[▇█▂▁▁▅▃▃▇           ]0.830 Fail[▇█▅▂▇▁▄▄▁           ]4 ⚡CONVERGED
+     [2KE10/10 NDCG[▇█▂▁▁▅▃▃▇▆          ]0.830 Fail[▇█▅▂▇▁▄▄▁▄          ]6 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8304 ↓ 0.8296  ([31m-0.0009[39m)
+     Final NDCG@10: 0.8262
+     Episodes: 10
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.85
+     3 edits proposed
+       • append: Policy in (new)
+       • replace: Heuristics in Temporal and structural signals compete
+       • replace: Heuristics in Depth penalties break monorepos
+     💾 Persisted to "training-outer/prompts/inner/inner_v015.md"
+     ✓ Created new promptgram: inner_v015
+
+  📈 Results:
+     NDCG: 0.8304 → 0.8296 (Δ-0.0009)
+     Failures: 10 → 6
+     Duration: 374.7s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.85 temp=0.00 explore=0.50 depth=0.10 hub=0.65 focus=0.36
+     Strategy capsules:
+       • Localize ranking, suppress structural noise
+       • Reduce authority diffusion, amplify direct reference signals
+       • Starve distractors via localization, boost direct coupling s
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 15/50 [0m[49m
+  📋 Selected promptgram: inner_v001 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_001/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.829 Fail[▁                   ]7
+     [2KE 2/10 NDCG[█▁                  ]0.827 Fail[█▁                  ]6
+     [2KE 3/10 NDCG[█▄▁                 ]0.825 Fail[█▆▁                 ]4 ⚡CONVERGED
+     [2KE 4/10 NDCG[█▄▁▇                ]0.828 Fail[█▆▁█                ]7 ⚡CONVERGED
+     [2KE 5/10 NDCG[█▄▁▇▇               ]0.828 Fail[█▆▁█▆               ]6 ⚡CONVERGED
+     [2KE 6/10 NDCG[█▅▃▇▇▁              ]0.823 Fail[▆▅▁▆▅█              ]8 ⚡CONVERGED
+     [2KE 7/10 NDCG[▇▄▂▆▆▁█             ]0.830 Fail[▆▅▁▆▅██             ]8 ⚡CONVERGED
+     [2KE 8/10 NDCG[▇▄▂▆▆▁█▅            ]0.827 Fail[▅▄▁▅▄▇▇█            ]9 ⚡CONVERGED
+     [2KE 9/10 NDCG[▇▄▂▆▆▁█▅▂           ]0.825 Fail[▅▃▁▅▃▆▆▇█           ]10 ⚡CONVERGED
+     [2KE10/10 NDCG[▇▄▂▆▆▁█▅▂▇          ]0.829 Fail[▅▄▂▅▄▆▆▇█▁          ]3 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8286 ↑ 0.8291  ([32m+0.0005[39m)
+     Final NDCG@10: 0.8283
+     Episodes: 6
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.85
+     3 edits proposed
+       • replace: Policy in Plateaued: orthogonal move
+       • replace: Heuristics in Low alpha localizes, high alpha globalizes
+       • replace: Heuristics in Depth penalties break monorepos
+     💾 Persisted to "training-outer/prompts/inner/inner_v016.md"
+     ✓ Created new promptgram: inner_v016
+
+  📈 Results:
+     NDCG: 0.8286 → 0.8291 (Δ+0.0005)
+     Failures: 10 → 3
+     Duration: 380.0s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.85 temp=0.00 explore=0.50 depth=0.10 hub=0.65 focus=0.36
+     Strategy capsules:
+       • Rebalance depth weights for monorepo structure; localize Pag
+       • Localize PageRank, rehabilitate moderate depth, extend focus
+       • Localize PageRank, penalize root noise, strengthen focus tra
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 16/50 [0m[49m
+  📋 Selected promptgram: inner_v001 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_001/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.827 Fail[▁                   ]7
+     [2KE 2/10 NDCG[▁█                  ]0.829 Fail[█▁                  ]6
+     [2KE 3/10 NDCG[▁█▇                 ]0.829 Fail[▃▁█                 ]10 ⚡CONVERGED
+     [2KE 4/10 NDCG[▂█▇▁                ]0.826 Fail[▃▁█▃                ]7 ⚡CONVERGED
+     [2KE 5/10 NDCG[▂▆▆▁█               ]0.831 Fail[▅▄█▅▁               ]3 ⚡CONVERGED
+     [2KE 6/10 NDCG[▃▇▆▂█▁              ]0.825 Fail[▅▄█▅▁▂              ]4 ⚡CONVERGED
+     [2KE 7/10 NDCG[▃▇▆▂█▁▃             ]0.827 Fail[▅▄█▅▁▂▆             ]8 ⚡CONVERGED
+     [2KE 8/10 NDCG[▃▇▆▂█▁▃▃            ]0.827 Fail[▅▄█▅▁▂▆▄            ]6 ⚡CONVERGED
+     [2KE 9/10 NDCG[▃▇▆▂█▁▃▃▄           ]0.828 Fail[▅▄█▅▁▂▆▄▇           ]9 ⚡CONVERGED
+     [2KE10/10 NDCG[▃▇▆▂█▁▃▃▄▃          ]0.827 Fail[▅▄█▅▁▂▆▄▇▂          ]4 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8265 ↑ 0.8266  ([32m+0.0000[39m)
+     Final NDCG@10: 0.8265
+     Episodes: 9
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.85
+     3 edits proposed
+       • append: Policy in (new)
+       • replace: Heuristics in Depth penalties break monorepos
+       • append: Heuristics in (new)
+     💾 Persisted to "training-outer/prompts/inner/inner_v017.md"
+     ✓ Created new promptgram: inner_v017
+
+  📈 Results:
+     NDCG: 0.8265 → 0.8266 (Δ+0.0000)
+     Failures: 10 → 4
+     Duration: 314.2s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.85 temp=0.00 explore=0.50 depth=0.10 hub=0.65 focus=0.36
+     Strategy capsules:
+       • Tighten locality to suppress synthetic noise
+       • Amplify structural coupling and penalize shallow noise paths
+       • Choke signal diffusion: lower alpha + reduce focus_max_hops 
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 17/50 [0m[49m
+  📋 Selected promptgram: inner_v001 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_001/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.828 Fail[▁                   ]6
+     [2KE 2/10 NDCG[▃▁                  ]0.828 Fail[█▁                  ]5
+     [2KE 3/10 NDCG[▃▁▁                 ]0.828 Fail[▃▁█                 ]8 ⚡CONVERGED
+     [2KE 4/10 NDCG[█▇▇▁                ]0.826 Fail[▃▁█▆                ]7 ⚡CONVERGED
+     [2KE 5/10 NDCG[█▇▇▁▁               ]0.826 Fail[▃▁█▆▁               ]5 ⚡CONVERGED
+     [2KE 6/10 NDCG[▆▅▅▁▁█              ]0.829 Fail[▃▁█▆▁▃              ]6 ⚡CONVERGED
+     [2KE 7/10 NDCG[▆▅▅▁▁█▁             ]0.826 Fail[▅▄█▇▄▅▁             ]3 ⚡CONVERGED
+     [2KE 8/10 NDCG[▆▅▅▁▁█▁▆            ]0.828 Fail[▅▄█▇▄▅▁▄            ]5 ⚡CONVERGED
+     [2KE 9/10 NDCG[▇▇▇▄▅█▄▇▁           ]0.824 Fail[▅▄█▇▄▅▁▄▁           ]3 ⚡CONVERGED
+     [2KE10/10 NDCG[▇▇▇▄▅█▄▇▁▄          ]0.826 Fail[▅▄█▇▄▅▁▄▁▇          ]7 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8283 ↓ 0.8258  ([31m-0.0025[39m)
+     Final NDCG@10: 0.8241
+     Episodes: 6
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.85
+     3 edits proposed
+       • append: Policy in (new)
+       • replace: Heuristics in Depth penalties break monorepos
+       • append: Heuristics in (new)
+     💾 Persisted to "training-outer/prompts/inner/inner_v018.md"
+     ✓ Created new promptgram: inner_v018
+
+  📈 Results:
+     NDCG: 0.8283 → 0.8258 (Δ-0.0025)
+     Failures: 10 → 7
+     Duration: 364.0s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.85 temp=0.00 explore=0.50 depth=0.10 hub=0.65 focus=0.36
+     Strategy capsules:
+       • Localize PageRank and strengthen direct structural signals t
+       • Dampen global diffusion, amplify direct edges, introduce sam
+       • Aggressive localization: halve alpha, double focus hops/boos
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 18/50 [0m[49m
+  📋 Selected promptgram: inner_v001 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_001/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.827 Fail[▁                   ]5
+     [2KE 2/10 NDCG[▁▆                  ]0.827 Fail[▁█                  ]6
+     [2KE 3/10 NDCG[▁▃█                 ]0.830 Fail[▁██                 ]6 ⚡CONVERGED
+     [2KE 4/10 NDCG[▂▃█▁                ]0.826 Fail[▁▃▃█                ]8 ⚡CONVERGED
+     [2KE 5/10 NDCG[▂▃█▁▇               ]0.829 Fail[▁▃▃▆█               ]9 ⚡CONVERGED
+     [2KE 6/10 NDCG[▂▃█▁▇▇              ]0.829 Fail[▁▃▃▆█▃              ]6 ⚡CONVERGED
+     [2KE 7/10 NDCG[▂▃█▁▇▇▃             ]0.827 Fail[▁▃▃▆█▃▆             ]8 ⚡CONVERGED
+     [2KE 8/10 NDCG[▃▄█▂▇▇▄▁            ]0.826 Fail[▁▃▃▆█▃▆▅            ]7 ⚡CONVERGED
+     [2KE 9/10 NDCG[▄▅█▃▇▇▅▂▁           ]0.824 Fail[▁▃▃▆█▃▆▅▆           ]8 ⚡CONVERGED
+     [2KE10/10 NDCG[▄▅█▃▇▇▅▂▁▄          ]0.827 Fail[▁▃▃▆█▃▆▅▆▅          ]7 ⚡CONVERGED
+     • Failure 2 (NDCG=0.000) indicates complete structural breakdown - expected file not in top 5
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8268 ↓ 0.8267  ([31m-0.0001[39m)
+     Final NDCG@10: 0.8267
+     Episodes: 10
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.85
+     3 edits proposed
+       • replace: Policy in Analyze failures:
+- Missing signal vs overwhelming signal
+- Parameter interactions
+       • append: Heuristics in (new)
+       • append: Heuristics in (new)
+     💾 Persisted to "training-outer/prompts/inner/inner_v019.md"
+     ✓ Created new promptgram: inner_v019
+
+  📈 Results:
+     NDCG: 0.8268 → 0.8267 (Δ-0.0001)
+     Failures: 10 → 7
+     Duration: 391.3s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.85 temp=0.00 explore=0.50 depth=0.10 hub=0.65 focus=0.36
+     Strategy capsules:
+       • Amplify focus expansion, dampen global PageRank contaminatio
+       • Extend focus reach to penetrate crates, dampen global hub co
+       • Localize PageRank, extend focus horizon, flatten depth curve
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 19/50 [0m[49m
+  📋 Selected promptgram: inner_v001 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_001/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.824 Fail[▁                   ]6
+     [2KE 2/10 NDCG[▁█                  ]0.826 Fail[▁▁                  ]6
+     [2KE 3/10 NDCG[▁▄█                 ]0.829 Fail[▁▁█                 ]7 ⚡CONVERGED
+     [2KE 4/10 NDCG[▁▃▅█                ]0.833 Fail[▁▁▅█                ]8 ⚡CONVERGED
+     [2KE 5/10 NDCG[▁▃▅█▂               ]0.825 Fail[▆▆▇█▁               ]1 ⚡CONVERGED
+     [2KE 6/10 NDCG[▁▃▅█▂▂              ]0.825 Fail[▆▆▇█▁▇              ]7 ⚡CONVERGED
+     [2KE 7/10 NDCG[▁▃▅█▂▂▄             ]0.828 Fail[▆▆▇█▁▇▅             ]5 ⚡CONVERGED
+     • Failure 5's NDCG=0.0 proves same-crate files aren't being reached - focus traversal is broken
+     [2KE 8/10 NDCG[▁▃▅█▂▂▄▄            ]0.828 Fail[▅▅▆▆▁▆▄█            ]10 ⚡CONVERGED
+     [2KE 9/10 NDCG[▂▃▅█▂▃▄▄▁           ]0.823 Fail[▅▅▆▆▁▆▄█▄           ]5 ⚡CONVERGED
+     [2KE10/10 NDCG[▂▃▅█▂▃▄▄▁▆          ]0.830 Fail[▅▅▆▆▁▆▄█▄▅          ]6 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8238 ↑ 0.8297  ([32m+0.0059[39m)
+     Final NDCG@10: 0.8330
+     Episodes: 9
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.85
+     3 edits proposed
+       • replace: Heuristics in Depth penalties break monorepos
+       • append: Heuristics in High boosts cause tunnel vision
+       • append: Policy in Parameter interactions
+     💾 Persisted to "training-outer/prompts/inner/inner_v020.md"
+     ✓ Created new promptgram: inner_v020
+
+  📈 Results:
+     NDCG: 0.8238 → 0.8297 (Δ+0.0059)
+     Failures: 10 → 6
+     Duration: 362.7s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.85 temp=0.00 explore=0.50 depth=0.10 hub=0.65 focus=0.36
+     Strategy capsules:
+       • Localize PageRank + stop penalizing depth in nested codebase
+       • Rehabilitate deep files + localize PageRank + strengthen tem
+       • Invert depth bias: deep crate files are signal, shallow dist
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 20/50 [0m[49m
+  📋 Selected promptgram: inner_v001 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_001/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.829 Fail[▁                   ]7
+     [2KE 2/10 NDCG[▁▁                  ]0.829 Fail[▁▁                  ]7
+     [2KE 3/10 NDCG[▃▃▁                 ]0.829 Fail[██▁                 ]6 ⚡CONVERGED
+     [2KE 4/10 NDCG[▂▂▁█                ]0.831 Fail[██▆▁                ]4 ⚡CONVERGED
+     [2KE 5/10 NDCG[▂▂▁▇█               ]0.832 Fail[██▆▃▁               ]3 ⚡CONVERGED
+     [2KE 6/10 NDCG[▂▂▁▇█▅              ]0.830 Fail[██▆▃▁▆              ]6 ⚡CONVERGED
+     [2KE 7/10 NDCG[▅▅▅██▇▁             ]0.825 Fail[██▆▃▁▆▅             ]5 ⚡CONVERGED
+     • FAILURE 4 NDCG=0.000 proves complete ranking failure when no structural connection exists
+     [2KE 8/10 NDCG[▅▅▅██▇▁▃            ]0.827 Fail[██▆▃▁▆▅▅            ]5 ⚡CONVERGED
+     [2KE 9/10 NDCG[▅▅▅██▇▁▃▃           ]0.827 Fail[▇▇▅▂▁▅▄▄█           ]8 ⚡CONVERGED
+     [2KE10/10 NDCG[▅▅▅██▇▁▃▃▁          ]0.825 Fail[▇▇▅▂▁▅▄▄█▂          ]4 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8290 ↓ 0.8249  ([31m-0.0042[39m)
+     Final NDCG@10: 0.8304
+     Episodes: 10
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.85
+     2 edits proposed
+       • replace: Heuristics in Depth penalties break monorepos
+       • append: Policy in Analyze failures:
+- Missing signal vs overwhelming signal
+- Parameter interactions
+     💾 Persisted to "training-outer/prompts/inner/inner_v021.md"
+     ✓ Created new promptgram: inner_v021
+
+  📈 Results:
+     NDCG: 0.8290 → 0.8249 (Δ-0.0042)
+     Failures: 10 → 4
+     Duration: 353.8s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.85 temp=0.00 explore=0.50 depth=0.10 hub=0.65 focus=0.36
+     Strategy capsules:
+       • Increase locality and focus to overcome synthetic noise file
+       • Tighten locality radius and dampen PageRank globalization to
+       • Tighten signal locality via lower PageRank alpha and reduced
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 21/50 [0m[49m
+  📋 Selected promptgram: inner_v001 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_001/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.828 Fail[▁                   ]5
+     [2KE 2/10 NDCG[▁▄                  ]0.828 Fail[▁█                  ]10
+     [2KE 3/10 NDCG[▇█▁                 ]0.825 Fail[▁█▄                 ]7 ⚡CONVERGED
+     [2KE 4/10 NDCG[▇▇▁█                ]0.829 Fail[▁█▄▂                ]6 ⚡CONVERGED
+     [2KE 5/10 NDCG[▆▇▁▇█               ]0.829 Fail[▁█▄▂▂               ]6 ⚡CONVERGED
+     [2KE 6/10 NDCG[▄▄▁▅▅█              ]0.832 Fail[▁█▄▂▂█              ]10 ⚡CONVERGED
+     [2KE 7/10 NDCG[▄▄▁▅▅█▅             ]0.829 Fail[▁█▄▂▂█▄             ]7 ⚡CONVERGED
+     [2KE 8/10 NDCG[▄▄▁▅▅█▅▁            ]0.825 Fail[▁█▄▂▂█▄▁            ]5 ⚡CONVERGED
+     • NDCG=0.000 cases (FAILURE 4,5) show complete signal loss - focus chain broken somewhere
+     [2KE 9/10 NDCG[▄▄▁▅▅█▅▁▄           ]0.828 Fail[▁█▄▂▂█▄▁▁           ]5 ⚡CONVERGED
+     [2KE10/10 NDCG[▄▄▁▅▅█▅▁▄▄          ]0.827 Fail[▁█▄▂▂█▄▁▁▂          ]6 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8279 ↓ 0.8274  ([31m-0.0005[39m)
+     Final NDCG@10: 0.8305
+     Episodes: 9
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.90
+     2 edits proposed
+       • replace: Policy in Plateaued: orthogonal move
+       • append: Heuristics in (new)
+     💾 Persisted to "training-outer/prompts/inner/inner_v022.md"
+     ✓ Created new promptgram: inner_v022
+
+  📈 Results:
+     NDCG: 0.8279 → 0.8274 (Δ-0.0005)
+     Failures: 10 → 6
+     Duration: 365.9s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.85 temp=0.00 explore=0.50 depth=0.10 hub=0.65 focus=0.36
+     Strategy capsules:
+       • Localize PageRank to combat distractor pollution; strengthen
+       • Aggressively localize PageRank and extend focus exploration 
+       • Localize PageRank via lower alpha to escape distractor gravi
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 22/50 [0m[49m
+  📋 Selected promptgram: inner_v015 (mode: explore)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_001/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.832 Fail[▁                   ]8
+     [2KE 2/10 NDCG[█▁                  ]0.827 Fail[█▁                  ]7
+     • NDCG ~0.3 range suggests correct files ARE present but ranked too low (positions 4-5 vs 1-2)
+     [2KE 3/10 NDCG[█▂▁                 ]0.826 Fail[▅▁█                 ]9 ⚡CONVERGED
+     [2KE 4/10 NDCG[█▄▃▁                ]0.824 Fail[▃▁▆█                ]10 ⚡CONVERGED
+     [2KE 5/10 NDCG[█▄▃▁▃               ]0.827 Fail[▆▅▇█▁               ]4 ⚡CONVERGED
+     • NDCG ~0.3-0.45 with correct files at positions 4-5 confirms signal presence but rank pollution
+     [2KE 6/10 NDCG[█▄▃▁▃▅              ]0.829 Fail[▆▅▇█▁▃              ]6 ⚡CONVERGED
+     [2KE 7/10 NDCG[█▄▃▁▃▅▅             ]0.828 Fail[▆▅▇█▁▃▆             ]8 ⚡CONVERGED
+     [2KE 8/10 NDCG[█▄▃▁▃▅▅▃            ]0.826 Fail[▆▅▇█▁▃▆▂            ]5 ⚡CONVERGED
+     [2KE 9/10 NDCG[█▄▃▁▃▅▅▃▇           ]0.832 Fail[▆▅▇█▁▃▆▂▅           ]7 ⚡CONVERGED
+     [2KE10/10 NDCG[█▄▃▁▃▅▅▃▇▂          ]0.825 Fail[▆▅▇█▃▅▆▄▅▁          ]2 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8323 ↓ 0.8252  ([31m-0.0071[39m)
+     Final NDCG@10: 0.8266
+     Episodes: 7
+     • NDCG ~0.3 range suggests correct files ARE present but ranked too low (positions 4-5 vs 1-2)
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.85
+     2 edits proposed
+       • replace: Heuristics in Monorepos require a flat depth curve (high decay) to allow crate-local navigation; use `focus_decay` to limit scope instead of `depth_weight`.
+       • append: Policy in Oscillation Strategy: If parameters bounce (e.g., PageRank up/down), fix the dominant global signal (Multiplier) and tune the structural discriminators (Focus, Coupling) instead.
+     💾 Persisted to "training-outer/prompts/inner/inner_v023.md"
+     ✓ Created new promptgram: inner_v023
+
+  📈 Results:
+     NDCG: 0.8270 → 0.8252 (Δ-0.0018)
+     Failures: 10 → 2
+     Duration: 353.2s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.85 temp=0.00 explore=0.50 depth=0.10 hub=0.65 focus=0.36
+     Strategy capsules:
+       • Localize PageRank + amplify focus expansion to fight distrac
+       • Surgical seed focus: reduce graph diffusion, amplify direct 
+       • Crush graph diffusion, maximize direct seed signal supremacy
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 23/50 [0m[49m
+  📋 Selected promptgram: inner_v008 (mode: explore)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_001/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.826 Fail[▁                   ]5
+     [2KE 2/10 NDCG[▄▁                  ]0.825 Fail[▁▁                  ]5
+     [2KE 3/10 NDCG[▃▁█                 ]0.827 Fail[▁▁▁                 ]5 ⚡CONVERGED
+     [2KE 4/10 NDCG[▂▁▅█                ]0.829 Fail[▁▁▁▁                ]5 ⚡CONVERGED
+     [2KE 5/10 NDCG[▂▁▅█▂               ]0.826 Fail[▁▁▁▁▁               ]5 ⚡CONVERGED
+     [2KE 6/10 NDCG[▂▁▅█▂▇              ]0.829 Fail[█████▁              ]3 ⚡CONVERGED
+     [2KE 7/10 NDCG[▂▁▄▇▂▇█             ]0.830 Fail[▄▄▄▄▄▁█             ]8 ⚡CONVERGED
+     [2KE 8/10 NDCG[▂▁▅▇▂▇█▁            ]0.825 Fail[▄▄▄▄▄▁█▇            ]7 ⚡CONVERGED
+     [2KE 9/10 NDCG[▂▁▅▇▂▇█▁▇           ]0.829 Fail[▄▄▄▄▄▁█▇▂           ]4 ⚡CONVERGED
+     [2KE10/10 NDCG[▃▂▅▇▃▇█▂▇▁          ]0.824 Fail[▃▃▃▃▃▁▇▆▂█          ]9 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8256 ↓ 0.8245  ([31m-0.0011[39m)
+     Final NDCG@10: 0.8291
+     Episodes: 9
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.85
+     3 edits proposed
+       • replace: Policy in If failing on 'boost' or 'noise', prioritize structural filtering (focus/hubs) over global signal amplification.
+       • replace: Heuristics in Depth penalties break monorepos
+       • replace: Heuristics in High-degree 'hub' nodes (e.g., utils, distractors) absorb PageRank; explicit damping is required.
+     💾 Persisted to "training-outer/prompts/inner/inner_v024.md"
+     ✓ Created new promptgram: inner_v024
+
+  📈 Results:
+     NDCG: 0.8256 → 0.8245 (Δ-0.0011)
+     Failures: 10 → 9
+     Duration: 298.5s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.85 temp=0.00 explore=0.50 depth=0.10 hub=0.65 focus=0.36
+     Strategy capsules:
+       • Localize PageRank and strengthen structural signal over nois
+       • Aggressive localization with stronger focus propagation to b
+       • Starve disconnected distractors via aggressive localization 
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 24/50 [0m[49m
+  📋 Selected promptgram: inner_v020 (mode: explore)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_001/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.830 Fail[▁                   ]10
+     [2KE 2/10 NDCG[▃▁                  ]0.830 Fail[█▁                  ]5
+     [2KE 3/10 NDCG[█▇▁                 ]0.826 Fail[█▁▄                 ]7 ⚡CONVERGED
+     [2KE 4/10 NDCG[██▃▁                ]0.825 Fail[█▁▄▁                ]5 ⚡CONVERGED
+     [2KE 5/10 NDCG[██▃▁▂               ]0.826 Fail[█▂▅▂▁               ]4 ⚡CONVERGED
+     [2KE 6/10 NDCG[██▃▁▂▃              ]0.826 Fail[█▂▅▂▁▁              ]4 ⚡CONVERGED
+     [2KE 7/10 NDCG[▅▅▂▁▂▂█             ]0.836 Fail[█▂▅▂▁▁▂             ]5 ⚡CONVERGED
+     [2KE 8/10 NDCG[▅▅▂▁▂▂██            ]0.835 Fail[█▂▅▂▁▁▂▅            ]7 ⚡CONVERGED
+     [2KE 9/10 NDCG[▃▃▂▁▁▂▅▅█           ]0.843 Fail[█▂▅▂▁▁▂▅▆           ]8 ⚡CONVERGED
+     [2KE10/10 NDCG[▃▃▂▁▁▂▅▅█▅          ]0.836 Fail[█▂▅▂▁▁▂▅▆▂          ]5 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8305 ↑ 0.8361  ([32m+0.0056[39m)
+     Final NDCG@10: 0.8374
+     Episodes: 10
+  🏆 New best! NDCG=0.8361 - params saved for warm start
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.85
+     2 edits proposed
+       • replace: Policy in If 'depth' is the failure, boost coupling (focus) before flattening penalties.
+       • replace: Heuristics in Distractor nodes often manifest as global hubs (high centrality); counteract with strong local `focus` expansion (local graph trust) rather than global diffusion.
+     💾 Persisted to "training-outer/prompts/inner/inner_v025.md"
+     ✓ Created new promptgram: inner_v025
+
+  📈 Results:
+     NDCG: 0.8305 → 0.8361 (Δ+0.0056)
+     Failures: 10 → 5
+     Duration: 267.5s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.59 temp=0.00 explore=0.50 depth=0.08 hub=0.65 focus=0.36
+     Strategy capsules:
+       • Reduce depth penalty for monorepo crates structure; strength
+       • Flatten depth weights to stop monorepo depth penalty; streng
+       • Radical depth flattening to let import graph dominate; reduc
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 25/50 [0m[49m
+  📋 Selected promptgram: inner_v025 (mode: explore)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_024/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.836 Fail[▁                   ]7
+     [2KE 2/10 NDCG[▁█                  ]0.836 Fail[█▁                  ]1
+     [2KE 3/10 NDCG[▁▄█                 ]0.838 Fail[█▁▃                 ]3 ⚡CONVERGED
+     [2KE 4/10 NDCG[▁▂▃█                ]0.846 Fail[▇▁▃█                ]8 ⚡CONVERGED
+     [2KE 5/10 NDCG[▁▂▃▇█               ]0.847 Fail[▇▁▃█▄               ]4 ⚡CONVERGED
+     • NDCG=0.000 failure suggests complete model misalignment for certain query types
+     [2KE 6/10 NDCG[▁▁▂▆▇█              ]0.850 Fail[▇▁▃█▄▄              ]4 ⚡CONVERGED
+     [2KE 7/10 NDCG[▁▁▂▆▇██             ]0.849 Fail[▇▁▃█▄▄▇             ]7 ⚡CONVERGED
+     [2KE 8/10 NDCG[▁▁▂▆▇██▇            ]0.848 Fail[▇▁▃█▄▄▇▅            ]5 ⚡CONVERGED
+     [2KE 9/10 NDCG[▁▁▂▆▇██▇█           ]0.849 Fail[▇▁▃█▄▄▇▅▅           ]5 ⚡CONVERGED
+     [2KE10/10 NDCG[▁▁▂▆▇██▇█▆          ]0.846 Fail[▇▁▃█▄▄▇▅▅▂          ]2 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8355 ↑ 0.8462  ([32m+0.0107[39m)
+     Final NDCG@10: 0.8496
+     Episodes: 10
+  🏆 New best! NDCG=0.8462 - params saved for warm start
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=exploit, confidence=0.80
+     1 edits proposed
+       • replace: Heuristics in Over-correction into 'localization' causes 'depth' failures by fragmenting the graph. Distractors are better managed by specific demotions or type-based filtering, not by suffocating the global PageRank signal which provides essential context.
+     💾 Persisted to "training-outer/prompts/inner/inner_v026.md"
+     ✓ Created new promptgram: inner_v026
+
+  📈 Results:
+     NDCG: 0.8355 → 0.8462 (Δ+0.0107)
+     Failures: 10 → 2
+     Duration: 306.8s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.42 temp=0.00 explore=0.50 depth=0.08 hub=0.65 focus=0.36
+     Strategy capsules:
+       • Reduce structural noise from PageRank dominance; strengthen 
+       • Pivot to co-change dominance: temporal coupling must outweig
+       • Localize PageRank, amplify temporal coupling, flatten modera
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 26/50 [0m[49m
+  📋 Selected promptgram: inner_v025 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_025/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.849 Fail[▁                   ]7
+     [2KE 2/10 NDCG[█▁                  ]0.846 Fail[█▁                  ]4
+     [2KE 3/10 NDCG[▄▁█                 ]0.853 Fail[█▁▁                 ]4 ⚡CONVERGED
+     [2KE 4/10 NDCG[▄▁█▁                ]0.847 Fail[█▁▁▆                ]6 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8492 ↓ 0.8467  ([31m-0.0025[39m)
+     Final NDCG@10: 0.8493
+     Episodes: 2
+  🏆 New best! NDCG=0.8462 - params saved for warm start
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=exploit, confidence=0.90
+     2 edits proposed
+       • replace: Policy in If targets are missing (unreachable/fragmented), you MUST increase global graph connectivity (alpha/teleport), even if it risks increasing distractor noise.
+       • append: Heuristics in Standard depth penalties punish modular architecture (e.g. `crates/`); use `focus` expansion to recover deep signals instead of just flattening global depth.
+     💾 Persisted to "training-outer/prompts/inner/inner_v027.md"
+     ✓ Created new promptgram: inner_v027
+
+  📈 Results:
+     NDCG: 0.8492 → 0.8462 (Δ-0.0029)
+     Failures: 10 → 4
+     Duration: 139.4s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.42 temp=0.00 explore=0.50 depth=0.08 hub=0.65 focus=0.36
+     Strategy capsules:
+       • Break global centrality dominance by strengthening local see
+       • Counter hub distractors by trusting seeds and structural cou
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 27/50 [0m[49m
+  📋 Selected promptgram: inner_v025 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_026/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.847 Fail[▁                   ]4
+     [2KE 2/10 NDCG[▁█                  ]0.848 Fail[▁▁                  ]4
+     [2KE 3/10 NDCG[▁▂█                 ]0.853 Fail[██▁                 ]1 ⚡CONVERGED
+     [2KE 4/10 NDCG[▁▂▆█                ]0.856 Fail[██▁█                ]4 ⚡CONVERGED
+     [2KE 5/10 NDCG[▁▂▄▆█               ]0.860 Fail[██▁█▆               ]3 ⚡CONVERGED
+     [2KE 6/10 NDCG[▁▁▄▅▇█              ]0.862 Fail[██▁█▆█              ]4 ⚡CONVERGED
+     [2KE 7/10 NDCG[▁▁▄▅▇█▇             ]0.860 Fail[██▁█▆█▁             ]1 ⚡CONVERGED
+     [2KE 8/10 NDCG[▁▁▄▅▇█▇█            ]0.861 Fail[██▁█▆█▁▆            ]3 ⚡CONVERGED
+     [2KE 9/10 NDCG[▁▁▄▅▇█▇█▇           ]0.860 Fail[██▁█▆█▁▆▆           ]3 ⚡CONVERGED
+     • Without graph structure changes, further parameter optimization yields <1% NDCG improvement ceiling
+     [2KE10/10 NDCG[▁▁▄▅▇█▇█▇█          ]0.862 Fail[██▁█▆█▁▆▆█          ]4 ⚡CONVERGED
+     • Parameter ceiling: ~0.86 NDCG without structural changes
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8470 ↑ 0.8619  ([32m+0.0149[39m)
+     Final NDCG@10: 0.8599
+     Episodes: 9
+  🏆 New best! NDCG=0.8619 - params saved for warm start
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=exploit, confidence=0.80
+     1 edits proposed
+       • replace: Policy in If targets are missing (unreachable/fragmented), you MUST increase global graph connectivity (alpha/teleport), even if it risks increasing distractor noise.
+     💾 Persisted to "training-outer/prompts/inner/inner_v028.md"
+     ✓ Created new promptgram: inner_v028
+
+  📈 Results:
+     NDCG: 0.8470 → 0.8619 (Δ+0.0149)
+     Failures: 10 → 4
+     Duration: 369.6s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.38 temp=0.00 explore=0.50 depth=0.05 hub=0.65 focus=0.18
+     Strategy capsules:
+       • Localize PageRank and strengthen semantic signal to combat d
+       • Expand structural reach with focus hops while boosting tempo
+       • Localize PageRank further and strengthen seed anchoring to d
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 28/50 [0m[49m
+  📋 Selected promptgram: inner_v025 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_027/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.861 Fail[▁                   ]3
+     [2KE 2/10 NDCG[█▁                  ]0.859 Fail[▁█                  ]5
+     [2KE 3/10 NDCG[█▁▅                 ]0.860 Fail[▁██                 ]5 ⚡CONVERGED
+     [2KE 4/10 NDCG[▅▁▄█                ]0.862 Fail[▁▃▃█                ]9 ⚡CONVERGED
+     [2KE 5/10 NDCG[▅▁▄█▃               ]0.860 Fail[▁▃▃█▅               ]6 ⚡CONVERGED
+     [2KE 6/10 NDCG[▅▁▃▇▃█              ]0.863 Fail[▁▃▃█▅▅              ]6 ⚡CONVERGED
+     • NDCG=0 on same-directory lookup (defs.rs→doc/man.rs) suggests missing directory co-location feature entirely - no current parameter captures 'files in same directory'
+     [2KE 7/10 NDCG[▃▁▂▄▂▄█             ]0.868 Fail[▂▄▄█▅▅▁             ]2 ⚡CONVERGED
+     [2KE 8/10 NDCG[▃▁▂▄▂▄█▇            ]0.867 Fail[▂▄▄█▅▅▁▂            ]3 ⚡CONVERGED
+     [2KE 9/10 NDCG[▂▁▂▃▂▄▇▆█           ]0.870 Fail[▂▄▄█▅▅▁▂▁           ]2 ⚡CONVERGED
+     [2KE10/10 NDCG[▂▁▂▃▂▄▇▆█▇          ]0.868 Fail[▃▅▅█▅▅▂▃▂▁          ]1 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8609 ↑ 0.8677  ([32m+0.0068[39m)
+     Final NDCG@10: 0.8655
+     Episodes: 8
+  🏆 New best! NDCG=0.8677 - params saved for warm start
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=exploit, confidence=0.90
+     2 edits proposed
+       • replace: Policy in If targets are missing (unreachable/fragmented), you MUST increase global graph connectivity (alpha/teleport), even if it risks increasing distractor noise.
+       • append: Heuristics in (new)
+     💾 Persisted to "training-outer/prompts/inner/inner_v029.md"
+     ✓ Created new promptgram: inner_v029
+
+  📈 Results:
+     NDCG: 0.8609 → 0.8677 (Δ+0.0068)
+     Failures: 10 → 1
+     Duration: 340.8s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.27 temp=0.00 explore=0.50 depth=0.03 hub=0.65 focus=0.36
+     Strategy capsules:
+       • Reduce global PageRank flood, amplify local structure and co
+       • Aggressive PageRank localization with temporal coupling ampl
+       • Hub suppression via aggressive depth penalties + stronger se
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 29/50 [0m[49m
+  📋 Selected promptgram: inner_v025 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_028/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.867 Fail[▁                   ]5
+     [2KE 2/10 NDCG[▁▄                  ]0.867 Fail[▁▁                  ]5
+     [2KE 3/10 NDCG[▁▂█                 ]0.872 Fail[██▁                 ]2 ⚡CONVERGED
+     [2KE 4/10 NDCG[▁▂█▅                ]0.869 Fail[██▁▁                ]2 ⚡CONVERGED
+     [2KE 5/10 NDCG[▁▂█▅▂               ]0.868 Fail[██▁▁▃               ]3 ⚡CONVERGED
+     [2KE 6/10 NDCG[▁▂█▅▂▁              ]0.867 Fail[██▁▁▃▁              ]2 ⚡CONVERGED
+     [2KE 7/10 NDCG[▁▂█▅▂▁▆             ]0.870 Fail[██▁▁▃▁▃             ]3 ⚡CONVERGED
+     [2KE 8/10 NDCG[▁▂█▅▂▁▆▅            ]0.870 Fail[██▁▁▃▁▃▁            ]2 ⚡CONVERGED
+     [2KE 9/10 NDCG[▄▄█▆▅▄▇▆▁           ]0.864 Fail[██▁▁▃▁▃▁▁           ]2 ⚡CONVERGED
+     [2KE10/10 NDCG[▄▄█▆▅▄▇▆▁▆          ]0.869 Fail[██▃▃▅▃▅▃▃▁          ]1 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8671 ↑ 0.8689  ([32m+0.0018[39m)
+     Final NDCG@10: 0.8673
+     Episodes: 10
+  🏆 New best! NDCG=0.8689 - params saved for warm start
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=exploit, confidence=0.85
+     2 edits proposed
+       • replace: Policy in If targets are missing (unreachable/fragmented), you MUST increase global graph connectivity (alpha/teleport), even if it risks increasing distractor noise.
+       • replace: Heuristics in Over-correction into 'localization' causes 'depth' failures by fragmenting the graph. Distractors are better managed by specific demotions or type-based filtering, not by suffocating the global PageRank signal which provides essential context.
+     💾 Persisted to "training-outer/prompts/inner/inner_v030.md"
+     ✓ Created new promptgram: inner_v030
+
+  📈 Results:
+     NDCG: 0.8671 → 0.8689 (Δ+0.0018)
+     Failures: 10 → 1
+     Duration: 341.6s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.27 temp=0.00 explore=0.50 depth=0.03 hub=0.65 focus=0.46
+     Strategy capsules:
+       • Invert depth penalty logic; strengthen focus propagation; bo
+       • Suppress distractor PageRank dominance; reward depth in crat
+       • Rehabilitate deep files; extend focus reach; dampen PageRank
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 30/50 [0m[49m
+  📋 Selected promptgram: inner_v025 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_029/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.872 Fail[▁                   ]3
+     [2KE 2/10 NDCG[█▁                  ]0.867 Fail[▁█                  ]4
+     [2KE 3/10 NDCG[█▄▁                 ]0.863 Fail[▅█▁                 ]2 ⚡CONVERGED
+     [2KE 4/10 NDCG[▆▄▁█                ]0.874 Fail[▅█▁▁                ]2 ⚡CONVERGED
+     [2KE 5/10 NDCG[▆▄▁█▅               ]0.869 Fail[▅█▁▁▅               ]3 ⚡CONVERGED
+     [2KE 6/10 NDCG[▆▄▁█▅▆              ]0.871 Fail[▅█▁▁▅█              ]4 ⚡CONVERGED
+     [2KE 7/10 NDCG[▆▄▁█▅▆▅             ]0.870 Fail[▃▅▁▁▃▅█             ]6 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8716 ↓ 0.8696  ([31m-0.0020[39m)
+     Final NDCG@10: 0.8702
+     Episodes: 6
+  🏆 New best! NDCG=0.8706 - params saved for warm start
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.85
+     2 edits proposed
+       • replace: Policy in If targets are missing (unreachable/fragmented), you MUST increase global graph connectivity (alpha/teleport), even if it risks increasing distractor noise.
+       • append: Heuristics in Standard depth penalties punish modular architecture (e.g. `crates/`); use `focus` expansion to recover deep signals instead of just flattening global depth.
+     💾 Persisted to "training-outer/prompts/inner/inner_v031.md"
+     ✓ Created new promptgram: inner_v031
+
+  📈 Results:
+     NDCG: 0.8716 → 0.8706 (Δ-0.0010)
+     Failures: 10 → 4
+     Duration: 279.0s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.27 temp=0.00 explore=0.50 depth=0.03 hub=0.65 focus=0.46
+     Strategy capsules:
+       • Reduce deep file noise, strengthen focus expansion to surfac
+       • Noise suppression + focus amplification: crush distractors, 
+       • Expand focus horizon + strengthen coupling signal to surface
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 31/50 [0m[49m
+  📋 Selected promptgram: inner_v025 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_030/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.870 Fail[▁                   ]6
+     [2KE 2/10 NDCG[█▁                  ]0.868 Fail[█▁                  ]3
+     [2KE 3/10 NDCG[█▁▆                 ]0.869 Fail[▆▁█                 ]7 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8697 ↓ 0.8692  ([31m-0.0005[39m)
+     Final NDCG@10: 0.8694
+     Episodes: 3
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.85
+     2 edits proposed
+       • replace: Policy in If targets are missing (unreachable/fragmented), you MUST increase global graph connectivity (alpha/teleport), even if it risks increasing distractor noise.
+       • append: Heuristics in (new)
+     💾 Persisted to "training-outer/prompts/inner/inner_v032.md"
+     ✓ Created new promptgram: inner_v032
+
+  📈 Results:
+     NDCG: 0.8697 → 0.8692 (Δ-0.0005)
+     Failures: 10 → 7
+     Duration: 133.6s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.27 temp=0.00 explore=0.50 depth=0.03 hub=0.65 focus=0.46
+     Strategy capsules:
+       • Reduce noise amplification by dampening aggressive boosts an
+       • Shift from structural to temporal signal - boost co-change r
+       • Temporal dominance - boost co-change signal to overpower str
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 32/50 [0m[49m
+  📋 Selected promptgram: inner_v017 (mode: explore)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_030/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.869 Fail[▁                   ]4
+     • NDCG=0.000 on failure 3 suggests complete signal miss - man.rs↔defs.rs are sibling files with no current boost
+     [2KE 2/10 NDCG[▁█                  ]0.872 Fail[█▁                  ]3
+     [2KE 3/10 NDCG[▄█▁                 ]0.866 Fail[█▁▁                 ]3 ⚡CONVERGED
+     [2KE 4/10 NDCG[▄█▁█                ]0.872 Fail[█▆▆▁                ]1 ⚡CONVERGED
+     [2KE 5/10 NDCG[▄▇▁▇█               ]0.873 Fail[█▆▆▁▆               ]3 ⚡CONVERGED
+     [2KE 6/10 NDCG[▄▇▁▇█▃              ]0.868 Fail[█▆▆▁▆▃              ]2 ⚡CONVERGED
+     [2KE 7/10 NDCG[▃▅▁▅▅▃█             ]0.877 Fail[█▆▆▁▆▃▁             ]1 ⚡CONVERGED
+     [2KE 8/10 NDCG[▂▄▁▄▄▂▆█            ]0.881 Fail[█▆▆▁▆▃▁▃            ]2 ⚡CONVERGED
+     [2KE 9/10 NDCG[▂▄▁▄▄▂▆██           ]0.881 Fail[█▆▆▁▆▃▁▃▆           ]3 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8686 ↑ 0.8810  ([32m+0.0124[39m)
+     Final NDCG@10: 0.8797
+     Episodes: 9
+     • NDCG=0.000 on failure 3 suggests complete signal miss - man.rs↔defs.rs are sibling files with no current boost
+  🏆 New best! NDCG=0.8810 - params saved for warm start
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.75
+     2 edits proposed
+       • replace: Heuristics in Synthetic distractors often mimic global authority but lack tight structural integration.
+       • replace: Policy in When noise reduction stalls, pivot to aggressive signal amplification (e.g., structural coupling over global authority).
+     💾 Persisted to "training-outer/prompts/inner/inner_v033.md"
+     ✓ Created new promptgram: inner_v033
+
+  📈 Results:
+     NDCG: 0.8686 → 0.8810 (Δ+0.0124)
+     Failures: 10 → 3
+     Duration: 337.5s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.27 temp=0.00 explore=0.50 depth=0.02 hub=0.65 focus=0.44
+     Strategy capsules:
+       • Increase temporal coupling and deep-path signals to surface 
+       • Localize ranking + amplify temporal coupling to overcome cen
+       • Amplify focus expansion + temporal coupling to proxy for mis
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 33/50 [0m[49m
+  📋 Selected promptgram: inner_v017 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_032/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.879 Fail[▁                   ]1
+     [2KE 2/10 NDCG[▁▇                  ]0.880 Fail[▁█                  ]2
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8789 ↑ 0.8798  ([32m+0.0009[39m)
+     Final NDCG@10: 0.8792
+     Episodes: 2
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=exploit, confidence=0.90
+     2 edits proposed
+       • append: Heuristics in (new)
+       • replace: Policy in When noise reduction stalls, pivot to aggressive signal amplification (e.g., structural coupling over global authority).
+     💾 Persisted to "training-outer/prompts/inner/inner_v034.md"
+     ✓ Created new promptgram: inner_v034
+
+  📈 Results:
+     NDCG: 0.8789 → 0.8798 (Δ+0.0009)
+     Failures: 10 → 2
+     Duration: 53.0s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.27 temp=0.00 explore=0.50 depth=0.02 hub=0.65 focus=0.44
+     Strategy capsules:
+       • Strengthen local file cohesion for test files by boosting di
+       • Dampen PageRank hub pollution, strengthen dependency-graph e
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 34/50 [0m[49m
+  📋 Selected promptgram: inner_v014 (mode: explore)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_032/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.880 Fail[▁                   ]2
+     [2KE 2/10 NDCG[█▁                  ]0.878 Fail[█▁                  ]1
+     • NDCG 0.356 on single failure suggests complete signal loss, not ranking refinement
+     [2KE 3/10 NDCG[▇▁█                 ]0.880 Fail[▅▁█                 ]3 ⚡CONVERGED
+     [2KE 4/10 NDCG[▅▁▆█                ]0.881 Fail[▂▁▃█                ]7 ⚡CONVERGED
+     [2KE 5/10 NDCG[▅▁▆█▁               ]0.878 Fail[▂▁▃█▃               ]3 ⚡CONVERGED
+     [2KE 6/10 NDCG[▅▁▆█▁▆              ]0.880 Fail[▂▁▃█▃▃              ]3 ⚡CONVERGED
+     [2KE 7/10 NDCG[▅▁▆█▁▆▆             ]0.880 Fail[▂▁▃█▃▃▃             ]3 ⚡CONVERGED
+     [2KE 8/10 NDCG[▅▁▆█▁▆▆▄            ]0.879 Fail[▂▁▃█▃▃▃▆            ]5 ⚡CONVERGED
+     [2KE 9/10 NDCG[▅▁▆█▁▆▆▄▃           ]0.879 Fail[▂▁▃█▃▃▃▆▁           ]1 ⚡CONVERGED
+     [2KE10/10 NDCG[▄▁▅▇▁▅▅▃▃█          ]0.882 Fail[▂▁▃█▃▃▃▆▁▂          ]2 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8800 ↑ 0.8823  ([32m+0.0023[39m)
+     Final NDCG@10: 0.8814
+     Episodes: 8
+     • NDCG 0.356 on single failure suggests complete signal loss, not ranking refinement
+  🏆 New best! NDCG=0.8823 - params saved for warm start
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.75
+     2 edits proposed
+       • append: Heuristics in (new)
+       • append: Heuristics in (new)
+     💾 Persisted to "training-outer/prompts/inner/inner_v035.md"
+     ✓ Created new promptgram: inner_v035
+
+  📈 Results:
+     NDCG: 0.8800 → 0.8823 (Δ+0.0023)
+     Failures: 10 → 2
+     Duration: 346.1s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.27 temp=0.00 explore=0.50 depth=0.02 hub=0.65 focus=0.44
+     Strategy capsules:
+       • Suppress noise from deep/internal files and reduce identifie
+       • Tame identifier noise, harden depth penalties, strengthen te
+       • Crush identifier noise, path-penalize internal/* patterns, s
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 35/50 [0m[49m
+  📋 Selected promptgram: inner_v014 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_034/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.882 Fail[▁                   ]2
+     [2KE 2/10 NDCG[█▁                  ]0.878 Fail[▁█                  ]3
+     [2KE 3/10 NDCG[█▁▃                 ]0.879 Fail[▁▃█                 ]6 ⚡CONVERGED
+     [2KE 4/10 NDCG[█▁▃▇                ]0.881 Fail[▁▃█▆                ]5 ⚡CONVERGED
+     [2KE 5/10 NDCG[█▁▃▇█               ]0.882 Fail[▁▂▇▅█               ]7 ⚡CONVERGED
+     [2KE 6/10 NDCG[█▁▃▇█▇              ]0.881 Fail[▂▃▇▆█▁              ]1 ⚡CONVERGED
+     [2KE 7/10 NDCG[█▁▃▇█▇▃             ]0.879 Fail[▂▃▇▆█▁▃             ]3 ⚡CONVERGED
+     [2KE 8/10 NDCG[█▁▃▇█▇▃▇            ]0.881 Fail[▂▃▇▆█▁▃▃            ]3 ⚡CONVERGED
+     [2KE 9/10 NDCG[█▁▃▇█▇▃▇▅           ]0.880 Fail[▂▃▇▆█▁▃▃▃           ]3 ⚡CONVERGED
+     • NDCG plateau at ~0.88 may be ceiling for parameter-only optimization
+     [2KE10/10 NDCG[█▁▃▇█▇▃▇▅█          ]0.882 Fail[▂▃▇▆█▁▃▃▃▂          ]2 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8817 ↓ 0.8816  ([31m-0.0001[39m)
+     Final NDCG@10: 0.8794
+     Episodes: 10
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=exploit, confidence=0.90
+     1 edits proposed
+       • replace: Heuristics in High boosts cause tunnel vision
+     💾 Persisted to "training-outer/prompts/inner/inner_v036.md"
+     ✓ Created new promptgram: inner_v036
+
+  📈 Results:
+     NDCG: 0.8817 → 0.8816 (Δ-0.0001)
+     Failures: 10 → 2
+     Duration: 444.4s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.27 temp=0.00 explore=0.50 depth=0.02 hub=0.65 focus=0.44
+     Strategy capsules:
+       • Increase global reach and focus expansion to combat distract
+       • Strengthen semantic focus, penalize depth drift
+       • Aggressive distractor suppression via depth penalty + semant
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 36/50 [0m[49m
+  📋 Selected promptgram: inner_v014 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_034/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.882 Fail[▁                   ]2
+     [2KE 2/10 NDCG[█▁                  ]0.878 Fail[█▁                  ]1
+     [2KE 3/10 NDCG[█▁▆                 ]0.881 Fail[▃▁█                 ]5 ⚡CONVERGED
+     [2KE 4/10 NDCG[█▁▆▁                ]0.878 Fail[▃▁█▃                ]2 ⚡CONVERGED
+     [2KE 5/10 NDCG[█▃▇▃▁               ]0.877 Fail[▃▁█▃▃               ]2 ⚡CONVERGED
+     [2KE 6/10 NDCG[█▃▇▃▁▄              ]0.879 Fail[▃▁█▃▃▅              ]3 ⚡CONVERGED
+     [2KE 7/10 NDCG[█▃▇▃▁▄▅             ]0.880 Fail[▃▁█▃▃▅▃             ]2 ⚡CONVERGED
+     [2KE 8/10 NDCG[█▃▇▃▁▄▅▇            ]0.881 Fail[▃▁█▃▃▅▃▃            ]2 ⚡CONVERGED
+     [2KE 9/10 NDCG[█▂▇▃▁▄▅▇█           ]0.882 Fail[▂▁▇▂▂▄▂▂█           ]6 ⚡CONVERGED
+     [2KE10/10 NDCG[█▂▇▃▁▄▅▇█▅          ]0.880 Fail[▂▁▇▂▂▄▂▂█▅          ]4 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8817 ↓ 0.8799  ([31m-0.0017[39m)
+     Final NDCG@10: 0.8808
+     Episodes: 10
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=exploit, confidence=0.90
+     2 edits proposed
+       • replace: Heuristics in High boosts cause tunnel vision
+       • append: Policy in Oscillating: Dampen magnitude, seek ratios between competing parameters rather than absolute extremes.
+     💾 Persisted to "training-outer/prompts/inner/inner_v037.md"
+     ✓ Created new promptgram: inner_v037
+
+  📈 Results:
+     NDCG: 0.8817 → 0.8799 (Δ-0.0017)
+     Failures: 10 → 4
+     Duration: 380.2s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.27 temp=0.00 explore=0.50 depth=0.02 hub=0.65 focus=0.44
+     Strategy capsules:
+       • Dilute hub concentration by globalizing PageRank and strengt
+       • Amplify same-directory sibling affinity; reduce depth penalt
+       • Localize PageRank, dampen chat noise, flatten depth curve fo
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 37/50 [0m[49m
+  📋 Selected promptgram: inner_v014 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_034/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.880 Fail[▁                   ]4
+     • man.rs→defs.rs NDCG=0.0 means NO relevant files in top-k - catastrophic structural signal failure
+     [2KE 2/10 NDCG[█▁                  ]0.879 Fail[█▁                  ]3
+     [2KE 3/10 NDCG[▃▁█                 ]0.883 Fail[█▆▁                 ]1 ⚡CONVERGED
+     [2KE 4/10 NDCG[▃▂█▁                ]0.878 Fail[█▆▁▃                ]2 ⚡CONVERGED
+     [2KE 5/10 NDCG[▃▂█▁▃               ]0.879 Fail[█▆▁▃▆               ]3 ⚡CONVERGED
+     [2KE 6/10 NDCG[▃▂█▁▃▇              ]0.883 Fail[█▆▁▃▆▃              ]2 ⚡CONVERGED
+     • Failure 2's complete miss (0.356 NDCG) suggests structural gap: same-directory siblings have no implicit edge weight
+     [2KE 7/10 NDCG[▃▂▇▁▂▆█             ]0.885 Fail[█▆▁▃▆▃█             ]4 ⚡CONVERGED
+     [2KE 8/10 NDCG[▃▂▇▁▂▆█▂            ]0.880 Fail[█▆▁▃▆▃██            ]4 ⚡CONVERGED
+     [2KE 9/10 NDCG[▃▂▇▂▃▆█▃▁           ]0.878 Fail[█▆▁▃▆▃██▆           ]3 ⚡CONVERGED
+     [2KE10/10 NDCG[▃▂▇▂▃▆█▃▁▄          ]0.881 Fail[█▆▁▃▆▃██▆█          ]4 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8801 ↑ 0.8806  ([32m+0.0006[39m)
+     Final NDCG@10: 0.8812
+     Episodes: 10
+     • man.rs→defs.rs NDCG=0.0 means NO relevant files in top-k - catastrophic structural signal failure
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.85
+     3 edits proposed
+       • replace: Heuristics in Depth penalties break monorepos
+       • replace: Heuristics in Monorepo fix: Flatter depth penalties require tighter focus/coupling thresholds to exclude the resulting noise.
+       • append: Policy in (new)
+     💾 Persisted to "training-outer/prompts/inner/inner_v038.md"
+     ✓ Created new promptgram: inner_v038
+
+  📈 Results:
+     NDCG: 0.8801 → 0.8806 (Δ+0.0006)
+     Failures: 10 → 4
+     Duration: 414.8s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.27 temp=0.00 explore=0.50 depth=0.02 hub=0.65 focus=0.44
+     Strategy capsules:
+       • Boost structural signals, increase alpha to escape hub traps
+       • Localize signal by lowering alpha and reducing depth penalty
+       • Escape hub traps via alpha increase + focus path strengtheni
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 38/50 [0m[49m
+  📋 Selected promptgram: inner_v014 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_034/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.883 Fail[▁                   ]2
+     [2KE 2/10 NDCG[▁▃                  ]0.883 Fail[▁▁                  ]2
+     [2KE 3/10 NDCG[▇█▁                 ]0.880 Fail[▁▁█                 ]6 ⚡CONVERGED
+     [2KE 4/10 NDCG[██▃▁                ]0.879 Fail[▁▁█▁                ]2 ⚡CONVERGED
+     [2KE 5/10 NDCG[██▃▁▄               ]0.881 Fail[▁▁█▁▁               ]2 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8830 ↓ 0.8806  ([31m-0.0024[39m)
+     Final NDCG@10: 0.8789
+     Episodes: 4
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.85
+     3 edits proposed
+       • append: Policy in (new)
+       • replace: Heuristics in Monorepo fix: Flatter depth penalties require tighter focus/coupling thresholds to exclude the resulting noise.
+       • append: Heuristics in (new)
+     💾 Persisted to "training-outer/prompts/inner/inner_v039.md"
+     ✓ Created new promptgram: inner_v039
+
+  📈 Results:
+     NDCG: 0.8830 → 0.8806 (Δ-0.0024)
+     Failures: 10 → 2
+     Duration: 193.9s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.34 temp=0.00 explore=0.50 depth=0.02 hub=0.65 focus=0.34
+     Strategy capsules:
+       • Tighten focus, reduce identifier noise, balance global/local
+       • Suppress identifier noise, amplify temporal coupling, widen 
+       • Suppress identifier noise, boost cross-crate PageRank flow, 
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 39/50 [0m[49m
+  📋 Selected promptgram: inner_v014 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_034/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.880 Fail[▁                   ]2
+     [2KE 2/10 NDCG[▁▇                  ]0.881 Fail[█▁                  ]1
+     [2KE 3/10 NDCG[▆█▁                 ]0.879 Fail[█▁▁                 ]1 ⚡CONVERGED
+     [2KE 4/10 NDCG[▆█▁▆                ]0.880 Fail[█▁▁▁                ]1 ⚡CONVERGED
+     [2KE 5/10 NDCG[▆█▁▆▂               ]0.879 Fail[█▁▁▁█               ]2 ⚡CONVERGED
+     [2KE 6/10 NDCG[▇█▄▇▅▁              ]0.877 Fail[█▁▁▁██              ]2 ⚡CONVERGED
+     [2KE 7/10 NDCG[▇█▄▇▅▁▇             ]0.880 Fail[▅▁▁▁▅▅█             ]3 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8803 ↓ 0.8803  ([31m-0.0000[39m)
+     Final NDCG@10: 0.8782
+     Episodes: 7
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.85
+     2 edits proposed
+       • replace: Policy in Analyze failures:
+- Missing signal vs overwhelming signal
+- Parameter interactions
+       • append: Heuristics in (new)
+     💾 Persisted to "training-outer/prompts/inner/inner_v040.md"
+     ✓ Created new promptgram: inner_v040
+
+  📈 Results:
+     NDCG: 0.8803 → 0.8803 (Δ-0.0000)
+     Failures: 10 → 3
+     Duration: 355.8s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.13 temp=0.00 explore=0.50 depth=0.01 hub=0.65 focus=0.67
+     Strategy capsules:
+       • Strengthen structural proximity signals while damping root-l
+       • Extend hop reach for cross-crate resolution while damping ro
+       • Extend hop reach to 3.5 for cross-crate traversal while crus
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 40/50 [0m[49m
+  📋 Selected promptgram: inner_v014 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_034/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.881 Fail[▁                   ]2
+     [2KE 2/10 NDCG[█▁                  ]0.878 Fail[▁█                  ]3
+     [2KE 3/10 NDCG[█▁▄                 ]0.879 Fail[▁██                 ]3 ⚡CONVERGED
+     [2KE 4/10 NDCG[█▁▄▄                ]0.879 Fail[▁██▁                ]2 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8812 ↓ 0.8793  ([31m-0.0019[39m)
+     Final NDCG@10: 0.8835
+     Episodes: 4
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.85
+     3 edits proposed
+       • replace: Policy in Plateaued: orthogonal move
+       • replace: Heuristics in Monorepo fix: Flatter depth penalties require tighter focus/coupling thresholds to exclude the resulting noise.
+       • append: Heuristics in (new)
+     💾 Persisted to "training-outer/prompts/inner/inner_v041.md"
+     ✓ Created new promptgram: inner_v041
+
+  📈 Results:
+     NDCG: 0.8812 → 0.8793 (Δ-0.0019)
+     Failures: 10 → 2
+     Duration: 145.4s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.27 temp=0.00 explore=0.50 depth=0.02 hub=0.65 focus=0.44
+     Strategy capsules:
+       • Amplify structural reference signals to overcome distractor 
+       • Reduce global PageRank inflation, amplify structural edge si
+       • Suppress global PageRank dominance, extend hop chains, slow 
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 41/50 [0m[49m
+  📋 Selected promptgram: inner_v014 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_034/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.885 Fail[▁                   ]3
+     [2KE 2/10 NDCG[█▁                  ]0.882 Fail[▁█                  ]4
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8850 ↓ 0.8817  ([31m-0.0033[39m)
+     Final NDCG@10: 0.8794
+     Episodes: 2
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.85
+     3 edits proposed
+       • replace: Policy in Plateaued: orthogonal move
+       • append: Heuristics in Depth penalties break monorepos
+       • append: Heuristics in High boosts cause tunnel vision
+     💾 Persisted to "training-outer/prompts/inner/inner_v042.md"
+     ✓ Created new promptgram: inner_v042
+
+  📈 Results:
+     NDCG: 0.8850 → 0.8817 (Δ-0.0033)
+     Failures: 10 → 4
+     Duration: 70.7s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.27 temp=0.00 explore=0.50 depth=0.02 hub=0.65 focus=0.44
+     Strategy capsules:
+       • Tighten focus radius and boost structural signals over PageR
+       • Dampen PageRank centrality, amplify structural co-location a
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 42/50 [0m[49m
+  📋 Selected promptgram: inner_v014 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_034/results.trained.json
+     [42m[1m TRAINING COMPLETE [0m[49m
+     Final NDCG@10: 0.8796
+     Episodes: 0
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.85
+     2 edits proposed
+       • append: Policy in (new)
+       • append: Heuristics in (new)
+     💾 Persisted to "training-outer/prompts/inner/inner_v043.md"
+     ✓ Created new promptgram: inner_v043
+
+  📈 Results:
+     NDCG: 0.0000 → 0.0000 (Δ+0.0000)
+     Failures: 10 → 0
+     Duration: 0.8s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.85 temp=0.00 explore=0.50 depth=0.10 hub=0.50 focus=0.30
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 43/50 [0m[49m
+  📋 Selected promptgram: inner_v014 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_034/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.878 Fail[▁                   ]2
+     [2KE 2/10 NDCG[█▁                  ]0.876 Fail[▁▁                  ]2
+     [2KE 3/10 NDCG[▆▁█                 ]0.879 Fail[██▁                 ]1 ⚡CONVERGED
+     [2KE 4/10 NDCG[▃▁▄█                ]0.882 Fail[▅▅▁█                ]3 ⚡CONVERGED
+     [2KE 5/10 NDCG[▃▁▄██               ]0.882 Fail[▃▃▁▆█               ]4 ⚡CONVERGED
+     [2KE 6/10 NDCG[▃▁▄██▇              ]0.881 Fail[▃▃▁▆█▆              ]3 ⚡CONVERGED
+     [2KE 7/10 NDCG[▃▁▄██▇▂             ]0.877 Fail[▃▃▁▅▆▅█             ]5 ⚡CONVERGED
+     [2KE 8/10 NDCG[▃▁▄██▇▂▄            ]0.879 Fail[▃▃▁▅▆▅██            ]5 ⚡CONVERGED
+     [2KE 9/10 NDCG[▃▁▄██▇▂▄▄           ]0.879 Fail[▃▃▁▅▆▅██▅           ]3 ⚡CONVERGED
+     [2KE10/10 NDCG[▃▁▄██▇▂▄▄▅          ]0.879 Fail[▃▃▁▅▆▅██▅▅          ]3 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8780 ↑ 0.8793  ([32m+0.0013[39m)
+     Final NDCG@10: 0.8830
+     Episodes: 9
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=exploit, confidence=0.85
+     2 edits proposed
+       • replace: Heuristics in Monorepo fix: Flatter depth penalties require tighter focus/coupling thresholds to exclude the resulting noise.
+       • append: Heuristics in Low alpha localizes, high alpha globalizes
+     💾 Persisted to "training-outer/prompts/inner/inner_v044.md"
+     ✓ Created new promptgram: inner_v044
+
+  📈 Results:
+     NDCG: 0.8780 → 0.8793 (Δ+0.0013)
+     Failures: 10 → 3
+     Duration: 326.8s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.27 temp=0.00 explore=0.50 depth=0.02 hub=0.65 focus=0.44
+     Strategy capsules:
+       • Localize PageRank + strengthen temporal/focus signals to sur
+       • Strengthen temporal/focus signals and localize PageRank to s
+       • Strengthen subtree cohesion: penalize cross-crate jumps in f
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 44/50 [0m[49m
+  📋 Selected promptgram: inner_v014 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_034/results.trained.json
+     [42m[1m TRAINING COMPLETE [0m[49m
+     Final NDCG@10: 0.8808
+     Episodes: 0
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.85
+     2 edits proposed
+       • replace: Policy in Oscillating: Dampen magnitude, seek ratios between competing parameters rather than absolute extremes.
+       • append: Heuristics in (new)
+     💾 Persisted to "training-outer/prompts/inner/inner_v045.md"
+     ✓ Created new promptgram: inner_v045
+
+  📈 Results:
+     NDCG: 0.0000 → 0.0000 (Δ+0.0000)
+     Failures: 10 → 0
+     Duration: 0.8s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.85 temp=0.00 explore=0.50 depth=0.10 hub=0.50 focus=0.30
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 45/50 [0m[49m
+  📋 Selected promptgram: inner_v014 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_034/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.881 Fail[▁                   ]3
+     [2KE 2/10 NDCG[▇▁                  ]0.880 Fail[█▁                  ]2
+     [2KE 3/10 NDCG[█▇▁                 ]0.870 Fail[▅▁█                 ]4 ⚡CONVERGED
+     [2KE 4/10 NDCG[█▇▁▄                ]0.875 Fail[▆▃█▁                ]1 ⚡CONVERGED
+     [2KE 5/10 NDCG[█▇▁▄▃               ]0.873 Fail[▅▃▆▁█               ]5 ⚡CONVERGED
+     • Failure 5 (NDCG=0.000) suggests crates/core/flags/doc/man.rs has no direct path to expected file under current parameterization
+     [2KE 6/10 NDCG[█▇▁▄▃▃              ]0.874 Fail[▅▃▆▁█▅              ]3 ⚡CONVERGED
+     [2KE 7/10 NDCG[█▇▁▄▃▃▄             ]0.875 Fail[▅▃▆▁█▅▅             ]3 ⚡CONVERGED
+     [2KE 8/10 NDCG[█▇▁▄▃▃▄▂            ]0.872 Fail[▅▃▆▁█▅▅▅            ]3 ⚡CONVERGED
+     [2KE 9/10 NDCG[█▇▁▄▃▃▄▂▃           ]0.873 Fail[▅▃▆▁█▅▅▅▅           ]3 ⚡CONVERGED
+     [2KE10/10 NDCG[█▇▁▄▃▃▄▂▃▂          ]0.872 Fail[▅▃▆▁█▅▅▅▅▆          ]4 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8811 ↓ 0.8721  ([31m-0.0091[39m)
+     Final NDCG@10: 0.8714
+     Episodes: 10
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=exploit, confidence=0.85
+     2 edits proposed
+       • replace: Heuristics in High boosts cause tunnel vision
+       • append: Policy in Analyze failures:
+     💾 Persisted to "training-outer/prompts/inner/inner_v046.md"
+     ✓ Created new promptgram: inner_v046
+
+  📈 Results:
+     NDCG: 0.8811 → 0.8721 (Δ-0.0091)
+     Failures: 10 → 4
+     Duration: 381.9s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.27 temp=0.00 explore=0.50 depth=0.02 hub=0.65 focus=0.40
+     Strategy capsules:
+       • Suppress structural hubs, amplify temporal coupling for test
+       • Suppress internal noise floor via aggressive depth penalties
+       • Reverse E2 depth erosion; dampen structural hub dominance vi
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 46/50 [0m[49m
+  📋 Selected promptgram: inner_v014 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_034/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.882 Fail[▁                   ]4
+     [2KE 2/10 NDCG[█▁                  ]0.880 Fail[▁█                  ]5
+     [2KE 3/10 NDCG[█▆▁                 ]0.878 Fail[▁█▁                 ]4 ⚡CONVERGED
+     [2KE 4/10 NDCG[█▆▁▂                ]0.879 Fail[▁▅▁█                ]6 ⚡CONVERGED
+     [2KE 5/10 NDCG[█▆▁▂▅               ]0.880 Fail[▃▆▃█▁               ]3 ⚡CONVERGED
+     [2KE 6/10 NDCG[█▆▁▂▅▁              ]0.878 Fail[▅▆▅█▃▁              ]2 ⚡CONVERGED
+     [2KE 7/10 NDCG[█▆▁▂▅▁█             ]0.882 Fail[▅▆▅█▃▁▁             ]2 ⚡CONVERGED
+     [2KE 8/10 NDCG[█▆▁▂▅▁█▃            ]0.879 Fail[▅▆▅█▃▁▁▅            ]4 ⚡CONVERGED
+     [2KE 9/10 NDCG[█▆▁▂▅▁█▃▃           ]0.879 Fail[▅▆▅█▃▁▁▅▅           ]4 ⚡CONVERGED
+     [2KE10/10 NDCG[█▆▁▂▅▁█▃▃▆          ]0.880 Fail[▅▆▅█▃▁▁▅▅█          ]6 ⚡CONVERGED
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8817 ↓ 0.8805  ([31m-0.0012[39m)
+     Final NDCG@10: 0.8813
+     Episodes: 10
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.90
+     2 edits proposed
+       • append: Policy in (new)
+       • replace: Heuristics in Low alpha localizes, high alpha globalizes
+     💾 Persisted to "training-outer/prompts/inner/inner_v047.md"
+     ✓ Created new promptgram: inner_v047
+
+  📈 Results:
+     NDCG: 0.8817 → 0.8805 (Δ-0.0012)
+     Failures: 10 → 6
+     Duration: 378.8s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.27 temp=0.00 explore=0.50 depth=0.02 hub=0.65 focus=0.44
+     Strategy capsules:
+       • Strengthen temporal coupling signal to overcome structural h
+       • Crush PageRank dominance, triple temporal coupling, add path
+       • Attack PageRank amplification via chat_multiplier, not just 
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 47/50 [0m[49m
+  📋 Selected promptgram: inner_v014 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_034/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.880 Fail[▁                   ]1
+     [2KE 2/10 NDCG[▁█                  ]0.881 Fail[▁█                  ]2
+     [2KE 3/10 NDCG[▁▄█                 ]0.882 Fail[▁▅█                 ]3 ⚡CONVERGED
+     [2KE 4/10 NDCG[▄▆█▁                ]0.877 Fail[▁▅██                ]3 ⚡CONVERGED
+     [2KE 5/10 NDCG[▄▆█▁▂               ]0.878 Fail[▁▅██▁               ]1 ⚡CONVERGED
+     [2KE 6/10 NDCG[▄▆█▁▂▄              ]0.879 Fail[▁▅██▁█              ]3 ⚡CONVERGED
+     [2KE 7/10 NDCG[▄▆█▁▂▄▁             ]0.877 Fail[▁▃▅▅▁▅█             ]5 ⚡CONVERGED
+     [2KE 8/10 NDCG[▄▆█▁▂▄▁█            ]0.882 Fail[▁▃▅▅▁▅█▆            ]4 ⚡CONVERGED
+     [2KE 9/10 NDCG[▄▆█▁▂▄▁█▃           ]0.879 Fail[▁▃▅▅▁▅█▆▅           ]3 ⚡CONVERGED
+     • Failure 3 (NDCG=0.0) is path-locality: defs.rs→doc/man.rs share directory prefix but no symbol edge
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8795 ↓ 0.8787  ([31m-0.0008[39m)
+     Final NDCG@10: 0.8802
+     Episodes: 9
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=exploit, confidence=0.90
+     2 edits proposed
+       • append: Heuristics in (new)
+       • append: Policy in (new)
+     💾 Persisted to "training-outer/prompts/inner/inner_v048.md"
+     ✓ Created new promptgram: inner_v048
+
+  📈 Results:
+     NDCG: 0.8795 → 0.8787 (Δ-0.0008)
+     Failures: 10 → 3
+     Duration: 306.6s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.19 temp=0.00 explore=0.50 depth=0.02 hub=0.76 focus=0.48
+     Strategy capsules:
+       • Strengthen seed-file locality; reduce depth penalty on deep 
+       • Strengthen cross-crate import graph; raise depth_weight_deep
+       • Localize PageRank + rehabilitate deep paths + tighten focus 
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 48/50 [0m[49m
+  📋 Selected promptgram: inner_v014 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_034/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.876 Fail[▁                   ]3
+     [2KE 2/10 NDCG[▁█                  ]0.881 Fail[▁█                  ]4
+     [2KE 3/10 NDCG[▁▆█                 ]0.883 Fail[▅█▁                 ]2 ⚡CONVERGED
+     [2KE 4/10 NDCG[▁▆█▄                ]0.879 Fail[▆█▃▁                ]1 ⚡CONVERGED
+     [2KE 5/10 NDCG[▁▆█▄▇               ]0.882 Fail[▆█▃▁█               ]4 ⚡CONVERGED
+     [2KE 6/10 NDCG[▁▆█▄▇▄              ]0.880 Fail[▄▅▂▁▅█              ]6 ⚡CONVERGED
+     • Zero NDCG on defs.rs→doc/man.rs suggests sibling file signal is broken at crate boundary
+     [2KE 7/10 NDCG[▁▆█▄▇▄▇             ]0.881 Fail[▄▅▂▁▅█▄             ]3 ⚡CONVERGED
+     [2KE 8/10 NDCG[▁▆█▄▇▄▇▄            ]0.879 Fail[▄▅▂▁▅█▄▄            ]3 ⚡CONVERGED
+     • This is a phase transition move - expect significant NDCG change (up or down)
+     [2KE 9/10 NDCG[▁▅▇▃▆▄▆▄█           ]0.884 Fail[▃▅▂▁▅▇▃▃█           ]7 ⚡CONVERGED
+     [2KE10/10 NDCG[▁▅▇▃▆▄▆▄█▅          ]0.880 Fail[▃▅▂▁▅▇▃▃█▃          ]3 ⚡CONVERGED
+     • This is the phase transition the previous episode predicted - expect significant NDCG movement
+     • If this fails badly (NDCG < 0.85), alpha 0.70 may be too aggressive - try 0.55 next
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8764 ↑ 0.8804  ([32m+0.0039[39m)
+     Final NDCG@10: 0.8785
+     Episodes: 8
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.85
+     2 edits proposed
+       • replace: Policy in Plateaued: orthogonal move
+       • replace: Heuristics in High boosts cause tunnel vision
+     💾 Persisted to "training-outer/prompts/inner/inner_v049.md"
+     ✓ Created new promptgram: inner_v049
+
+  📈 Results:
+     NDCG: 0.8764 → 0.8804 (Δ+0.0039)
+     Failures: 10 → 3
+     Duration: 353.1s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.27 temp=0.00 explore=0.50 depth=0.02 hub=0.65 focus=0.44
+     Strategy capsules:
+       • Rebalance depth weights for crate structures; increase globa
+       • Lift depth penalty for deep crate paths; increase alpha for 
+       • Increase alpha + depth tolerance for cross-crate Explore tra
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 49/50 [0m[49m
+  📋 Selected promptgram: inner_v014 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_034/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.877 Fail[▁                   ]3
+     [2KE 2/10 NDCG[▁█                  ]0.881 Fail[█▁                  ]1
+     • The 0.289 NDCG suggests expected file is not even in top-10 - catastrophic miss
+     [2KE 3/10 NDCG[▁█▇                 ]0.881 Fail[█▁▅                 ]2 ⚡CONVERGED
+     [2KE 4/10 NDCG[▁█▇▆                ]0.880 Fail[▆▁▃█                ]4 ⚡CONVERGED
+     [2KE 5/10 NDCG[▁█▇▆▆               ]0.880 Fail[▆▁▃█▆               ]3 ⚡CONVERGED
+     [2KE 6/10 NDCG[▁█▇▆▆█              ]0.881 Fail[▆▁▃█▆▃              ]2 ⚡CONVERGED
+     [2KE 7/10 NDCG[▁█▇▆▆█▇             ]0.880 Fail[▆▁▃█▆▃▁             ]1 ⚡CONVERGED
+     [2KE 8/10 NDCG[▁█▇▆▆█▇▆            ]0.880 Fail[▆▁▃█▆▃▁█            ]4 ⚡CONVERGED
+     [2KE 9/10 NDCG[▁▆▆▅▅▆▅▅█           ]0.882 Fail[▆▁▃█▆▃▁█▃           ]2 ⚡CONVERGED
+     [2KE10/10 NDCG[▁▆▆▅▅▆▅▅█▆          ]0.881 Fail[▆▁▃█▆▃▁█▃▆          ]3 ⚡CONVERGED
+     • NDCG=0.000 on Failure 3 means expected file (defs.rs) didn't rank - seed<->expected relationship is bidirectional but neither direction works
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8768 ↑ 0.8805  ([32m+0.0037[39m)
+     Final NDCG@10: 0.8779
+     Episodes: 10
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.85
+     2 edits proposed
+       • append: Policy in (new)
+       • replace: Heuristics in Monorepo fix: Flatter depth penalties require tighter focus/coupling thresholds to exclude the resulting noise.
+     💾 Persisted to "training-outer/prompts/inner/inner_v050.md"
+     ✓ Created new promptgram: inner_v050
+
+  📈 Results:
+     NDCG: 0.8768 → 0.8805 (Δ+0.0037)
+     Failures: 10 → 3
+     Duration: 378.0s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.27 temp=0.00 explore=0.50 depth=0.02 hub=0.65 focus=0.44
+     Strategy capsules:
+       • Dampen hub dominance, elevate deep library signals
+       • Hyper-localize around seed, boost deep paths, resist utility
+       • Expand cross-crate reach, dampen seed dominance, boost deep 
+
+  💾 Checkpoint saved
+
+[46m[1m OUTER STEP 50/50 [0m[49m
+  📋 Selected promptgram: inner_v014 (mode: best)
+     📦 Starting from best params: training-outer/runs/l2_overnight_500ep/inner_runs/step_034/results.trained.json
+     [2KE 1/10 NDCG[▁                   ]0.879 Fail[▁                   ]2
+     [2KE 2/10 NDCG[▃▁                  ]0.879 Fail[█▁                  ]1
+     [42m[1m TRAINING COMPLETE [0m[49m
+     [1mNDCG@10[0m: 0.8793 ↓ 0.8791  ([31m-0.0002[39m)
+     Final NDCG@10: 0.8770
+     Episodes: 2
+  🧠 Invoking L2 reasoning (gemini)...
+  📝 L2 proposal: mode=explore, confidence=0.85
+     2 edits proposed
+       • append: Heuristics in (new)
+       • append: Policy in (new)
+     💾 Persisted to "training-outer/prompts/inner/inner_v051.md"
+     ✓ Created new promptgram: inner_v051
+
+  📈 Results:
+     NDCG: 0.8793 → 0.8791 (Δ-0.0002)
+     Failures: 10 → 1
+     Duration: 75.7s
+     Stability: 0 collapses, 0.0000 variance
+     Meta-levers: struct=0.27 temp=0.00 explore=0.50 depth=0.02 hub=0.65 focus=0.44
+     Strategy capsules:
+       • Strengthen locality signals and reduce depth penalty on well
+       • Extend focus reach to cross structural boundaries for test d
+
+  💾 Checkpoint saved
+
+
+─────────────────────────────────────────────────────────────────
+[42m[1m OUTER LOOP COMPLETE [0m[49m
+─────────────────────────────────────────────────────────────────
+
+╔══════════════════════════════════════════════════════════════╗
+║                    L2 RUN STATISTICAL SUMMARY                ║
+╚══════════════════════════════════════════════════════════════╝
+
+═══ NDCG TRAJECTORY ═══
+  Episodes:     50
+  First:        0.8329
+  Last:         0.8791
+  Best:         0.8823 (step 34)
+  Worst:        0.0000
+  Mean:         0.8172
+  Std Dev:      0.1685
+  Total Δ:      +0.0462 (+5.5%)
+
+═══ LEARNING DIAGNOSIS ═══
+  Warm-started:  49 / 50 (98%)
+  ⚠️  PLATEAU - final NDCG within 0.5σ of initial
+
+═══ PARAMETER EVOLUTION ═══
+  Most changed params (cumulative absolute Δ):
+    pagerank_chat_multiplier: Δ84.00 (4 changes)
+    boost_temporal_coupling: Δ11.70 (8 changes)
+    focus_max_hops: Δ6.50 (8 changes)
+    boost_focus_expansion: Δ6.49 (6 changes)
+    boost_mentioned_ident: Δ6.00 (2 changes)
+
+═══ STABILITY ═══
+  Collapses:    0 total
+  Oscillations: 191 total
+  Converged:    22 / 50 runs
+
+═══ BEST CONFIGURATION ═══
+  NDCG:   0.8823
+  Step:   34
+  Path:   training-outer/runs/l2_overnight_500ep/inner_runs/step_034/results.trained.json
+
+═══ STRUCTURAL INSIGHTS ═══
+  • tests/test_9.rs and tests/test_4.rs are the primary hub attractors across failures
+  • Lower alpha + higher hops = follow import chains further but with less global leak
+  • Import graph is the ONLY discriminator between real code and distractors
+  • Root files (src/*) are systematically distractors - penalize structurally not just via PageRank
+  • Cross-crate sibling files (defs.rs → doc/man.rs) are 2 hops topologically, need focus_max_hops >= 2
+
+Total strategy capsules recorded: 386
+
+Outputs saved to: "training-outer/runs/l2_overnight_500ep"

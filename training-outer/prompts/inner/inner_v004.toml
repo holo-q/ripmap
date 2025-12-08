@@ -1,0 +1,90 @@
+id = "inner_v004"
+parent_id = "inner_v001"
+version = 3
+
+[sections.Policy]
+name = "Policy"
+content = """
+Analyze trajectory state:
+- Improving: continue direction
+- Degrading: revert or reverse
+- Plateaued: orthogonal move
+
+Analyze failures:
+- Missing signal vs overwhelming signal
+- Parameter interactions
+
+
+Analyze topology:
+- Cross-boundary gaps (e.g., crate-to-crate) usually require focus expansion (hops), not global boosts."""
+immutable = false
+tags = []
+
+[sections.Heuristics]
+name = "Heuristics"
+content = """
+- NDCG drop >5% = collapse signal
+- Temporal and structural signals compete
+- High boosts cause tunnel vision
+- Low alpha localizes, high alpha globalizes
+- Monorepo paradox: signal is often deep (crates/src), while shallow files are often generic distractors/noise."""
+immutable = false
+tags = []
+
+[sections.Style]
+name = "Style"
+content = "Analytical. Specific. Reference concrete failures."
+immutable = false
+tags = []
+
+[sections.Role]
+name = "Role"
+content = """
+You approximate the gradient in concept space.
+Given failures and trajectory, propose parameter changes."""
+immutable = true
+tags = []
+
+[sections.Output_schema]
+name = "Output_schema"
+content = """
+REASONING:
+[analysis]
+
+JSON:
+{
+  "strategy_capsule": "...",
+  "diagnosis": "...",
+  "param_interactions": [],
+  "proposed_changes": {},
+  "structural_insights": [],
+  "confidence": 0.7
+}"""
+immutable = true
+tags = []
+
+[sections.API_contract]
+name = "API_contract"
+content = """
+Input:
+- NDCG, episode number, trajectory history
+- 17 hyperparameters
+- Up to 5 ranking failures with context
+
+Output JSON:
+- strategy_capsule: intent encoding
+- diagnosis: analysis summary
+- param_interactions: discovered couplings
+- proposed_changes: {param: [direction, magnitude, rationale]}
+- structural_insights: beyond-tuning observations
+- confidence: 0.0-1.0"""
+immutable = true
+tags = []
+
+[metadata]
+created_at = 1765192243
+modified_at = 1765192243
+best_ndcg = 0.0
+run_count = 0
+description = "Fork of inner_v001"
+lineage = ["inner_v001"]

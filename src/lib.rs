@@ -22,6 +22,7 @@
 //! - String interning for symbol names
 //! - Persistent cache with redb
 
+pub mod config;
 pub mod types;
 pub mod extraction;
 pub mod discovery;

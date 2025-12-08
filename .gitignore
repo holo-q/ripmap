@@ -1,4 +1,3 @@
-
 /target/
 Cargo.lock
 *.swp
@@ -7,13 +6,15 @@ Cargo.lock
 .DS_Store
 .ripmap.cache/
 
+# Generated artifacts
+all_code.txt
+
 # Training artifacts
 /training/corpus/
 /training/runs/
 /tmp/
 *.json.bak
-training/**
 
-# Grepmap cache
+# Grepmap cache (legacy)
 .grepmap.tags.cache*/
 gremapper-py/**

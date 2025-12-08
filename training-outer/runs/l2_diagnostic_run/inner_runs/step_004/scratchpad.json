@@ -1,0 +1,563 @@
+{
+  "episodes": [
+    {
+      "timestamp": 1765189037,
+      "duration_secs": 34.550044926,
+      "failures": [
+        {
+          "query": "tests/regression.rs",
+          "seed_file": "tests/regression.rs",
+          "expected_top": [
+            "crates/printer/src/util.rs"
+          ],
+          "actual_top": [
+            "src/core/internal/deep_2.rs",
+            "src/distractor_0.rs",
+            "lib/mod_3.rs",
+            "crates/printer/src/util.rs",
+            "src/utils/helper_6.rs"
+          ],
+          "ndcg": 0.4306765580733931,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/core/flags/doc/man.rs",
+          "seed_file": "crates/core/flags/doc/man.rs",
+          "expected_top": [
+            "crates/core/flags/defs.rs"
+          ],
+          "actual_top": [
+            "lib/mod_3.rs",
+            "tests/test_4.rs",
+            "src/utils/helper_6.rs",
+            "crates/core/flags/defs.rs",
+            "src/core/internal/deep_2.rs"
+          ],
+          "ndcg": 0.4306765580733931,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/core/flags/defs.rs",
+          "seed_file": "crates/core/flags/defs.rs",
+          "expected_top": [
+            "crates/printer/src/color.rs",
+            "crates/printer/src/standard.rs"
+          ],
+          "actual_top": [
+            "src/utils/helper_1.rs",
+            "lib/mod_3.rs",
+            "tests/test_4.rs",
+            "crates/printer/src/standard.rs",
+            "src/distractor_0.rs"
+          ],
+          "ndcg": 0.46306276085095593,
+          "commit_context": "intent: Extend",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/printer/src/standard.rs",
+          "seed_file": "crates/printer/src/standard.rs",
+          "expected_top": [
+            "crates/core/flags/defs.rs",
+            "crates/printer/src/color.rs"
+          ],
+          "actual_top": [
+            "src/core/internal/deep_2.rs",
+            "src/utils/helper_1.rs",
+            "crates/core/flags/defs.rs",
+            "crates/printer/src/color.rs",
+            "src/distractor_0.rs"
+          ],
+          "ndcg": 0.4795637322400205,
+          "commit_context": "intent: Extend",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        }
+      ],
+      "params": {
+        "pagerank_alpha": 0.595,
+        "pagerank_chat_multiplier": 100.0,
+        "depth_weight_root": 0.7,
+        "depth_weight_moderate": 0.65,
+        "depth_weight_deep": 0.13,
+        "depth_weight_vendor": 0.01,
+        "boost_mentioned_ident": 10.0,
+        "boost_mentioned_file": 5.0,
+        "boost_chat_file": 20.0,
+        "boost_temporal_coupling": 3.9,
+        "boost_focus_expansion": 6.5,
+        "git_recency_decay_days": 30.0,
+        "git_recency_max_boost": 10.0,
+        "git_churn_threshold": 5.0,
+        "git_churn_max_boost": 6.0,
+        "focus_decay": 0.5,
+        "focus_max_hops": 2.0
+      },
+      "ndcg_before": 0.8448857359990277,
+      "reasoning": "Looking at this optimization problem, I need to analyze the failures and propose parameter adjustments.\n\n****\n\nThis is episode 1 with NDCG 0.8449 - a reasonable starting point but with clear room for improvement.\n\n**Failure Pattern Analysis:**\n\nAll 4 failures share a common pattern: **distractor files are ranking above expected targets**. Looking at what's appearing:\n- `src/core/internal/deep_2.rs` - appears in 3/4 failures\n- `lib/mod_3.rs` - appears in 3/4 failures  \n- `src/utils/helper_*.rs` - appears in all 4 failures\n- `src/distractor_0.rs` - appears in 3/4 failures\n- `tests/test_4.rs` - appears in 2/4 failures\n\nThe expected files ARE appearing in results (position 4-5), but they're being outranked by what appear to be generic/utility files.\n\n**Diagnosis:**\n\n1. **Depth weighting issue**: `depth_weight_root: 0.70` and `depth_weight_moderate: 0.65` are giving too much weight to shallow files. Files like `src/distractor_0.rs`, `lib/mod_3.rs` are likely at root/shallow depth and getting boosted over the actual relevant `crates/*/` files which are deeper.\n\n2. **PageRank is pulling in high-connectivity nodes**: Files like `helper_*.rs` and `mod_*.rs` are likely highly connected utility files that PageRank naturally favors. The `pagerank_alpha: 0.595` may be too high, spreading too much weight to these hub nodes.\n\n3. **Boost for mentioned identifiers/files may be too weak**: The seed files have direct structural relationships with expected targets (imports, type references), but `boost_mentioned_ident: 10.0` and `boost_mentioned_file: 5.0` aren't overcoming the PageRank signal from distractor hubs.\n\n4. **Deep files are being penalized**: `depth_weight_deep: 0.13` is severely penalizing the `crates/` subdirectories where the actual relevant code lives.\n\n**Strategy:**\n\n- Reduce depth penalties for deep files (the crates structure is deep but important)\n- Lower pagerank_alpha to reduce hub bias\n- Increase direct mention boosts to emphasize structural relationships\n- Reduce root/moderate depth weights to stop shallow distractors from dominating\n\n**",
+      "strategy_capsule": "Reduce hub bias, increase structural signal, flatten depth curve",
+      "proposed_changes": {},
+      "param_interactions": [
+        "pagerank_alpha × depth_weight_deep: high alpha spreads to hubs, deep penalty blocks actual targets",
+        "depth_weight_root vs boost_mentioned_*: shallow files winning over direct structural relationships"
+      ],
+      "structural_insights": [
+        "Curated repo has crates/ structure - deep paths are semantically important, not noise",
+        "Generic named files (helper_*, mod_*, distractor_*) are PageRank hubs pulling focus",
+        "Expected targets have direct structural links to seeds but lose to depth + hub effects"
+      ],
+      "confidence": 0.65
+    },
+    {
+      "timestamp": 1765189076,
+      "duration_secs": 39.186986049,
+      "failures": [
+        {
+          "query": "tests/regression.rs",
+          "seed_file": "tests/regression.rs",
+          "expected_top": [
+            "crates/printer/src/util.rs"
+          ],
+          "actual_top": [
+            "src/utils/helper_6.rs",
+            "src/distractor_0.rs",
+            "src/core/internal/deep_7.rs",
+            "crates/printer/src/util.rs",
+            "src/utils/helper_1.rs"
+          ],
+          "ndcg": 0.4306765580733931,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "tests/regression.rs",
+          "seed_file": "tests/regression.rs",
+          "expected_top": [
+            "crates/ignore/src/dir.rs"
+          ],
+          "actual_top": [
+            "lib/mod_3.rs",
+            "src/core/internal/deep_2.rs",
+            "src/distractor_5.rs",
+            "crates/ignore/src/dir.rs",
+            "tests/test_9.rs"
+          ],
+          "ndcg": 0.43067655807339306,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/core/flags/defs.rs",
+          "seed_file": "crates/core/flags/defs.rs",
+          "expected_top": [
+            "tests/binary.rs",
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "src/utils/helper_6.rs",
+            "lib/mod_8.rs",
+            "tests/test_9.rs",
+            "src/core/internal/deep_7.rs",
+            "src/distractor_0.rs"
+          ],
+          "ndcg": 0.23734215994481,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        }
+      ],
+      "params": {
+        "pagerank_alpha": 0.595,
+        "pagerank_chat_multiplier": 100.0,
+        "depth_weight_root": 0.7,
+        "depth_weight_moderate": 0.65,
+        "depth_weight_deep": 0.13,
+        "depth_weight_vendor": 0.01,
+        "boost_mentioned_ident": 10.0,
+        "boost_mentioned_file": 5.0,
+        "boost_chat_file": 20.0,
+        "boost_temporal_coupling": 3.9,
+        "boost_focus_expansion": 6.5,
+        "git_recency_decay_days": 30.0,
+        "git_recency_max_boost": 10.0,
+        "git_churn_threshold": 5.0,
+        "git_churn_max_boost": 6.0,
+        "focus_decay": 0.5,
+        "focus_max_hops": 2.0
+      },
+      "ndcg_before": 0.8491179563644797,
+      "reasoning": "Now I have a good understanding of the codebase. This is a codebase cartography tool with a meta-learning/training outer loop for optimizing ranking parameters. Let me analyze the optimization problem:\n\n---\n\n\n\n**Trajectory Analysis:**\n- E1 → E2: NDCG improved from 0.845 → 0.8491 (+0.5%)\n- Direction is improving, but slowly. The strategy in E1 was \"reduce hub bias, increase structural signal, flatten depth curve\"\n\n**Failure Pattern Analysis:**\n\nAll 3 failures share a common signature:\n1. **Seeds are tests or deep crates files** (`tests/regression.rs`, `crates/core/flags/defs.rs`)\n2. **Expected targets are in `crates/` paths** (`crates/printer/src/util.rs`, `crates/ignore/src/dir.rs`, `tests/binary.rs`)\n3. **Actual top results are polluted by generic hub files**: `helper_*`, `mod_*`, `distractor_*`, `deep_*`, `test_*`\n\nThis tells me:\n- **Hub pollution is still dominant**: Files named generically (`helper_6.rs`, `mod_3.rs`, `distractor_0.rs`) are PageRank attractors\n- **Depth weight is fighting the right battle but losing**: `crates/` structure with 3+ levels is penalized by depth weights\n- **The curated repo is adversarial**: It has intentional distractors (`distractor_*`) and generic helpers that are structural hubs\n\n**Parameter Interaction Analysis:**\n\n1. `depth_weight_deep: 0.13` - This is *very* low. Files in `crates/printer/src/util.rs` (depth 4) get crushed\n2. `pagerank_alpha: 0.595` - Moderate. Higher would globalize more (bad for this case), lower would localize (might help)\n3. `boost_focus_expansion: 6.5` - This should help seeds reach related files, but may not overcome hub dominance\n\n**The Core Problem:**\nThe expected files (`crates/*/src/*.rs`) have structural links to seeds but:\n- They're at depth 4 (crates/X/src/file.rs)\n- Generic hubs (`helper_*`, `mod_*`) have more incoming references\n- PageRank amplifies hub status even when seeds point elsewhere\n\n**Proposed Strategy:**\n1. **Increase depth_weight_deep significantly** - Files in `crates/` shouldn't be penalized; they're semantically important\n2. **Lower pagerank_alpha** - Make PageRank more localized to seed neighborhoods\n3. **Increase boost_focus_expansion** - Amplify signal from seed connections\n4. **Slight decrease to pagerank_chat_multiplier** - Reduce hub amplification\n\n**Why this should work:**\n- Higher depth_weight_deep rescues `crates/` files from depth penalty\n- Lower alpha means less random-walk drift to global hubs\n- Higher focus_expansion means files structurally connected to seeds get stronger boost\n- These changes are coherent with E1's strategy of \"reduce hub bias, increase structural signal\"\n\n---",
+      "strategy_capsule": "Rescue deep crates paths, localize PageRank, amplify seed neighborhood",
+      "proposed_changes": {},
+      "param_interactions": [
+        "depth_weight_deep vs crates/ structure: 0.13 annihilates depth-4 files that are semantically critical",
+        "pagerank_alpha vs localization: 0.595 is neutral; lowering biases toward seed neighborhood",
+        "boost_focus_expansion vs hub gravity: current 6.5 may not overcome PageRank hub amplification"
+      ],
+      "structural_insights": [
+        "Curated repo's crates/ structure means depth-4 files are not 'deep junk' - they're core implementation",
+        "distractor_* and helper_* files are intentional noise attracting PageRank due to generic naming",
+        "Tests querying for crates/ files indicates debugging/explore intent where structural proximity matters more than global centrality"
+      ],
+      "confidence": 0.72
+    },
+    {
+      "timestamp": 1765189102,
+      "duration_secs": 25.712894342,
+      "failures": [
+        {
+          "query": "crates/core/flags/hiargs.rs",
+          "seed_file": "crates/core/flags/hiargs.rs",
+          "expected_top": [
+            "crates/ignore/src/dir.rs",
+            "crates/ignore/src/gitignore.rs",
+            "crates/ignore/src/walk.rs",
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "tests/test_4.rs",
+            "tests/test_9.rs",
+            "crates/ignore/src/gitignore.rs",
+            "src/distractor_10.rs",
+            "crates/ignore/src/walk.rs"
+          ],
+          "ndcg": 0.4660013925925292,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/printer/src/util.rs",
+          "seed_file": "crates/printer/src/util.rs",
+          "expected_top": [
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "src/utils/helper_1.rs",
+            "src/distractor_5.rs",
+            "lib/mod_3.rs",
+            "src/distractor_0.rs",
+            "tests/regression.rs"
+          ],
+          "ndcg": 0.3868528072345416,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/core/flags/hiargs.rs",
+          "seed_file": "crates/core/flags/hiargs.rs",
+          "expected_top": [
+            "crates/core/flags/defs.rs",
+            "crates/printer/src/standard.rs",
+            "crates/searcher/src/searcher/core.rs",
+            "crates/searcher/src/searcher/glue.rs",
+            "crates/searcher/src/searcher/mod.rs"
+          ],
+          "actual_top": [
+            "lib/mod_3.rs",
+            "src/utils/helper_16.rs",
+            "crates/printer/src/standard.rs",
+            "crates/searcher/src/searcher/mod.rs",
+            "crates/searcher/src/searcher/core.rs"
+          ],
+          "ndcg": 0.3788001605681636,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/core/flags/defs.rs",
+          "seed_file": "crates/core/flags/defs.rs",
+          "expected_top": [
+            "crates/printer/src/hyperlink/aliases.rs",
+            "crates/printer/src/hyperlink/mod.rs",
+            "crates/printer/src/hyperlink_aliases.rs",
+            "crates/printer/src/lib.rs"
+          ],
+          "actual_top": [
+            "src/distractor_0.rs",
+            "lib/mod_3.rs",
+            "lib/mod_8.rs",
+            "tests/test_9.rs",
+            "crates/printer/src/hyperlink/mod.rs"
+          ],
+          "ndcg": 0.4169165567984466,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        }
+      ],
+      "params": {
+        "pagerank_alpha": 0.595,
+        "pagerank_chat_multiplier": 100.0,
+        "depth_weight_root": 0.7,
+        "depth_weight_moderate": 0.65,
+        "depth_weight_deep": 0.13,
+        "depth_weight_vendor": 0.01,
+        "boost_mentioned_ident": 10.0,
+        "boost_mentioned_file": 5.0,
+        "boost_chat_file": 20.0,
+        "boost_temporal_coupling": 3.9,
+        "boost_focus_expansion": 6.5,
+        "git_recency_decay_days": 30.0,
+        "git_recency_max_boost": 10.0,
+        "git_churn_threshold": 5.0,
+        "git_churn_max_boost": 6.0,
+        "focus_decay": 0.5,
+        "focus_max_hops": 2.0
+      },
+      "ndcg_before": 0.8476190729153618,
+      "reasoning": "I need to analyze this optimization trajectory and propose parameter changes. Let me reason through this systematically.\n\n## REASONING:\n\n**Trajectory Analysis:**\n- E1→E2: 0.845 → 0.849 (+0.4%) - slight improvement\n- E2→E3: 0.849 → 0.848 (-0.1%) - essentially plateaued\n\nWe're in a **plateau state**, which means we need an orthogonal move rather than continuing the same direction.\n\n**Failure Pattern Analysis:**\n\nLooking at the 4 failures, there's a clear pattern:\n1. **Generic-named files dominate top results**: `distractor_*`, `helper_*`, `mod_*`, `test_*` files consistently appear in top positions despite being irrelevant\n2. **Depth-4 crates files are the expected targets** but they're losing to shallower generic files\n3. **Structural proximity is being overwhelmed** by something else\n\n**Root Cause Diagnosis:**\n\nThe key insight from the failures: files like `lib/mod_3.rs`, `src/utils/helper_1.rs`, `src/distractor_*` are PageRank hubs because:\n1. They have generic names that likely import/export many things\n2. They sit at moderate depth (1-2) where `depth_weight_moderate=0.65` is high\n3. The crates/ files at depth 4+ are getting crushed by `depth_weight_deep=0.13`\n\n**The Problem:** We're penalizing depth too aggressively. `depth_weight_deep=0.13` means a depth-4 file starts at 13% of its base score before any other factors. Meanwhile, shallow distractor files get 65-70% weight.\n\n**Parameter Interactions:**\n- `depth_weight_deep` (0.13) is killing legitimate deep crates files\n- `pagerank_alpha=0.595` is moderately localized but still letting hubs dominate\n- `boost_mentioned_ident=10` and `boost_focus_expansion=6.5` should help seed neighbors but can't overcome the 5x depth penalty\n\n**Proposed Direction:**\n\nSince we're plateaued, the orthogonal move is to **dramatically reduce depth penalty for deep files** since this is a curated repo where depth indicates structure, not junk.\n\nAlso, we should **reduce pagerank_alpha** to further localize (less global hub influence) and **increase focus_max_hops** to let structural signal propagate further from seeds.\n\n```json",
+      "strategy_capsule": "Rehabilitate deep files by reducing depth penalty, hyperlocalize PageRank to escape hub trap",
+      "proposed_changes": {},
+      "param_interactions": [
+        "depth_weight_deep vs boost_focus_expansion: 5x depth penalty overwhelms 6.5x focus boost",
+        "pagerank_alpha vs hub dominance: 0.595 still lets generic hubs accumulate disproportionate rank",
+        "depth_weight_moderate favors shallow distractors over deep implementation files"
+      ],
+      "structural_insights": [
+        "Curated repo depth is intentional architecture, not decay signal",
+        "Generic naming pattern (helper_*, mod_*, distractor_*) correlates with PageRank hubs - may need explicit penalty in future",
+        "Cross-crate dependencies (e.g., core→printer→ignore) need multi-hop focus propagation to surface"
+      ],
+      "confidence": 0.65
+    },
+    {
+      "timestamp": 1765189153,
+      "duration_secs": 50.587575021,
+      "failures": [
+        {
+          "query": "crates/printer/src/util.rs",
+          "seed_file": "crates/printer/src/util.rs",
+          "expected_top": [
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "src/distractor_5.rs",
+            "tests/test_9.rs",
+            "src/utils/helper_1.rs",
+            "src/utils/helper_6.rs",
+            "tests/test_4.rs"
+          ],
+          "ndcg": 0.3333333333333333,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/core/flags/defs.rs",
+          "seed_file": "crates/core/flags/defs.rs",
+          "expected_top": [
+            "crates/core/flags/doc/man.rs"
+          ],
+          "actual_top": [
+            "src/utils/helper_6.rs",
+            "lib/mod_3.rs",
+            "lib/mod_8.rs",
+            "tests/test_4.rs",
+            "tests/test_9.rs"
+          ],
+          "ndcg": 0.0,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        }
+      ],
+      "params": {
+        "pagerank_alpha": 0.595,
+        "pagerank_chat_multiplier": 100.0,
+        "depth_weight_root": 0.7,
+        "depth_weight_moderate": 0.65,
+        "depth_weight_deep": 0.13,
+        "depth_weight_vendor": 0.01,
+        "boost_mentioned_ident": 10.0,
+        "boost_mentioned_file": 5.0,
+        "boost_chat_file": 20.0,
+        "boost_temporal_coupling": 3.9,
+        "boost_focus_expansion": 6.5,
+        "git_recency_decay_days": 30.0,
+        "git_recency_max_boost": 10.0,
+        "git_churn_threshold": 5.0,
+        "git_churn_max_boost": 6.0,
+        "focus_decay": 0.5,
+        "focus_max_hops": 2.0
+      },
+      "ndcg_before": 0.8528326091323992,
+      "reasoning": "Now I understand the context - this is a meta-optimization problem where you're tuning parameters for a ranking/relevance system. Let me analyze the failures and trajectory to provide a gradient update.\n\n---\n\n\n\n**Trajectory State: PLATEAU**\n- E1→E2: 0.845→0.849 (+0.004) ✓ improving\n- E2→E3: 0.849→0.848 (-0.001) ~ flat\n- E3→E4: 0.848→0.853 (+0.005) ✓ slight improvement but failures persist\n\nThe overall NDCG is respectable at 0.8528, but we have 2 persistent failure modes that reveal a fundamental signal problem.\n\n**Failure Analysis:**\n\n*FAILURE 1: `crates/printer/src/util.rs` → expected `tests/regression.rs`*\n- Query is a deep crate file\n- Expected file is a TEST file that exercises this utility\n- Actual results: distractor_5, test_9, helper_1, helper_6, test_4 (all noise)\n- This is a **cross-boundary intent** problem: when debugging a utility, you want its test coverage\n- The seed is in `crates/printer/`, the target is in `tests/` - different structural neighborhoods\n- Current focus_max_hops=2 is too shallow to bridge crate→test\n- PageRank is being captured by generic-named files (helper_*, distractor_*)\n\n*FAILURE 2: `crates/core/flags/defs.rs` → expected `crates/core/flags/doc/man.rs`*\n- Query and expected are in SAME crate, related by naming (flags/defs.rs → flags/doc/man.rs)\n- These should be structurally close!\n- NDCG=0.000 means complete miss - the expected file isn't even appearing\n- The doc/man.rs likely documents the flags defined in defs.rs\n- Current ranking is returning helper_6, mod_3, mod_8 - all generic PageRank hubs\n\n**Root Cause Diagnosis:**\n1. **PageRank Hub Trap**: Generic-named files (helper_*, mod_*, distractor_*) are PageRank hubs because they're imported/referenced broadly. With alpha=0.595 (mid-range), PageRank still dominates over structural proximity.\n2. **Focus Propagation Too Weak**: focus_decay=0.50 with max_hops=2 means signal attenuates to 0.25 at 2 hops. For crate→test bridges, we need 3+ hops with slower decay.\n3. **Depth Penalty Misaligned**: depth_weight_deep=0.13 is punishing the legitimate deep crate files we're trying to surface.\n4. **Missing Sibling/Cousin Affinity**: flags/defs.rs and flags/doc/man.rs share a path prefix but this structural similarity isn't being captured.\n\n**Key Insight from Training Notes:**\n> \"Cross-crate dependencies (e.g., core→printer→ignore) need multi-hop focus propagation to surface\"\n\nThis confirms we need more hops with slower decay.\n\n**Parameter Interactions:**\n- pagerank_alpha ↔ focus_decay: Lower alpha localizes PageRank but if focus_decay is too aggressive, seed neighborhood signal dies before reaching related files\n- boost_focus_expansion ↔ focus_max_hops: Higher expansion boost is pointless if hops are capped too low\n- depth_weight_deep ↔ focus signals: Deep files get double-penalized if both depth penalty and focus attenuation hit them\n\n**Proposed Changes:**\n1. **focus_max_hops: 2→3**: Critical for cross-boundary queries\n2. **focus_decay: 0.50→0.65**: Slower decay preserves signal across hops\n3. **depth_weight_deep: 0.13→0.25**: Rehabilitate deep crate files (they're architectural, not buried)\n4. **pagerank_alpha: 0.595→0.55**: More localized PageRank to reduce hub dominance\n5. **boost_focus_expansion: 6.50→8.00**: Stronger seed neighborhood amplification\n\nThis is an **orthogonal move** - rather than continuing to tune individual parameters, we're adjusting the propagation mechanics to solve the cross-boundary problem.",
+      "strategy_capsule": "Extend focus propagation depth and slow decay to bridge crate→test/doc boundaries, reduce PageRank hub capture",
+      "proposed_changes": {},
+      "param_interactions": [
+        "focus_decay × focus_max_hops: current 0.50 decay kills signal at hop 2 (0.25 strength), need slower decay with more hops",
+        "pagerank_alpha × boost_focus_expansion: alpha=0.595 allows global hubs to dominate even with expansion boost",
+        "depth_weight_deep × focus signals: deep files get compounded penalty from both mechanisms"
+      ],
+      "structural_insights": [
+        "flags/defs.rs→flags/doc/man.rs failure suggests path-prefix similarity isn't being captured - consider future 'sibling affinity' signal",
+        "Generic naming (helper_*, mod_*, distractor_*) is a systematic PageRank trap - may warrant explicit pattern-based penalty",
+        "Intent='Debug' and 'Explore' both need structural proximity over global centrality - intents aren't differentiating well"
+      ],
+      "confidence": 0.72
+    },
+    {
+      "timestamp": 1765189184,
+      "duration_secs": 31.216170404,
+      "failures": [
+        {
+          "query": "crates/searcher/src/searcher/glue.rs",
+          "seed_file": "crates/searcher/src/searcher/glue.rs",
+          "expected_top": [
+            "crates/searcher/src/line_buffer.rs"
+          ],
+          "actual_top": [
+            "src/utils/helper_1.rs",
+            "src/core/internal/deep_7.rs",
+            "lib/mod_8.rs",
+            "crates/searcher/src/line_buffer.rs",
+            "src/distractor_0.rs"
+          ],
+          "ndcg": 0.4306765580733931,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/ignore/src/dir.rs",
+          "seed_file": "crates/ignore/src/dir.rs",
+          "expected_top": [
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "src/distractor_0.rs",
+            "tests/test_9.rs",
+            "src/utils/helper_6.rs",
+            "tests/test_4.rs",
+            "tests/regression.rs"
+          ],
+          "ndcg": 0.38685280723454163,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "tests/binary.rs",
+          "seed_file": "tests/binary.rs",
+          "expected_top": [
+            "crates/core/flags/defs.rs",
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "lib/mod_8.rs",
+            "src/distractor_0.rs",
+            "lib/mod_3.rs",
+            "crates/core/flags/defs.rs",
+            "src/utils/helper_6.rs"
+          ],
+          "ndcg": 0.4557225766534415,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/core/flags/defs.rs",
+          "seed_file": "crates/core/flags/defs.rs",
+          "expected_top": [
+            "crates/core/flags/doc/man.rs"
+          ],
+          "actual_top": [
+            "tests/test_9.rs",
+            "src/utils/helper_1.rs",
+            "lib/mod_8.rs",
+            "src/utils/helper_6.rs",
+            "src/distractor_0.rs"
+          ],
+          "ndcg": 0.0,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        }
+      ],
+      "params": {
+        "pagerank_alpha": 0.595,
+        "pagerank_chat_multiplier": 100.0,
+        "depth_weight_root": 0.7,
+        "depth_weight_moderate": 0.65,
+        "depth_weight_deep": 0.13,
+        "depth_weight_vendor": 0.01,
+        "boost_mentioned_ident": 10.0,
+        "boost_mentioned_file": 5.0,
+        "boost_chat_file": 20.0,
+        "boost_temporal_coupling": 3.9,
+        "boost_focus_expansion": 6.5,
+        "git_recency_decay_days": 30.0,
+        "git_recency_max_boost": 10.0,
+        "git_churn_threshold": 5.0,
+        "git_churn_max_boost": 6.0,
+        "focus_decay": 0.5,
+        "focus_max_hops": 2.0
+      },
+      "ndcg_before": 0.8449953476827349,
+      "reasoning": "Let me analyze the failure patterns and trajectory:\n\n**Trajectory State**: Plateau - NDCG hovering around 0.845-0.853 for 4 episodes. The last episode (E4) hit 0.853 which is the best so far, but failures persist. This suggests we're in a local optimum and need an orthogonal move.\n\n**Critical Pattern in Failures**:\n1. All 4 failures show generic-named files dominating top positions: `helper_*.rs`, `mod_*.rs`, `distractor_*.rs`, `test_*.rs`\n2. These are classic PageRank hubs - they get linked to by many files but aren't semantically relevant\n3. The expected files ARE appearing (positions 4-5) but generic junk pushes them down\n\n**Failure 4 is the smoking gun**: `crates/core/flags/defs.rs` → expected `crates/core/flags/doc/man.rs` (same directory tree!) but got NDCG=0.000. The sibling file didn't appear at all. This is a **path-proximity signal failure**.\n\n**Diagnosis**:\n1. **PageRank is still too global** despite alpha=0.595. The generic-named files are PageRank hubs that dominate regardless of seed.\n2. **Focus propagation isn't reaching siblings** - `flags/defs.rs` and `flags/doc/man.rs` share a path prefix but focus_max_hops=2 with decay=0.5 isn't bridging them\n3. **No penalty for generic naming** - the key insight notes this pattern but parameters don't address it yet\n\n**Proposed Strategy**: \"Hyperlocalize via aggressive focus expansion and path-based proximity; starve PageRank to break hub dominance\"\n\n**Key Changes**:\n- **Reduce pagerank_alpha significantly** (0.595 → 0.35) - make PageRank much more local, less hub-convergent\n- **Increase focus_max_hops** (2 → 3) - reach sibling directories like flags/ → flags/doc/\n- **Increase focus_decay slightly** (0.5 → 0.6) - slower decay means more signal reaches distant siblings\n- **Boost focus_expansion** (6.5 → 9.0) - amplify the neighborhood signal to overpower generic hubs\n- **Reduce pagerank_chat_multiplier** (100 → 60) - the chat signal is being distributed to hubs; reduce this to prevent hub amplification",
+      "strategy_capsule": "Starve PageRank hubs via low alpha, extend focus reach to 3 hops with slower decay to bridge sibling directories",
+      "proposed_changes": {},
+      "param_interactions": [
+        "pagerank_alpha × focus_expansion: lower alpha localizes PR, higher focus_expansion compensates by amplifying neighborhood",
+        "focus_max_hops × focus_decay: more hops with slower decay extends reach to sibling directories",
+        "pagerank_chat_multiplier × pagerank_alpha: high multiplier with high alpha distributes seed signal to hubs; reducing both starves hubs"
+      ],
+      "structural_insights": [
+        "NDCG=0.000 on flags/defs.rs→flags/doc/man.rs reveals focus propagation doesn't traverse directory structure - may need explicit path-prefix affinity signal",
+        "All failures show same generic files in top-3 regardless of seed - these are structural hubs that PageRank can't escape",
+        "Expected files consistently appear at positions 4-5, suggesting signal exists but is drowned by hub noise",
+        "Future consideration: explicit penalty for files matching /helper_|mod_|distractor_|test_\\d/ naming patterns"
+      ],
+      "confidence": 0.65
+    }
+  ],
+  "param_interactions": [
+    "pagerank_alpha × depth_weight_deep: high alpha spreads to hubs, deep penalty blocks actual targets",
+    "depth_weight_root vs boost_mentioned_*: shallow files winning over direct structural relationships",
+    "depth_weight_deep vs crates/ structure: 0.13 annihilates depth-4 files that are semantically critical",
+    "pagerank_alpha vs localization: 0.595 is neutral; lowering biases toward seed neighborhood",
+    "boost_focus_expansion vs hub gravity: current 6.5 may not overcome PageRank hub amplification",
+    "depth_weight_deep vs boost_focus_expansion: 5x depth penalty overwhelms 6.5x focus boost",
+    "pagerank_alpha vs hub dominance: 0.595 still lets generic hubs accumulate disproportionate rank",
+    "depth_weight_moderate favors shallow distractors over deep implementation files",
+    "focus_decay × focus_max_hops: current 0.50 decay kills signal at hop 2 (0.25 strength), need slower decay with more hops",
+    "pagerank_alpha × boost_focus_expansion: alpha=0.595 allows global hubs to dominate even with expansion boost",
+    "depth_weight_deep × focus signals: deep files get compounded penalty from both mechanisms",
+    "pagerank_alpha × focus_expansion: lower alpha localizes PR, higher focus_expansion compensates by amplifying neighborhood",
+    "focus_max_hops × focus_decay: more hops with slower decay extends reach to sibling directories",
+    "pagerank_chat_multiplier × pagerank_alpha: high multiplier with high alpha distributes seed signal to hubs; reducing both starves hubs"
+  ],
+  "failure_patterns": [],
+  "success_patterns": [],
+  "structural_proposals": [
+    "Curated repo has crates/ structure - deep paths are semantically important, not noise",
+    "Generic named files (helper_*, mod_*, distractor_*) are PageRank hubs pulling focus",
+    "Expected targets have direct structural links to seeds but lose to depth + hub effects",
+    "Curated repo's crates/ structure means depth-4 files are not 'deep junk' - they're core implementation",
+    "distractor_* and helper_* files are intentional noise attracting PageRank due to generic naming",
+    "Tests querying for crates/ files indicates debugging/explore intent where structural proximity matters more than global centrality",
+    "Curated repo depth is intentional architecture, not decay signal",
+    "Generic naming pattern (helper_*, mod_*, distractor_*) correlates with PageRank hubs - may need explicit penalty in future",
+    "Cross-crate dependencies (e.g., core→printer→ignore) need multi-hop focus propagation to surface",
+    "flags/defs.rs→flags/doc/man.rs failure suggests path-prefix similarity isn't being captured - consider future 'sibling affinity' signal",
+    "Generic naming (helper_*, mod_*, distractor_*) is a systematic PageRank trap - may warrant explicit pattern-based penalty",
+    "Intent='Debug' and 'Explore' both need structural proximity over global centrality - intents aren't differentiating well",
+    "NDCG=0.000 on flags/defs.rs→flags/doc/man.rs reveals focus propagation doesn't traverse directory structure - may need explicit path-prefix affinity signal",
+    "All failures show same generic files in top-3 regardless of seed - these are structural hubs that PageRank can't escape",
+    "Expected files consistently appear at positions 4-5, suggesting signal exists but is drowned by hub noise",
+    "Future consideration: explicit penalty for files matching /helper_|mod_|distractor_|test_\\d/ naming patterns"
+  ],
+  "presets": {},
+  "heuristics": [],
+  "warnings": []
+}

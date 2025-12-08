@@ -1,0 +1,9 @@
+# L2 Outer Loop Configuration
+[run]
+name = "l2_long_run"
+steps_outer = 10
+episodes_inner = 5
+agent_inner = "claude"
+agent_outer = "gemini"
+corpus = "curated"
+dry = false

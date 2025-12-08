@@ -1,0 +1,185 @@
+{
+  "episodes": [
+    {
+      "outer_step": 1,
+      "prompt_id": "inner_v001",
+      "baseline_metrics": {
+        "ndcg": 0.8292373136117808,
+        "failures": 10,
+        "mean_confidence": 0.5
+      },
+      "final_metrics": {
+        "ndcg": 0.8266672610602435,
+        "failures": 6,
+        "mean_confidence": 0.6833333333333332
+      },
+      "delta": {
+        "ndcg": -0.002570052551537305,
+        "failures": 0,
+        "mean_confidence": 0.18333333333333324
+      },
+      "stability": {
+        "collapse_events": 0,
+        "ndcg_variance": 2.2187855175378106e-6,
+        "converged": false,
+        "oscillations": 1
+      },
+      "meta_levers_estimate": {
+        "structural_trust": 0.85,
+        "temporal_horizon": 0.0,
+        "exploration_bias": 0.5,
+        "depth_sensitivity": 0.1,
+        "hub_damping": 0.5,
+        "focus_locality": 0.3
+      },
+      "strategy_capsules": [
+        "Reduce root-depth privilege; trust git coupling more; penalize orphan shallow files",
+        "Invert depth heuristic for monorepo; amplify directory-local and temporal coupling signals",
+        "Path-aware depth inversion: penalize shallow files when seed is deep; amplify same-directory and temporal signals"
+      ],
+      "notable_failures": [],
+      "structural_insights": [
+        "Curated test repo has intentional distractors at root level - depth heuristic inverted",
+        "Cross-crate relationships (ignore→printer, core→flags/doc) need stronger structural linking",
+        "NDCG=0.000 on Failure 4 indicates complete signal loss for sibling-directory relationships",
+        "Monorepo crate structures (crates/X/src/) have inverted depth semantics vs flat repos",
+        "NDCG=0.358-0.431 on these failures suggests 60-65% of signal is misdirected to distractors",
+        "Same-crate sibling files (util.rs↔standard.rs, color.rs↔defs.rs) need same-directory affinity",
+        "The 'intentional distractors at root level' note in training hints confirms depth inversion needed",
+        "Monorepo pattern: 'crates/X/src/' means depth 3 is semantic root, not filesystem root",
+        "Same-directory files need explicit affinity signal - temporal coupling is proxy but insufficient",
+        "Distractors are nameless (mod_N, helper_N, distractor_N) - no semantic hooks for focus matching",
+        "tests/*.rs files need test↔test coupling not just test↔source"
+      ],
+      "inner_episodes": 3,
+      "duration_secs": 151.788405662,
+      "timestamp": 1765176403,
+      "proposal": {
+        "mode": "explore",
+        "mode_justification": "Cold start. Injecting structural diagnostic logic to separate retrieval vs. ranking issues, creating a more capable baseline than the seed.",
+        "confidence": 0.9,
+        "edits": [
+          {
+            "section": "Policy",
+            "edit_type": "replace",
+            "target": "Analyze failures:\n- Missing signal vs overwhelming signal\n- Parameter interactions",
+            "content": "Analyze failures:\n- Classify error type: Retrieval (target not in top-k) vs Ranking (target present but low score).\n- Hypothesis: explicitly link the error type to a parameter group (e.g., Retrieval -> Discovery params, Ranking -> Boost params).",
+            "rationale": "Different failure modes require adjusting different parameter sets (recall vs. precision). Explicit classification prevents conflating them."
+          },
+          {
+            "section": "Style",
+            "edit_type": "replace",
+            "target": "Analytical. Specific. Reference concrete failures.",
+            "content": "Analytical. Hypothesis-driven. Explicitly map failure mechanisms to parameter changes.",
+            "rationale": "Encourages the model to provide causal reasoning, which is known to improve optimization trajectory."
+          }
+        ],
+        "expected_effects": [
+          "More targeted parameter updates.",
+          "Reduced oscillation between recall-promoting and precision-promoting parameters."
+        ],
+        "hypothesis": "Explicitly classifying failure modes improves hyperparameter attribution efficiency.",
+        "risk_level": "low"
+      },
+      "selection_mode": "best"
+    },
+    {
+      "outer_step": 2,
+      "prompt_id": "inner_v001",
+      "baseline_metrics": {
+        "ndcg": 0.8321585273021463,
+        "failures": 10,
+        "mean_confidence": 0.5
+      },
+      "final_metrics": {
+        "ndcg": 0.8288089034854249,
+        "failures": 5,
+        "mean_confidence": 0.6733333333333333
+      },
+      "delta": {
+        "ndcg": -0.0033496238167214365,
+        "failures": 0,
+        "mean_confidence": 0.17333333333333334
+      },
+      "stability": {
+        "collapse_events": 0,
+        "ndcg_variance": 2.8163009818441506e-6,
+        "converged": false,
+        "oscillations": 1
+      },
+      "meta_levers_estimate": {
+        "structural_trust": 0.85,
+        "temporal_horizon": 0.0,
+        "exploration_bias": 0.5,
+        "depth_sensitivity": 0.1,
+        "hub_damping": 0.5,
+        "focus_locality": 0.3
+      },
+      "strategy_capsules": [
+        "Localize PageRank, amplify seed signal, penalize utility noise",
+        "Suppress noise via localized PageRank and path-aware affinity",
+        "Flatten depth curve, boost graph-based affinity to overcome monorepo depth penalty"
+      ],
+      "notable_failures": [],
+      "structural_insights": [
+        "Distractor files suggest test repo with intentional noise - need robust noise suppression",
+        "Expected files appearing mid-rank = signal present but overwhelmed, not missing",
+        "Test file queries need stronger same-category affinity (tests → tests)",
+        "Utility/helper path pattern suggests depth heuristic could use path component matching",
+        "Curated test repo has intentional distractors in lib/, src/distractor_*, src/utils/helper_*",
+        "Path structure: crates/{name}/src/*.rs should have implicit affinity",
+        "Test files need stronger same-category affinity (tests → tests in same domain)",
+        "Consider path-component matching: files sharing path segments should boost each other",
+        "Path-component matching (crates/X → crates/Y affinity) is not expressible in current parameters - consider adding path_prefix_boost",
+        "Curated repo's distractor pattern (lib/mod_*, src/distractor_*) exploits depth heuristic - flattening helps",
+        "Test files (tests/*.rs) need same-category affinity that current params can't capture",
+        "The monorepo crates/ structure puts real code at depth 4-5, making depth_weight_deep critical"
+      ],
+      "inner_episodes": 3,
+      "duration_secs": 157.190639154,
+      "timestamp": 1765176607,
+      "proposal": {
+        "mode": "explore",
+        "mode_justification": "Early stage of optimization with only one outer episode. Slight NDCG degradation but reduced failures and diverse strategy capsules warrant continued exploration. The current heuristics need refinement based on observed structural insights.",
+        "confidence": 0.8,
+        "edits": [
+          {
+            "section": "Heuristics",
+            "edit_type": "replace",
+            "target": "Depth penalties break monorepos",
+            "content": "Depth penalties should be context-dependent; consider inverting for monorepos with root-level distractors.",
+            "rationale": "The current heuristic is too absolute and contradicts observed effective strategies like depth inversion for specific repo types. This change introduces necessary nuance and flexibility."
+          },
+          {
+            "section": "Heuristics",
+            "edit_type": "replace",
+            "target": "Temporal and structural signals compete",
+            "content": "Temporal and structural signals interact; actively seek optimal balance or context-dependent weighting.",
+            "rationale": "Strengthens guidance to actively consider the interplay and potential weighting of temporal vs. structural signals, rather than just noting their competition, especially given the low temporal lever usage."
+          },
+          {
+            "section": "Heuristics",
+            "edit_type": "append",
+            "target": "",
+            "content": "Complete signal loss (NDCG=0.000) for specific failure types (e.g., sibling-directory relationships) indicates a critical gap in signal propagation.",
+            "rationale": "Incorporates a specific, critical structural insight from Episode 1 to guide the inner optimizer in recognizing and addressing severe signal loss situations more effectively."
+          }
+        ],
+        "expected_effects": [
+          "Inner optimizer will propose more sophisticated and context-aware depth-related parameter changes.",
+          "Improved ability to balance or weigh temporal and structural signals, potentially leading to better signal integration.",
+          "Increased sensitivity to critical signal loss patterns, enabling targeted solutions for specific interaction types."
+        ],
+        "hypothesis": "By providing more refined and action-oriented heuristics, the inner promptgram will generate more effective parameter adjustments, leading to improved NDCG or a faster reduction in failure count in subsequent outer episodes.",
+        "risk_level": "medium"
+      },
+      "selection_mode": "best"
+    }
+  ],
+  "best_prompt_id": "inner_v001",
+  "best_ndcg": 0.8288089034854249,
+  "hall_of_fame": [],
+  "success_patterns": [],
+  "failure_patterns": [],
+  "meta_insights": []
+}

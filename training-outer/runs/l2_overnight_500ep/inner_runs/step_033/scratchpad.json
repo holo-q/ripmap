@@ -1,0 +1,160 @@
+{
+  "episodes": [
+    {
+      "timestamp": 1765202768,
+      "duration_secs": 25.609038235,
+      "failures": [
+        {
+          "query": "tests/binary.rs",
+          "seed_file": "tests/binary.rs",
+          "expected_top": [
+            "crates/core/flags/defs.rs",
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "lib/mod_3.rs",
+            "crates/core/flags/defs.rs",
+            "src/core/internal/deep_7.rs",
+            "src/core/internal/deep_2.rs",
+            "lib/mod_8.rs"
+          ],
+          "ndcg": 0.40297975727170576,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        }
+      ],
+      "params": {
+        "pagerank_alpha": 0.26531049999999995,
+        "pagerank_chat_multiplier": 70.0,
+        "depth_weight_root": 0.3429999999999999,
+        "depth_weight_moderate": 0.41405,
+        "depth_weight_deep": 0.199927,
+        "depth_weight_vendor": 0.01,
+        "boost_mentioned_ident": 10.0,
+        "boost_mentioned_file": 5.0,
+        "boost_chat_file": 14.0,
+        "boost_temporal_coupling": 4.198467,
+        "boost_focus_expansion": 2.4499999999999997,
+        "git_recency_decay_days": 30.0,
+        "git_recency_max_boost": 7.0,
+        "git_churn_threshold": 5.0,
+        "git_churn_max_boost": 6.0,
+        "focus_decay": 0.22295,
+        "focus_max_hops": 2.1530599999999995
+      },
+      "ndcg_before": 0.8789380646538635,
+      "reasoning": "Looking at this optimization problem, let me analyze the failure case.\n\n**REASONING:**\n\nThis is Episode 1 with NDCG 0.8789 overall, but this specific failure shows NDCG 0.403 - significantly below average.\n\n**Failure Analysis:**\n- Query: `tests/binary.rs` (a test file)\n- Expected: `crates/core/flags/defs.rs`, `tests/regression.rs`\n- Got: `lib/mod_3.rs`, `crates/core/flags/defs.rs`, `src/core/internal/deep_*`, `lib/mod_8.rs`\n- Context: \"intent: Explore\"\n\nThe system DID find `crates/core/flags/defs.rs` at position 2, but missed `tests/regression.rs` entirely, and surfaced irrelevant `lib/mod_*.rs` and `deep_*.rs` files.\n\n**Key observations:**\n\n1. **Test file cohesion is weak**: When seeding from a test file, other test files should have stronger affinity. `tests/regression.rs` should naturally couple with `tests/binary.rs` but isn't surfacing.\n\n2. **PageRank is pulling toward deep/lib files**: The `deep_*` and `lib/mod_*` files suggest high PageRank scores are dominating, possibly because these are heavily imported across the codebase.\n\n3. **`boost_mentioned_file: 5.0` may be too low**: If `tests/binary.rs` references `tests/regression.rs` or they share test utilities, this signal isn't strong enough.\n\n4. **`depth_weight_root: 0.34` vs `depth_weight_moderate: 0.41`**: Files in `src/core/internal/` (deep) and `lib/` are getting weight despite `depth_weight_deep: 0.20`. The `lib/` files might be classified as moderate depth.\n\n5. **`pagerank_alpha: 0.265`** is relatively low, which localizes - but the wrong kind of local. It's pulling toward structural hubs rather than semantic/path affinity.\n\n**Hypothesis:** The temporal coupling and focus expansion signals aren't compensating for PageRank's bias toward hub files. For test files specifically, sibling test files should have stronger affinity.\n\n**Proposed changes:**\n- Increase `boost_mentioned_file` to strengthen direct reference signals\n- Slightly decrease `pagerank_alpha` to reduce global hub dominance\n- Increase `focus_max_hops` to allow test→test discovery through shared imports\n- Increase `boost_focus_expansion` to strengthen semantic path following\n\n```json",
+      "strategy_capsule": "Strengthen local file cohesion for test files by boosting direct mentions and focus expansion while reducing PageRank's global hub bias",
+      "proposed_changes": {},
+      "param_interactions": [
+        "pagerank_alpha × boost_mentioned_file: lower alpha + higher mention boost should favor direct references over global structure",
+        "focus_max_hops × boost_focus_expansion: expanding search radius while strengthening expansion signal helps test file discovery"
+      ],
+      "structural_insights": [
+        "Test files likely share imports with other test files (test utilities, fixtures) - focus expansion should surface these",
+        "lib/mod_*.rs files are likely high PageRank hubs - need dampening for explore-intent queries",
+        "First episode: conservative changes to establish gradient direction"
+      ],
+      "confidence": 0.65
+    },
+    {
+      "timestamp": 1765202795,
+      "duration_secs": 26.591907919,
+      "failures": [
+        {
+          "query": "tests/binary.rs",
+          "seed_file": "tests/binary.rs",
+          "expected_top": [
+            "crates/core/flags/defs.rs",
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "src/core/internal/deep_2.rs",
+            "tests/test_9.rs",
+            "src/utils/helper_6.rs",
+            "tests/regression.rs",
+            "tests/test_4.rs"
+          ],
+          "ndcg": 0.2466202911282501,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "tests/regression.rs",
+          "seed_file": "tests/regression.rs",
+          "expected_top": [
+            "crates/core/flags/defs.rs",
+            "tests/binary.rs"
+          ],
+          "actual_top": [
+            "src/distractor_0.rs",
+            "lib/mod_8.rs",
+            "crates/core/flags/defs.rs",
+            "src/core/internal/deep_7.rs",
+            "src/core/internal/deep_2.rs"
+          ],
+          "ndcg": 0.3669446548087192,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        }
+      ],
+      "params": {
+        "pagerank_alpha": 0.26531049999999995,
+        "pagerank_chat_multiplier": 70.0,
+        "depth_weight_root": 0.3429999999999999,
+        "depth_weight_moderate": 0.41405,
+        "depth_weight_deep": 0.199927,
+        "depth_weight_vendor": 0.01,
+        "boost_mentioned_ident": 10.0,
+        "boost_mentioned_file": 5.0,
+        "boost_chat_file": 14.0,
+        "boost_temporal_coupling": 4.198467,
+        "boost_focus_expansion": 2.4499999999999997,
+        "git_recency_decay_days": 30.0,
+        "git_recency_max_boost": 7.0,
+        "git_churn_threshold": 5.0,
+        "git_churn_max_boost": 6.0,
+        "focus_decay": 0.22295,
+        "focus_max_hops": 2.1530599999999995
+      },
+      "ndcg_before": 0.8797882591314602,
+      "reasoning": "I'll analyze this optimization problem for the ripmap ranking system.\n\n****\n\nLooking at the trajectory:\n- E1 → E2: NDCG stayed flat at ~0.88 (0.879 → 0.8798), essentially no change\n- The strategy from E1 focused on strengthening local file cohesion for test files\n\n**Failure Analysis:**\n\nBoth failures are test file queries with \"Explore\" intent:\n\n**Failure 1** (tests/binary.rs → expects crates/core/flags/defs.rs, tests/regression.rs):\n- Got: deep internal files and random test files\n- NDCG: 0.247 (very poor)\n- tests/regression.rs appears at position 4, so partial success\n- crates/core/flags/defs.rs is completely missing from top results\n- Problem: The actual architectural relationship (tests/binary.rs tests the flags/defs.rs module) isn't being captured\n\n**Failure 2** (tests/regression.rs → expects crates/core/flags/defs.rs, tests/binary.rs):\n- Got: distractor files, lib/mod_* hubs, and crates/core/flags/defs.rs at position 3\n- NDCG: 0.367 (poor but better)\n- crates/core/flags/defs.rs IS surfacing but too low\n- tests/binary.rs missing entirely\n- Problem: High PageRank hubs (lib/mod_8.rs) and distractors overwhelming the actual signal\n\n**Key Observations:**\n\n1. **Test ↔ Test cohesion is weak**: binary.rs and regression.rs should strongly associate (both test the same core module), but they're not finding each other\n2. **Test → Implementation link is weak**: The tests should strongly link to what they test (crates/core/flags/defs.rs), but this signal is drowning\n3. **High PageRank files pollute results**: lib/mod_8.rs, distractor files appearing suggests global hubs are overwhelming local relevance\n4. **Current pagerank_alpha = 0.265 is quite low** (localizes), yet hubs still dominate - suggests the chat_multiplier (70.0) or other boosts are fighting the localization\n\n**Parameter Interaction Hypothesis:**\n- `pagerank_chat_multiplier: 70.0` is very high - this amplifies PageRank scores for contextual files\n- Combined with even low alpha, high-PageRank hubs get massive boosts\n- `boost_focus_expansion: 2.45` is modest - test file connections through shared imports/deps aren't being amplified enough\n\n**Proposed Direction:**\n1. **Reduce pagerank_chat_multiplier** - hubs are polluting results\n2. **Increase boost_focus_expansion** - strengthen the test→test and test→impl connections via dependency/import graph\n3. **Increase boost_mentioned_file** - when a test file explicitly references another file, that should be weighted heavily\n4. **Consider depth_weight adjustments** - crates/core/flags/defs.rs is \"moderate\" depth but should surface higher for test queries\n\n```json",
+      "strategy_capsule": "Dampen PageRank hub pollution, strengthen dependency-graph expansion for test file cohesion",
+      "proposed_changes": {},
+      "param_interactions": [
+        "pagerank_chat_multiplier × pagerank_alpha: even with low alpha, multiplier of 70 amplifies hubs excessively",
+        "boost_focus_expansion vs boost_mentioned_file: expansion should propagate test relationships, mentioned should anchor known references",
+        "depth_weight_moderate affects crates/core/* visibility - may need increase for explore-intent"
+      ],
+      "structural_insights": [
+        "Test files form implicit clusters via shared test utilities and common implementation targets",
+        "Explore intent on test files should prioritize: (1) what they test, (2) sibling tests, (3) shared fixtures",
+        "lib/mod_*.rs hubs are structurally central but semantically irrelevant for test exploration"
+      ],
+      "confidence": 0.65
+    }
+  ],
+  "param_interactions": [
+    "pagerank_alpha × boost_mentioned_file: lower alpha + higher mention boost should favor direct references over global structure",
+    "focus_max_hops × boost_focus_expansion: expanding search radius while strengthening expansion signal helps test file discovery",
+    "pagerank_chat_multiplier × pagerank_alpha: even with low alpha, multiplier of 70 amplifies hubs excessively",
+    "boost_focus_expansion vs boost_mentioned_file: expansion should propagate test relationships, mentioned should anchor known references",
+    "depth_weight_moderate affects crates/core/* visibility - may need increase for explore-intent"
+  ],
+  "failure_patterns": [],
+  "success_patterns": [],
+  "structural_proposals": [
+    "Test files likely share imports with other test files (test utilities, fixtures) - focus expansion should surface these",
+    "lib/mod_*.rs files are likely high PageRank hubs - need dampening for explore-intent queries",
+    "First episode: conservative changes to establish gradient direction",
+    "Test files form implicit clusters via shared test utilities and common implementation targets",
+    "Explore intent on test files should prioritize: (1) what they test, (2) sibling tests, (3) shared fixtures",
+    "lib/mod_*.rs hubs are structurally central but semantically irrelevant for test exploration"
+  ],
+  "presets": {},
+  "heuristics": [],
+  "warnings": []
+}

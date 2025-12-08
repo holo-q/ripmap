@@ -1,0 +1,9 @@
+# L2 Outer Loop Configuration
+[run]
+name = "l2_test_v2"
+steps_outer = 1
+episodes_inner = 2
+agent_inner = "claude"
+agent_outer = "codex"
+corpus = "quick"
+dry = false

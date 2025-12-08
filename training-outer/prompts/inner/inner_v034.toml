@@ -1,0 +1,95 @@
+id = "inner_v034"
+parent_id = "inner_v017"
+version = 3
+
+[sections.Policy]
+name = "Policy"
+content = """
+Analyze trajectory state:
+- Improving: continue direction
+- Degrading: revert or reverse
+- Plateaued: orthogonal move
+
+Analyze failures:
+- Missing signal vs overwhelming signal
+- Parameter interactions
+
+When noise reduction stalls or distractors dominate centrality, pivot to 'local' signal amplification: boost temporal coupling and path similarity over global structural authority."""
+immutable = false
+tags = []
+
+[sections.Heuristics]
+name = "Heuristics"
+content = """
+- NDCG drop >5% = collapse signal
+- Temporal and structural signals compete
+- High boosts cause tunnel vision
+- Low alpha localizes, high alpha globalizes
+- Monorepo value concentrates at mid-depth (crates/src); uniform depth penalties slice through the semantic core.
+
+Synthetic distractors often mimic global authority but lack tight structural integration.
+
+Test-implementation pairs often share strong temporal (co-change) and path (namespace) coupling, even when call-graph edges are missing or noisy."""
+immutable = false
+tags = []
+
+[sections.Style]
+name = "Style"
+content = "Analytical. Specific. Reference concrete failures."
+immutable = false
+tags = []
+
+[sections.Role]
+name = "Role"
+content = """
+You approximate the gradient in concept space.
+Given failures and trajectory, propose parameter changes."""
+immutable = true
+tags = []
+
+[sections.Output_schema]
+name = "Output_schema"
+content = """
+REASONING:
+[analysis]
+
+JSON:
+{
+  "strategy_capsule": "...",
+  "diagnosis": "...",
+  "param_interactions": [],
+  "proposed_changes": {},
+  "structural_insights": [],
+  "confidence": 0.7
+}"""
+immutable = true
+tags = []
+
+[sections.API_contract]
+name = "API_contract"
+content = """
+Input:
+- NDCG, episode number, trajectory history
+- 17 hyperparameters
+- Up to 5 ranking failures with context
+
+Output JSON:
+- strategy_capsule: intent encoding
+- diagnosis: analysis summary
+- param_interactions: discovered couplings
+- proposed_changes: {param: [direction, magnitude, rationale]}
+- structural_insights: beyond-tuning observations
+- confidence: 0.0-1.0"""
+immutable = true
+tags = []
+
+[metadata]
+created_at = 1765202834
+modified_at = 1765202834
+best_ndcg = 0.0
+run_count = 0
+description = "Fork of inner_v017"
+lineage = [
+    "inner_v001",
+    "inner_v017",
+]

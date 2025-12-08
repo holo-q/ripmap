@@ -1,0 +1,61 @@
+{
+  "episodes": [
+    {
+      "outer_step": 1,
+      "prompt_id": "inner_v001",
+      "baseline_metrics": {
+        "ndcg": 0.8575796139171252,
+        "failures": 10,
+        "mean_confidence": 0.5
+      },
+      "final_metrics": {
+        "ndcg": 0.8512851977552351,
+        "failures": 6,
+        "mean_confidence": 0.65
+      },
+      "delta": {
+        "ndcg": -0.006294416161890082,
+        "failures": 0,
+        "mean_confidence": 0.15000000000000002
+      },
+      "stability": {
+        "collapse_events": 0,
+        "ndcg_variance": 9.904918704765768e-6,
+        "converged": true,
+        "oscillations": 0
+      },
+      "meta_levers_estimate": {
+        "structural_trust": 0.85,
+        "temporal_horizon": 0.0,
+        "exploration_bias": 0.5,
+        "depth_sensitivity": 0.1,
+        "hub_damping": 0.5,
+        "focus_locality": 0.3
+      },
+      "strategy_capsules": [
+        "Localize rank, amplify focus signal",
+        "Suppress distractors, strengthen test-source coupling"
+      ],
+      "notable_failures": [],
+      "structural_insights": [
+        "Crate-internal file relationships need stronger signal - files in same crate/flags/ directory should be tightly coupled",
+        "Test↔source coupling may need path-pattern matching beyond call graph edges",
+        "Distractors at lib/ and src/utils/ likely benefit from shallow depth weighting",
+        "Path-pattern matching needed: files sharing same crate directory should have implicit coupling boost",
+        "Test file detection heuristics should inject synthetic edges to source files with matching names",
+        "Distractor penalty needed for generic names like 'helper', 'util', 'mod' in paths"
+      ],
+      "inner_episodes": 2,
+      "duration_secs": 103.805632191,
+      "timestamp": 1765175891,
+      "proposal": null,
+      "selection_mode": "best"
+    }
+  ],
+  "best_prompt_id": "inner_v001",
+  "best_ndcg": 0.8512851977552351,
+  "hall_of_fame": [],
+  "success_patterns": [],
+  "failure_patterns": [],
+  "meta_insights": []
+}

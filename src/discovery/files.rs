@@ -2,6 +2,7 @@
 //!
 //! This module implements efficient file discovery that:
 //! - Respects .gitignore automatically via the `ignore` crate
+//! - Supports pyproject.toml/ripmap.toml include/exclude patterns
 //! - Filters out binary files, images, archives, etc.
 //! - Uses parallel walking for speed on large codebases
 //! - Returns deterministic (sorted) results
@@ -15,6 +16,8 @@
 use std::path::{Path, PathBuf};
 use anyhow::Result;
 use ignore::WalkBuilder;
+
+use crate::config::Config;
 
 /// File extensions excluded from discovery.
 ///
@@ -136,6 +139,86 @@ pub fn find_source_files(directory: &Path, include_all: bool) -> Result<Vec<Path
     // across runs, breaking cache invalidation logic.
     files.sort();
 
+    Ok(files)
+}
+
+/// Find source files with configuration-based filtering.
+///
+/// This is the preferred entry point that applies include/exclude patterns
+/// from pyproject.toml or ripmap.toml configuration.
+///
+/// ## Arguments
+/// - `directory`: Root path to scan
+/// - `config`: Configuration with include/exclude patterns
+/// - `include_all`: If true, bypass extension filtering (for diagnostics)
+pub fn find_source_files_with_config(
+    directory: &Path,
+    config: &Config,
+    include_all: bool,
+) -> Result<Vec<PathBuf>> {
+    // Handle single file case early
+    if directory.is_file() {
+        if config.should_include(directory) {
+            return Ok(vec![directory.to_path_buf()]);
+        } else {
+            return Ok(vec![]);
+        }
+    }
+
+    if !directory.is_dir() {
+        anyhow::bail!("Path does not exist: {}", directory.display());
+    }
+
+    // Build parallel walker
+    let walker = WalkBuilder::new(directory)
+        .hidden(false)
+        .git_ignore(true)
+        .git_global(true)
+        .git_exclude(true)
+        .require_git(false)
+        .follow_links(false)
+        .threads(0)
+        .build_parallel();
+
+    let files = std::sync::Mutex::new(Vec::new());
+    let dir_path = directory.to_path_buf();
+
+    walker.run(|| {
+        Box::new(|entry_result| {
+            match entry_result {
+                Ok(entry) => {
+                    let path = entry.path();
+
+                    if !path.is_file() {
+                        return ignore::WalkState::Continue;
+                    }
+
+                    // Apply extension filter
+                    if !include_all && is_excluded_by_extension(path) {
+                        return ignore::WalkState::Continue;
+                    }
+
+                    // Apply config include/exclude patterns
+                    // Use relative path for pattern matching
+                    let rel_path = path.strip_prefix(&dir_path).unwrap_or(path);
+                    if !config.should_include(rel_path) {
+                        return ignore::WalkState::Continue;
+                    }
+
+                    if let Ok(mut files) = files.lock() {
+                        files.push(path.to_path_buf());
+                    }
+
+                    ignore::WalkState::Continue
+                }
+                Err(_) => ignore::WalkState::Continue,
+            }
+        })
+    });
+
+    let mut files = files.into_inner()
+        .map_err(|_| anyhow::anyhow!("Failed to unwrap mutex"))?;
+    files.sort();
     Ok(files)
 }
 

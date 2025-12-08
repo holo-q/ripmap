@@ -336,7 +336,8 @@ fn run(cli: &Cli) -> Result<String> {
     use std::collections::{HashMap, HashSet};
     use std::sync::Arc;
     use std::time::Instant;
-    use ripmap::discovery::find_source_files;
+    use ripmap::config::Config;
+    use ripmap::discovery::find_source_files_with_config;
     use ripmap::extraction::{Parser, extract_tags};
     use ripmap::ranking::{PageRanker, BoostCalculator};
     use ripmap::rendering::DirectoryRenderer;
@@ -349,15 +350,19 @@ fn run(cli: &Cli) -> Result<String> {
     let root = cli.root.canonicalize()
         .map_err(|e| anyhow::anyhow!("Failed to resolve root path '{}': {}", cli.root.display(), e))?;
 
+    // Load configuration from pyproject.toml or ripmap.toml
+    let file_config = Config::load(&root);
+
     if cli.verbose {
         eprintln!("🗺️  ripmap v{}", env!("CARGO_PKG_VERSION"));
         eprintln!("📂 Scanning: {}", root.display());
+        eprintln!("{}", file_config.display_summary());
     }
 
     // ══════════════════════════════════════════════════════════════════════════
     // Stage 1: File Discovery
     // ══════════════════════════════════════════════════════════════════════════
-    let files = find_source_files(&root, false)?;
+    let files = find_source_files_with_config(&root, &file_config, false)?;
 
     if files.is_empty() {
         return Ok("No source files found. Check your path and .gitignore settings.".into());

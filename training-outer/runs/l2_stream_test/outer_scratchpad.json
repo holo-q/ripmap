@@ -1,0 +1,93 @@
+{
+  "episodes": [
+    {
+      "outer_step": 1,
+      "prompt_id": "inner_v001",
+      "baseline_metrics": {
+        "ndcg": 0.8288863210698869,
+        "failures": 10,
+        "mean_confidence": 0.5
+      },
+      "final_metrics": {
+        "ndcg": 0.8275809670469375,
+        "failures": 5,
+        "mean_confidence": 0.65
+      },
+      "delta": {
+        "ndcg": -0.001305354022949401,
+        "failures": 0,
+        "mean_confidence": 0.15000000000000002
+      },
+      "stability": {
+        "collapse_events": 0,
+        "ndcg_variance": 1.4877548937678107e-6,
+        "converged": false,
+        "oscillations": 1
+      },
+      "meta_levers_estimate": {
+        "structural_trust": 0.85,
+        "temporal_horizon": 0.0,
+        "exploration_bias": 0.5,
+        "depth_sensitivity": 0.1,
+        "hub_damping": 0.5,
+        "focus_locality": 0.3
+      },
+      "strategy_capsules": [
+        "Reduce depth penalties and localize PageRank to favor structurally-connected crate code over shallow distractors",
+        "Flatten depth weights to let structural signal dominate over broken depth heuristic",
+        "Near-eliminate depth differentiation, boost temporal coupling for test↔source pairs"
+      ],
+      "notable_failures": [],
+      "structural_insights": [
+        "Curated test repo has inverted depth structure: distractors at root, real code in crates/*/src/",
+        "Query is bare file path with no identifiers - mentioned_ident and mentioned_file boosts inactive",
+        "Intent hints (Explore/Debug/Extend) not currently affecting ranking - potential signal loss",
+        "Curated test repo has inverted depth structure - consider adding monorepo detection",
+        "Bare file path queries disable mentioned_ident boost - need file-to-file coupling signal",
+        "Tests directory coupling should trigger (test.rs ↔ crates/*) but depth penalty blocks it",
+        "Curated repo's depth heuristic is inverted - consider monorepo detection as a preprocessing step",
+        "Bare file path queries disable identifier/file boosts - ranking falls back to pure structural signal",
+        "Intent hints (Explore/Debug/Extend) not modulating behavior - potential signal loss for future work",
+        "crates/ directory pattern should trigger depth-penalty inversion or crate-aware scoring"
+      ],
+      "inner_episodes": 3,
+      "duration_secs": 174.100270138,
+      "timestamp": 1765177405,
+      "proposal": {
+        "mode": "explore",
+        "mode_justification": "Cold start: Bootstrapping the prompt with procedural stability constraints to ensure initial trajectories are interpretable.",
+        "confidence": 0.9,
+        "edits": [
+          {
+            "section": "Policy",
+            "edit_type": "append",
+            "target": "Parameter interactions",
+            "content": "- Constraint: Limit simultaneous large edits (>2 parameters) to avoid confounding causes, unless recovering from collapse.",
+            "rationale": "Prevents the optimizer from changing too many variables at once, which makes it impossible to know which change caused the effect."
+          },
+          {
+            "section": "Heuristics",
+            "edit_type": "append",
+            "target": "Depth penalties break monorepos",
+            "content": "- Parameter sensitivity is often non-linear; changes near zero-bounds can trigger feature toggles with outsized impact.",
+            "rationale": "Encourages caution around critical thresholds (like 0.0) where behavior might change discontinuously."
+          }
+        ],
+        "expected_effects": [
+          "Lower variance in initial episode scores.",
+          "More specific diagnosis in inner run logs due to isolated parameter changes.",
+          "Reduced risk of immediate ranker collapse."
+        ],
+        "hypothesis": "Constraining the 'blast radius' of updates in a cold-start scenario yields faster convergence than unconstrained random walks.",
+        "risk_level": "low"
+      },
+      "selection_mode": "best"
+    }
+  ],
+  "best_prompt_id": "inner_v001",
+  "best_ndcg": 0.8275809670469375,
+  "hall_of_fame": [],
+  "success_patterns": [],
+  "failure_patterns": [],
+  "meta_insights": []
+}

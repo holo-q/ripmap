@@ -1,0 +1,9 @@
+# L2 Outer Loop Configuration
+[run]
+name = "l2_evolution_v1"
+steps_outer = 5
+episodes_inner = 5
+agent_inner = "claude"
+agent_outer = "codex"
+corpus = "curated"
+dry = false

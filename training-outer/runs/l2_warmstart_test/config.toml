@@ -1,0 +1,9 @@
+# L2 Outer Loop Configuration
+[run]
+name = "l2_warmstart_test"
+steps_outer = 3
+episodes_inner = 3
+agent_inner = "claude"
+agent_outer = "gemini"
+corpus = "quick"
+dry = false

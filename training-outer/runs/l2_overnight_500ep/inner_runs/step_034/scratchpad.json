@@ -1,0 +1,810 @@
+{
+  "episodes": [
+    {
+      "timestamp": 1765202858,
+      "duration_secs": 23.392572881,
+      "failures": [
+        {
+          "query": "tests/regression.rs",
+          "seed_file": "tests/regression.rs",
+          "expected_top": [
+            "crates/globset/src/glob.rs",
+            "crates/ignore/src/gitignore.rs",
+            "crates/ignore/src/overrides.rs"
+          ],
+          "actual_top": [
+            "tests/test_4.rs",
+            "src/core/internal/deep_7.rs",
+            "crates/ignore/src/gitignore.rs",
+            "crates/globset/src/glob.rs",
+            "src/core/internal/deep_2.rs"
+          ],
+          "ndcg": 0.44183938484769186,
+          "commit_context": "intent: Extend",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/printer/src/summary.rs",
+          "seed_file": "crates/printer/src/summary.rs",
+          "expected_top": [
+            "crates/core/flags/hiargs.rs",
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "src/core/internal/deep_2.rs",
+            "lib/mod_8.rs",
+            "src/distractor_0.rs",
+            "crates/core/flags/hiargs.rs",
+            "tests/regression.rs"
+          ],
+          "ndcg": 0.4979901874916749,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        }
+      ],
+      "params": {
+        "pagerank_alpha": 0.26531049999999995,
+        "pagerank_chat_multiplier": 70.0,
+        "depth_weight_root": 0.3429999999999999,
+        "depth_weight_moderate": 0.41405,
+        "depth_weight_deep": 0.199927,
+        "depth_weight_vendor": 0.01,
+        "boost_mentioned_ident": 10.0,
+        "boost_mentioned_file": 5.0,
+        "boost_chat_file": 14.0,
+        "boost_temporal_coupling": 4.198467,
+        "boost_focus_expansion": 2.4499999999999997,
+        "git_recency_decay_days": 30.0,
+        "git_recency_max_boost": 7.0,
+        "git_churn_threshold": 5.0,
+        "git_churn_max_boost": 6.0,
+        "focus_decay": 0.22295,
+        "focus_max_hops": 2.1530599999999995
+      },
+      "ndcg_before": 0.8800140581976215,
+      "reasoning": "Looking at this optimization problem, let me analyze the failures and current state.\n\n****\n\nThis is episode 1 with NDCG 0.8800 - a reasonable starting point but with two specific failures showing patterns.\n\n**Failure Analysis:**\n\n1. **Query \"tests/regression.rs\"** (NDCG 0.442):\n   - Expected: crates/globset/src/glob.rs, crates/ignore/src/gitignore.rs, crates/ignore/src/overrides.rs\n   - Got: tests/test_4.rs, src/core/internal/deep_7.rs first, then the expected files appeared 3rd/4th\n   - Problem: Test files and deep internal files are ranking above the actual dependencies\n   - The test file seed is pulling other test files (test_4.rs) too strongly\n   - \"internal/deep_*\" files suggest depth penalties aren't working correctly OR boost_mentioned_ident is pulling irrelevant identifiers\n\n2. **Query \"crates/printer/src/summary.rs\"** (NDCG 0.498):\n   - Expected: crates/core/flags/hiargs.rs, tests/regression.rs\n   - Got: deep_2.rs, mod_8.rs, distractor_0.rs before the expected files (which do appear 4th/5th)\n   - \"distractor\" in the filename is telling - noise files are ranking high\n   - The expected files ARE in top 5, just pushed down by noise\n\n**Pattern Recognition:**\n- Both failures show irrelevant files (distractors, internal/deep files) ranking too high\n- The expected files DO appear, just not at top positions\n- This suggests: signal is present but being overwhelmed by noise\n- `depth_weight_deep: 0.20` may be too generous for \"internal/deep\" paths\n- `boost_mentioned_ident: 10.0` might be catching false positive identifier matches\n\n**Hypothesis:**\n- The structural signals (PageRank, depth) are being overwhelmed by identity/mention boosts\n- Need to either reduce noise amplification or increase structural signal strength\n\n**Proposed Changes:**\n1. Reduce `depth_weight_deep` from 0.20 → 0.12 (penalize deep internal files more)\n2. Reduce `boost_mentioned_ident` from 10.0 → 7.0 (reduce false positive noise)\n3. Slightly increase `pagerank_alpha` from 0.265 → 0.30 (more global structure awareness)\n4. Reduce `depth_weight_vendor` from 0.01 → 0.005 (ensure vendor/distractor suppression)",
+      "strategy_capsule": "Suppress noise from deep/internal files and reduce identifier over-matching while strengthening global PageRank signal",
+      "proposed_changes": {},
+      "param_interactions": [
+        "depth_weight_deep × boost_mentioned_ident: deep files getting identity boosts that overcome depth penalty",
+        "pagerank_alpha × boost_mentioned_ident: local identity matches overwhelming structural importance"
+      ],
+      "structural_insights": [
+        "Files named 'distractor' and 'internal/deep_*' appearing in results suggests test corpus has intentional noise - depth penalties need strengthening",
+        "Test file seeds pulling other test files indicates test-to-test coupling might need special handling",
+        "Expected files consistently appearing in top 5 but not top 3 suggests ranking refinement not signal discovery problem"
+      ],
+      "confidence": 0.65
+    },
+    {
+      "timestamp": 1765202896,
+      "duration_secs": 37.964480128,
+      "failures": [
+        {
+          "query": "crates/printer/src/summary.rs",
+          "seed_file": "crates/printer/src/summary.rs",
+          "expected_top": [
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "src/distractor_0.rs",
+            "src/core/internal/deep_7.rs",
+            "src/utils/helper_6.rs",
+            "src/utils/helper_1.rs",
+            "lib/mod_3.rs"
+          ],
+          "ndcg": 0.3562071871080222,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        }
+      ],
+      "params": {
+        "pagerank_alpha": 0.26531049999999995,
+        "pagerank_chat_multiplier": 70.0,
+        "depth_weight_root": 0.3429999999999999,
+        "depth_weight_moderate": 0.41405,
+        "depth_weight_deep": 0.199927,
+        "depth_weight_vendor": 0.01,
+        "boost_mentioned_ident": 10.0,
+        "boost_mentioned_file": 5.0,
+        "boost_chat_file": 14.0,
+        "boost_temporal_coupling": 4.198467,
+        "boost_focus_expansion": 2.4499999999999997,
+        "git_recency_decay_days": 30.0,
+        "git_recency_max_boost": 7.0,
+        "git_churn_threshold": 5.0,
+        "git_churn_max_boost": 6.0,
+        "focus_decay": 0.22295,
+        "focus_max_hops": 2.1530599999999995
+      },
+      "ndcg_before": 0.8780118738068178,
+      "reasoning": "Let me understand this better - you've provided a training promptgram for an \"inner optimizer\" that's approximating gradients in concept space. Looking at the data:\n\n**REASONING:**\n\nThe trajectory shows NDCG dropped from 0.880 to 0.878 - essentially flat/slight degradation (-0.2%). The failure case is telling:\n\n1. **Query**: A printer file in a crates subdirectory  \n2. **Expected**: `tests/regression.rs` (a test file)\n3. **Actual top results**: distractor files, deep internal files, helpers, lib mods\n\nThe seed is `crates/printer/src/summary.rs` with a \"Debug\" intent. The expected file is a regression test, which suggests a structural relationship (test imports the module being debugged).\n\n**Diagnosis**: The ranking is dominated by:\n- `distractor` files (the test corpus has intentional noise)\n- `deep_*` files (depth penalty not strong enough)\n- Generic helpers/mods (identifier over-matching)\n\nThe test file `tests/regression.rs` isn't appearing at all - it's not a \"ranking within top-5\" problem, it's a **signal discovery** problem. The test-to-source coupling signal isn't reaching through.\n\n**Key observations**:\n- `depth_weight_deep: 0.20` is still too permissive for internal/deep paths\n- `boost_mentioned_ident: 10.0` is causing identifier over-matching (helpers, mods)\n- The \"distractor\" files suggest we need path-based negative signals\n- `tests/regression.rs` should couple to `crates/printer/src/summary.rs` via imports/temporal coupling but isn't\n\n**Parameter interactions**:\n- High `boost_mentioned_ident` (10.0) pulls irrelevant files with common identifiers\n- `depth_weight_deep` at 0.20 lets `internal/deep_*` through\n- `boost_temporal_coupling` at 4.20 might not be enough to overcome the noise\n\n**Proposed direction**: \n1. Reduce identifier boost to tame over-matching\n2. Strengthen depth penalties for deep/internal paths\n3. Slightly increase temporal coupling to surface test relationships\n\n```json",
+      "strategy_capsule": "Tame identifier noise, harden depth penalties, strengthen temporal coupling for test discovery",
+      "proposed_changes": {},
+      "param_interactions": [
+        "boost_mentioned_ident × depth_weight_deep: high ident boost amplifies any file with common tokens, including deep/distractor files",
+        "boost_temporal_coupling vs noise floor: at 4.2 the coupling signal may be below the noise from identifiers"
+      ],
+      "structural_insights": [
+        "NDCG 0.356 on single failure suggests complete signal loss, not ranking refinement",
+        "Expected 'tests/regression.rs' implies test-source coupling - this is temporal/import signal",
+        "Distractor files named explicitly suggest test harness has adversarial examples - need hard path penalties",
+        "The 'Debug' intent should favor test files but current weights don't capture this"
+      ],
+      "confidence": 0.65
+    },
+    {
+      "timestamp": 1765202929,
+      "duration_secs": 32.761631781,
+      "failures": [
+        {
+          "query": "tests/regression.rs",
+          "seed_file": "tests/regression.rs",
+          "expected_top": [
+            "crates/ignore/src/dir.rs"
+          ],
+          "actual_top": [
+            "lib/mod_8.rs",
+            "src/utils/helper_1.rs",
+            "src/core/internal/deep_2.rs",
+            "lib/mod_3.rs",
+            "crates/ignore/src/dir.rs"
+          ],
+          "ndcg": 0.38685280723454163,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/core/flags/defs.rs",
+          "seed_file": "crates/core/flags/defs.rs",
+          "expected_top": [
+            "crates/core/flags/doc/man.rs"
+          ],
+          "actual_top": [
+            "src/core/internal/deep_2.rs",
+            "src/core/internal/deep_7.rs",
+            "src/distractor_0.rs",
+            "tests/test_9.rs",
+            "crates/core/flags/doc/man.rs"
+          ],
+          "ndcg": 0.38685280723454163,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/core/flags/doc/man.rs",
+          "seed_file": "crates/core/flags/doc/man.rs",
+          "expected_top": [
+            "crates/core/flags/defs.rs"
+          ],
+          "actual_top": [
+            "src/utils/helper_1.rs",
+            "lib/mod_8.rs",
+            "src/distractor_0.rs",
+            "crates/core/flags/defs.rs",
+            "src/core/internal/deep_7.rs"
+          ],
+          "ndcg": 0.4306765580733931,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        }
+      ],
+      "params": {
+        "pagerank_alpha": 0.26531049999999995,
+        "pagerank_chat_multiplier": 70.0,
+        "depth_weight_root": 0.3429999999999999,
+        "depth_weight_moderate": 0.41405,
+        "depth_weight_deep": 0.199927,
+        "depth_weight_vendor": 0.01,
+        "boost_mentioned_ident": 10.0,
+        "boost_mentioned_file": 5.0,
+        "boost_chat_file": 14.0,
+        "boost_temporal_coupling": 4.198467,
+        "boost_focus_expansion": 2.4499999999999997,
+        "git_recency_decay_days": 30.0,
+        "git_recency_max_boost": 7.0,
+        "git_churn_threshold": 5.0,
+        "git_churn_max_boost": 6.0,
+        "focus_decay": 0.22295,
+        "focus_max_hops": 2.1530599999999995
+      },
+      "ndcg_before": 0.8802876630213317,
+      "reasoning": "Looking at the failure patterns:\n\n**Failure 1 (Debug intent, tests/regression.rs → expects crates/ignore/src/dir.rs):**\n- Expected file appears at position 5 (NDCG 0.387)\n- Top results are dominated by lib/mod_*, src/utils/helper_*, src/core/internal/deep_* \n- The \"Debug\" intent + test file should signal test-source coupling\n- The expected crates/ignore/src/dir.rs is a crate-internal file, suggesting the test exercises this module\n- **Problem**: Deep internal files (src/core/internal/) are ranking too high despite depth_weight_deep=0.20\n\n**Failure 2 (Explore intent, crates/core/flags/defs.rs → expects crates/core/flags/doc/man.rs):**\n- Same module hierarchy (crates/core/flags/) but doc subdir not found\n- Top results polluted by src/core/internal/deep_*, src/distractor_0.rs, tests/test_9.rs\n- Expected file at position 5 (NDCG 0.387)\n- **Problem**: Structural proximity in path not weighted enough; distractor files appearing\n\n**Failure 3 (Explore intent, crates/core/flags/doc/man.rs → expects crates/core/flags/defs.rs):**\n- Inverse of Failure 2 - sibling modules should find each other\n- Expected file at position 4 (NDCG 0.431)\n- Same pollutants: src/utils/helper_*, lib/mod_*, src/distractor_*\n- **Problem**: Path-based structural affinity is weak\n\n**Pattern Analysis:**\n1. All three failures show expected files in positions 4-5, not top 3\n2. Consistent pollutants: `src/core/internal/deep_*`, `lib/mod_*`, `src/distractor_*`, `src/utils/helper_*`\n3. These look like intentional adversarial distractors with high PageRank or boost-triggering names\n4. The insights note \"distractor files named explicitly suggest test harness has adversarial examples\"\n\n**Root Cause Hypothesis:**\n- `boost_mentioned_ident: 10.0` is likely matching generic identifiers in distractor/helper files\n- `depth_weight_moderate: 0.41` may be too generous for internal subdirs\n- Path structural affinity (sibling files in same module) has no explicit signal\n- The \"internal\" path component should be penalized like \"vendor\"\n\n**Trajectory State:**\n- E1→E2: 0.880 → 0.878 (slight degradation)  \n- E2→E3: 0.878 → 0.880 (micro-recovery)\n- This is plateau territory - need an orthogonal move\n\n**Proposed Direction:**\n1. Reduce `boost_mentioned_ident` to stop generic identifier over-matching\n2. Add stronger penalty for \"internal\" path patterns (reduce depth_weight_moderate or treat as near-vendor)\n3. Increase `boost_temporal_coupling` since test→source coupling is temporal signal\n4. Current depth_weight_deep=0.20 should be lower for src/core/internal/ patterns specifically\n\nSince depth weights apply broadly, the key lever is reducing identifier noise that lets distractor files float up.",
+      "strategy_capsule": "Crush identifier noise, path-penalize internal/* patterns, strengthen temporal signal for test coupling",
+      "proposed_changes": {},
+      "param_interactions": [
+        "boost_mentioned_ident(10.0) triggers on generic names in distractor/helper files",
+        "depth_weight_moderate(0.41) doesn't distinguish src/core/ from src/core/internal/",
+        "boost_temporal_coupling(4.20) insufficient to surface test→source relationships over noise"
+      ],
+      "structural_insights": [
+        "Files in same crate subpath (crates/X/Y/) need affinity beyond raw PageRank",
+        "Path patterns like 'internal/', 'distractor', 'helper' are adversarial - consider path-based penalties",
+        "Test files seeking source should weight import/temporal coupling higher than identifier matching"
+      ],
+      "confidence": 0.65
+    },
+    {
+      "timestamp": 1765202964,
+      "duration_secs": 34.825525333,
+      "failures": [
+        {
+          "query": "crates/core/flags/hiargs.rs",
+          "seed_file": "crates/core/flags/hiargs.rs",
+          "expected_top": [
+            "crates/ignore/src/dir.rs",
+            "crates/ignore/src/gitignore.rs",
+            "crates/ignore/src/walk.rs",
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "src/core/internal/deep_7.rs",
+            "lib/mod_3.rs",
+            "crates/ignore/src/walk.rs",
+            "crates/ignore/src/dir.rs",
+            "src/utils/helper_1.rs"
+          ],
+          "ndcg": 0.46004237673586323,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/printer/src/util.rs",
+          "seed_file": "crates/printer/src/util.rs",
+          "expected_top": [
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "src/core/internal/deep_7.rs",
+            "src/distractor_5.rs",
+            "tests/test_9.rs",
+            "src/utils/helper_1.rs",
+            "lib/mod_3.rs"
+          ],
+          "ndcg": 0.3333333333333333,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/ignore/src/dir.rs",
+          "seed_file": "crates/ignore/src/dir.rs",
+          "expected_top": [
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "src/utils/helper_1.rs",
+            "tests/test_9.rs",
+            "src/core/internal/deep_7.rs",
+            "tests/regression.rs",
+            "src/core/internal/deep_2.rs"
+          ],
+          "ndcg": 0.43067655807339306,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/core/flags/defs.rs",
+          "seed_file": "crates/core/flags/defs.rs",
+          "expected_top": [
+            "tests/binary.rs",
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "src/distractor_5.rs",
+            "src/core/internal/deep_7.rs",
+            "src/utils/helper_1.rs",
+            "tests/regression.rs",
+            "src/core/internal/deep_2.rs"
+          ],
+          "ndcg": 0.30665311359220654,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "tests/binary.rs",
+          "seed_file": "tests/binary.rs",
+          "expected_top": [
+            "crates/core/flags/defs.rs",
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "src/utils/helper_1.rs",
+            "src/core/internal/deep_2.rs",
+            "src/utils/helper_6.rs",
+            "tests/regression.rs",
+            "src/core/internal/deep_7.rs"
+          ],
+          "ndcg": 0.4312482515089095,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/core/flags/doc/man.rs",
+          "seed_file": "crates/core/flags/doc/man.rs",
+          "expected_top": [
+            "crates/core/flags/defs.rs"
+          ],
+          "actual_top": [
+            "src/core/internal/deep_7.rs",
+            "src/distractor_0.rs",
+            "src/distractor_5.rs",
+            "lib/mod_8.rs",
+            "lib/mod_3.rs"
+          ],
+          "ndcg": 0.3562071871080222,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/core/flags/defs.rs",
+          "seed_file": "crates/core/flags/defs.rs",
+          "expected_top": [
+            "crates/printer/src/hyperlink/aliases.rs",
+            "crates/printer/src/hyperlink/mod.rs",
+            "crates/printer/src/hyperlink_aliases.rs",
+            "crates/printer/src/lib.rs"
+          ],
+          "actual_top": [
+            "src/core/internal/deep_7.rs",
+            "src/utils/helper_6.rs",
+            "crates/printer/src/hyperlink/aliases.rs",
+            "src/core/internal/deep_2.rs",
+            "crates/printer/src/lib.rs"
+          ],
+          "ndcg": 0.46042573036223444,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        }
+      ],
+      "params": {
+        "pagerank_alpha": 0.26531049999999995,
+        "pagerank_chat_multiplier": 70.0,
+        "depth_weight_root": 0.3429999999999999,
+        "depth_weight_moderate": 0.41405,
+        "depth_weight_deep": 0.199927,
+        "depth_weight_vendor": 0.01,
+        "boost_mentioned_ident": 10.0,
+        "boost_mentioned_file": 5.0,
+        "boost_chat_file": 14.0,
+        "boost_temporal_coupling": 4.198467,
+        "boost_focus_expansion": 2.4499999999999997,
+        "git_recency_decay_days": 30.0,
+        "git_recency_max_boost": 7.0,
+        "git_churn_threshold": 5.0,
+        "git_churn_max_boost": 6.0,
+        "focus_decay": 0.22295,
+        "focus_max_hops": 2.1530599999999995
+      },
+      "ndcg_before": 0.8813520873283098,
+      "reasoning": "**Trajectory State: PLATEAUED**\n- E1→E2: 0.880 → 0.878 (slight dip)\n- E2→E3: 0.878 → 0.880 (recovery)\n- E3→E4: 0.880 → 0.8814 (tiny improvement)\n\nThe NDCG is oscillating around 0.88. We've been trying to crush \"noise\" files but haven't fundamentally changed the ranking dynamics.\n\n**Failure Pattern Analysis:**\n\nAll 5 failures share a critical pattern:\n1. **Adversarial noise files dominate top results:**\n   - `src/core/internal/deep_7.rs` (appears in 4/5 failures)\n   - `src/utils/helper_1.rs` (appears in 4/5 failures)\n   - `src/distractor_5.rs` (appears in 2/5 failures)\n   - `src/core/internal/deep_2.rs` (appears in 3/5 failures)\n\n2. **Expected files are in `tests/` or specific `crates/` paths**\n   - `tests/regression.rs` is expected in 4/5 failures\n   - `crates/ignore/src/*.rs` expected in failure 1\n\n3. **Intent context is \"Debug\" or \"Explore\"** - these should strongly favor test files\n\n**Root Cause Diagnosis:**\n\nThe current parameters are **missing a path-based penalty mechanism**. We have:\n- `depth_weight_*` which penalizes by depth level\n- Various boosts for identifiers, temporal coupling, etc.\n\nBut `src/core/internal/deep_7.rs` and `src/utils/helper_1.rs` are being ranked highly despite:\n- \"internal\" in path (should be penalized)\n- \"helper\" in name (likely a distractor)\n- \"deep_N\" and \"distractor_N\" being obvious adversarial test fixtures\n\n**The Problem:** Depth weights alone can't distinguish between:\n- `crates/ignore/src/walk.rs` (legitimate, wanted)\n- `src/core/internal/deep_7.rs` (adversarial, unwanted)\n\nBoth might have similar depth, but one has \"internal\" which should be a red flag.\n\n**Parameter Interaction Analysis:**\n\nCurrent `boost_mentioned_ident: 10.0` is very high. If these adversarial files happen to contain common identifiers, they'll rank highly regardless of path penalties.\n\n`pagerank_alpha: 0.265` is relatively low - this localizes PageRank around the seed. But if the seed file has NO connections to the expected files (because it's a curated test repo with artificial structure), PageRank won't help.\n\n**Orthogonal Move Required:**\n\nSince we're plateaued, we need a different approach. The insights mention \"hard path penalties\" for adversarial patterns. Since we can't add new parameter types mid-training, we need to:\n\n1. **Dramatically reduce identifier boost** - the adversarial files are likely getting ranked via identifier matching\n2. **Increase temporal coupling** - if `tests/regression.rs` actually changes with the seed files in commit history, this signal should dominate\n3. **Increase `pagerank_alpha`** - more global view might help surface the actual test files\n4. **Punish deeper depths harder** - `deep_7.rs` in `src/core/internal/` is deep; current penalties may be too gentle\n\nThe key insight: **identifier matching is probably the villain**. Files named `helper_1.rs`, `deep_7.rs`, `distractor_5.rs` likely contain generic identifiers that match many queries.",
+      "strategy_capsule": "Slash identifier boost, maximize temporal coupling - identifiers are feeding adversarial matches",
+      "proposed_changes": {},
+      "param_interactions": [
+        "boost_mentioned_ident at 10.0 amplifies noise from generic helper files",
+        "boost_temporal_coupling at 4.20 is too weak vs identifier boost",
+        "depth_weight_deep at 0.20 not aggressive enough for internal/deep paths"
+      ],
+      "structural_insights": [
+        "Curated 100-file repo has adversarial 'distractor', 'helper', 'internal/deep' files as traps",
+        "All failures show tests/regression.rs should rank higher - likely has temporal coupling with crates/* files",
+        "Intent 'Debug' appearing with no test affinity suggests intent->file_type mapping is absent",
+        "Identifier matching is domain-agnostic and rewards generic code; temporal coupling is relationship-aware"
+      ],
+      "confidence": 0.65
+    },
+    {
+      "timestamp": 1765202999,
+      "duration_secs": 35.139263322,
+      "failures": [
+        {
+          "query": "crates/core/flags/defs.rs",
+          "seed_file": "crates/core/flags/defs.rs",
+          "expected_top": [
+            "tests/binary.rs",
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "src/distractor_0.rs",
+            "src/core/internal/deep_7.rs",
+            "src/utils/helper_1.rs",
+            "src/distractor_5.rs",
+            "tests/binary.rs"
+          ],
+          "ndcg": 0.382391966207383,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "tests/regression.rs",
+          "seed_file": "tests/regression.rs",
+          "expected_top": [
+            "crates/core/flags/defs.rs",
+            "tests/binary.rs"
+          ],
+          "actual_top": [
+            "src/distractor_5.rs",
+            "crates/core/flags/defs.rs",
+            "src/utils/helper_1.rs",
+            "src/core/internal/deep_2.rs",
+            "src/core/internal/deep_7.rs"
+          ],
+          "ndcg": 0.4630326012656574,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/core/flags/defs.rs",
+          "seed_file": "crates/core/flags/defs.rs",
+          "expected_top": [
+            "crates/printer/src/hyperlink/aliases.rs",
+            "crates/printer/src/hyperlink/mod.rs",
+            "crates/printer/src/hyperlink_aliases.rs",
+            "crates/printer/src/lib.rs"
+          ],
+          "actual_top": [
+            "src/distractor_10.rs",
+            "src/utils/helper_6.rs",
+            "src/utils/helper_11.rs",
+            "src/distractor_0.rs",
+            "crates/printer/src/hyperlink_aliases.rs"
+          ],
+          "ndcg": 0.2712539199973358,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        }
+      ],
+      "params": {
+        "pagerank_alpha": 0.26531049999999995,
+        "pagerank_chat_multiplier": 70.0,
+        "depth_weight_root": 0.3429999999999999,
+        "depth_weight_moderate": 0.41405,
+        "depth_weight_deep": 0.199927,
+        "depth_weight_vendor": 0.01,
+        "boost_mentioned_ident": 10.0,
+        "boost_mentioned_file": 5.0,
+        "boost_chat_file": 14.0,
+        "boost_temporal_coupling": 4.198467,
+        "boost_focus_expansion": 2.4499999999999997,
+        "git_recency_decay_days": 30.0,
+        "git_recency_max_boost": 7.0,
+        "git_churn_threshold": 5.0,
+        "git_churn_max_boost": 6.0,
+        "focus_decay": 0.22295,
+        "focus_max_hops": 2.1530599999999995
+      },
+      "ndcg_before": 0.8778491517246915,
+      "reasoning": "Now let me analyze the failure patterns and trajectory to provide a response as the \"inner optimizer.\"\n\n\n\nLooking at the trajectory and failures:\n\n1. **Plateau Detection**: NDCG has been hovering around 0.878-0.881 for 5 episodes. The strategies have been increasingly aggressive about crushing identifier signal, but we're not breaking through.\n\n2. **Failure Analysis**:\n   - All 3 failures involve the curated 100-file repo with adversarial \"distractor\" and \"helper\" files\n   - `src/distractor_*.rs` files consistently rank in top slots where test files should be\n   - `src/utils/helper_*.rs` and `src/core/internal/deep_*.rs` are noise\n   - Expected files are test files (`tests/regression.rs`, `tests/binary.rs`) or real source (`crates/printer/src/*`)\n\n3. **Signal Analysis**:\n   - **Why distractors win**: They likely have:\n     - Generic identifiers that match broadly (high `boost_mentioned_ident: 10.0`)\n     - Moderate depth (not penalized much with `depth_weight_moderate: 0.41`)\n     - Perhaps recent git activity?\n   \n   - **Why tests lose**: \n     - `tests/` directory may be at a depth that's getting moderate weight\n     - Temporal coupling boost (`4.20`) isn't strong enough to overcome identifier noise\n     - Focus expansion (`2.45`) might be spreading to distractors\n\n4. **Parameter Interactions**:\n   - `boost_mentioned_ident` at 10.0 is STILL too high despite previous cuts\n   - The depth weights are curious: root=0.34, moderate=0.41, deep=0.20\n   - This means moderate depth files get a BONUS over root files - likely causing distractors to beat well-placed test files\n\n5. **Critical Insight**:\n   - The depth weighting is inverted! `depth_weight_moderate > depth_weight_root` means files in `src/utils/` get MORE weight than files in `tests/`\n   - Test files at repo root level (or similar) should be boosted over nested internal files\n\n6. **Orthogonal Move Needed**:\n   - Previous episodes kept slashing identifier boost - diminishing returns\n   - The STRUCTURAL issue is the depth weighting inversion\n   - Also: temporal coupling needs to be MUCH stronger to overcome noise",
+      "strategy_capsule": "Fix inverted depth weights, crush moderate-depth advantage, boost temporal coupling to dominate identifier noise",
+      "proposed_changes": {},
+      "param_interactions": [
+        "depth_weight_moderate > depth_weight_root creates a hidden adversarial surface for mid-depth noise files",
+        "boost_mentioned_ident at 10.0 still amplifies generic identifiers in distractor files",
+        "boost_temporal_coupling at 4.20 cannot compete with combined depth + identifier signal"
+      ],
+      "structural_insights": [
+        "The curated repo intentionally plants distractors at moderate depth - the current depth gradient REWARDS them",
+        "Inverting depth_weight_root > depth_weight_moderate should immediately suppress src/utils/helper_* noise",
+        "Temporal coupling is the ONLY reliable relationship signal between crates/* and tests/* - needs 2x current strength",
+        "Reducing focus_max_hops prevents distractor contamination through graph diffusion"
+      ],
+      "confidence": 0.75
+    },
+    {
+      "timestamp": 1765203039,
+      "duration_secs": 39.291583246,
+      "failures": [
+        {
+          "query": "crates/core/flags/defs.rs",
+          "seed_file": "crates/core/flags/defs.rs",
+          "expected_top": [
+            "crates/core/flags/doc/man.rs"
+          ],
+          "actual_top": [
+            "src/utils/helper_1.rs",
+            "src/core/internal/deep_7.rs",
+            "lib/mod_8.rs",
+            "crates/core/flags/doc/man.rs",
+            "src/core/internal/deep_2.rs"
+          ],
+          "ndcg": 0.4306765580733931,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/core/flags/doc/man.rs",
+          "seed_file": "crates/core/flags/doc/man.rs",
+          "expected_top": [
+            "crates/core/flags/defs.rs"
+          ],
+          "actual_top": [
+            "src/core/internal/deep_2.rs",
+            "src/utils/helper_6.rs",
+            "tests/test_9.rs",
+            "src/distractor_5.rs",
+            "src/utils/helper_1.rs"
+          ],
+          "ndcg": 0.3010299956639812,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/core/flags/defs.rs",
+          "seed_file": "crates/core/flags/defs.rs",
+          "expected_top": [
+            "crates/printer/src/hyperlink/aliases.rs",
+            "crates/printer/src/hyperlink/mod.rs",
+            "crates/printer/src/hyperlink_aliases.rs",
+            "crates/printer/src/lib.rs"
+          ],
+          "actual_top": [
+            "tests/test_4.rs",
+            "crates/printer/src/hyperlink/mod.rs",
+            "src/distractor_5.rs",
+            "crates/printer/src/hyperlink_aliases.rs",
+            "src/distractor_10.rs"
+          ],
+          "ndcg": 0.41751268823326365,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        }
+      ],
+      "params": {
+        "pagerank_alpha": 0.26531049999999995,
+        "pagerank_chat_multiplier": 70.0,
+        "depth_weight_root": 0.3429999999999999,
+        "depth_weight_moderate": 0.41405,
+        "depth_weight_deep": 0.199927,
+        "depth_weight_vendor": 0.01,
+        "boost_mentioned_ident": 10.0,
+        "boost_mentioned_file": 5.0,
+        "boost_chat_file": 14.0,
+        "boost_temporal_coupling": 4.198467,
+        "boost_focus_expansion": 2.4499999999999997,
+        "git_recency_decay_days": 30.0,
+        "git_recency_max_boost": 7.0,
+        "git_churn_threshold": 5.0,
+        "git_churn_max_boost": 6.0,
+        "focus_decay": 0.22295,
+        "focus_max_hops": 2.1530599999999995
+      },
+      "ndcg_before": 0.8803607291597075,
+      "reasoning": "I see this is an inner optimizer prompt for training a ranking system. You're asking me to reason about parameter changes given the optimization trajectory and failures. Let me analyze this carefully.\n\n\n\n**Trajectory State Analysis:**\n- Episodes 1-5: NDCG oscillating in tight band (0.878-0.881) - classic plateau\n- Current E6: 0.8804, just marginally above E5's 0.878\n- The trajectory analysis flag confirms: \"Plateau: NDCG stable - may need different approach\"\n\n**Failure Pattern Analysis:**\n\nAll 3 failures share a common pattern:\n1. Query involves `crates/core/flags/*` files \n2. Expected files are semantically related (same module, cross-crate dependencies)\n3. Actual top results are polluted with:\n   - `src/utils/helper_*.rs` (shallow helper files)\n   - `src/core/internal/deep_*.rs` (deep internal files)\n   - `src/distractor_*.rs` (explicitly named distractors)\n   - `tests/test_*.rs` (test files)\n\n**Critical Observations:**\n\n1. **Depth weights are inverted for this task**: `depth_weight_moderate (0.41) > depth_weight_root (0.34)`. The distractors at `src/utils/helper_*` and `src/distractor_*` are at moderate depth (2 components) and are being REWARDED. The key insight from training says \"the curated repo intentionally plants distractors at moderate depth.\"\n\n2. **Identifier matching is hurting cross-crate discovery**: `boost_mentioned_ident: 10.0` is high. When querying `crates/core/flags/defs.rs`, identifier matching finds generic code patterns in helper files rather than semantically related files in `crates/printer/`.\n\n3. **Temporal coupling is underweighted**: At 4.20, it's not strong enough to overcome the noise. The training insights say temporal coupling needs \"2x current strength\" because it's the \"ONLY reliable relationship signal between crates/* and tests/*\".\n\n4. **Focus expansion is contaminating**: `focus_max_hops: 2.2` means graph diffusion pulls in distractors that are connected through common generic symbols. Training insight: \"Reducing focus_max_hops prevents distractor contamination through graph diffusion.\"\n\n**Parameter Interactions:**\n- High `boost_mentioned_ident` + moderate `depth_weight_moderate` = identifier noise amplified for moderate-depth distractors\n- Low `boost_temporal_coupling` + high `focus_max_hops` = weak true signal drowned by graph diffusion noise\n\n**Proposed Changes:**\n\n1. **Invert depth gradient**: Make `depth_weight_root > depth_weight_moderate`. This should immediately suppress `src/utils/helper_*` noise.\n\n2. **Crush identifier boost further**: From 10.0 → 4.0. Identifiers are domain-agnostic; they match generic patterns.\n\n3. **Amplify temporal coupling**: From 4.20 → 8.5 (approximately 2x). This is the only reliable cross-crate signal.\n\n4. **Reduce focus_max_hops**: From 2.2 → 1.5. Tighten graph expansion to prevent distractor contamination.\n\n5. **Slightly increase focus_decay**: From 0.22 → 0.35. Make hop penalty steeper so distant connections contribute less.",
+      "strategy_capsule": "Invert depth gradient, crush identifier noise, amplify temporal coupling 2x, tighten graph diffusion",
+      "proposed_changes": {},
+      "param_interactions": [
+        "depth_weight_moderate > depth_weight_root rewards the exact distractor depth the curated repo uses",
+        "high boost_mentioned_ident + permissive depth_weights = identifier noise at moderate depth amplified",
+        "low boost_temporal_coupling + high focus_max_hops = true signal drowned by graph diffusion noise",
+        "focus_decay too gentle allows distant contamination to persist"
+      ],
+      "structural_insights": [
+        "Curated repo distractors cluster at moderate depth (2 path components) - must penalize this stratum",
+        "Cross-crate relationships (crates/core → crates/printer) have no graph path but share commit history",
+        "Temporal coupling is the archaeological signal that reveals intent; identifiers reveal only lexical coincidence",
+        "The depth gradient should monotonically decrease: root > moderate > deep > vendor"
+      ],
+      "confidence": 0.75
+    },
+    {
+      "timestamp": 1765203144,
+      "duration_secs": 40.721527694,
+      "failures": [
+        {
+          "query": "tests/regression.rs",
+          "seed_file": "tests/regression.rs",
+          "expected_top": [
+            "crates/core/flags/defs.rs",
+            "crates/core/flags/hiargs.rs",
+            "crates/printer/src/standard.rs",
+            "crates/searcher/src/searcher/core.rs",
+            "crates/searcher/src/searcher/glue.rs"
+          ],
+          "actual_top": [
+            "lib/mod_8.rs",
+            "crates/searcher/src/searcher/mod.rs",
+            "crates/searcher/src/searcher/core.rs",
+            "src/utils/helper_6.rs",
+            "src/utils/helper_1.rs"
+          ],
+          "ndcg": 0.4096432617125648,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        }
+      ],
+      "params": {
+        "pagerank_alpha": 0.26531049999999995,
+        "pagerank_chat_multiplier": 70.0,
+        "depth_weight_root": 0.3429999999999999,
+        "depth_weight_moderate": 0.41405,
+        "depth_weight_deep": 0.199927,
+        "depth_weight_vendor": 0.01,
+        "boost_mentioned_ident": 10.0,
+        "boost_mentioned_file": 5.0,
+        "boost_chat_file": 14.0,
+        "boost_temporal_coupling": 4.198467,
+        "boost_focus_expansion": 2.4499999999999997,
+        "git_recency_decay_days": 30.0,
+        "git_recency_max_boost": 7.0,
+        "git_churn_threshold": 5.0,
+        "git_churn_max_boost": 6.0,
+        "focus_decay": 0.22295,
+        "focus_max_hops": 2.1530599999999995
+      },
+      "ndcg_before": 0.879053860734967,
+      "reasoning": "Good, I have context on the training system. This appears to be an inner optimizer for a code ranking system that uses NDCG (Normalized Discounted Cumulative Gain) as a metric. Let me analyze the failure case and trajectory to propose an informed parameter adjustment.\n\n\n\n**Trajectory Analysis:**\n- NDCG is plateaued around 0.878-0.881 for 6 episodes\n- Current episode (E7) shows NDCG=0.8791 with the same 3 failures\n- Previous strategies have oscillated between attacking identifier noise vs boosting temporal coupling\n- The trajectory shows classic oscillation: E1→E2→E3→E4→E5→E6 have been tuning the same levers without breakthrough\n\n**Failure Analysis:**\nThe single failure case is revealing:\n- Query: `tests/regression.rs` (a test file in a curated 100-file repo)\n- Expected: Cross-crate connections to `crates/core/flags/...`, `crates/printer/...`, `crates/searcher/...`\n- Actual: `lib/mod_8.rs`, `crates/searcher/src/searcher/mod.rs`, generic helpers\n\nThe problem: Test files have **temporal coupling** (they change with the code they test) but **weak graph connectivity** (tests often don't import the implementation directly - they test through public APIs).\n\n**Key Observations:**\n1. The expected files span multiple crates (`core`, `printer`, `searcher`) - this is cross-crate discovery\n2. The actual results include `lib/mod_8.rs` (likely a moderate-depth distractor) and generic `helper_*.rs` files\n3. `crates/searcher/src/searcher/mod.rs` is close but not quite right - we want `core.rs` and `glue.rs`\n\n**Parameter Diagnosis:**\n1. `depth_weight_moderate: 0.41` is TOO HIGH - it's boosting distractors at moderate depth (lib/, src/utils/)\n2. `boost_temporal_coupling: 4.20` may not be sufficient when competing against identifier matches in helpers\n3. `focus_max_hops: 2.2` is correct (recent reduction to prevent contamination)\n4. The depth gradient is INVERTED: moderate (0.41) > root (0.34) > deep (0.20) - this violates the \"monotonically decrease\" principle from the key insights\n\n**Proposed Fix:**\nThe depth gradient is fundamentally broken. Key insight states: \"root > moderate > deep > vendor\" but we have \"moderate > root > deep > vendor\". This is feeding the moderate-depth distractors.",
+      "strategy_capsule": "Fix inverted depth gradient - root must dominate moderate, boost temporal to break plateau",
+      "proposed_changes": {},
+      "param_interactions": [
+        "depth_weight_moderate vs depth_weight_root: Currently inverted, causing moderate distractors to win",
+        "boost_temporal_coupling vs depth_weight_moderate: Temporal signal cannot overcome inflated moderate weight",
+        "boost_mentioned_ident vs temporal: High identifier boost (10.0) amplifies helper file matches"
+      ],
+      "structural_insights": [
+        "Test files discover implementation through temporal coupling, not graph edges - they test via public API",
+        "Cross-crate discovery (tests → core, printer, searcher) requires temporal signal to bridge disconnected graph regions",
+        "Helper files at src/utils/* are lexical attractors that must be suppressed via depth gradient"
+      ],
+      "confidence": 0.75
+    },
+    {
+      "timestamp": 1765203180,
+      "duration_secs": 36.507765716,
+      "failures": [
+        {
+          "query": "crates/ignore/src/walk.rs",
+          "seed_file": "crates/ignore/src/walk.rs",
+          "expected_top": [
+            "crates/core/flags/hiargs.rs",
+            "crates/ignore/src/dir.rs",
+            "crates/ignore/src/gitignore.rs",
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "lib/mod_8.rs",
+            "tests/regression.rs",
+            "crates/ignore/src/dir.rs",
+            "src/utils/helper_6.rs",
+            "tests/test_4.rs"
+          ],
+          "ndcg": 0.34393213900562597,
+          "commit_context": "intent: Debug",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        },
+        {
+          "query": "crates/core/flags/defs.rs",
+          "seed_file": "crates/core/flags/defs.rs",
+          "expected_top": [
+            "tests/binary.rs",
+            "tests/regression.rs"
+          ],
+          "actual_top": [
+            "src/core/internal/deep_7.rs",
+            "src/core/internal/deep_2.rs",
+            "src/utils/helper_6.rs",
+            "lib/mod_8.rs",
+            "src/distractor_5.rs"
+          ],
+          "ndcg": 0.39992481989881595,
+          "commit_context": "intent: Explore",
+          "repo_name": "curated",
+          "repo_file_count": 100
+        }
+      ],
+      "params": {
+        "pagerank_alpha": 0.26531049999999995,
+        "pagerank_chat_multiplier": 70.0,
+        "depth_weight_root": 0.3429999999999999,
+        "depth_weight_moderate": 0.41405,
+        "depth_weight_deep": 0.199927,
+        "depth_weight_vendor": 0.01,
+        "boost_mentioned_ident": 10.0,
+        "boost_mentioned_file": 5.0,
+        "boost_chat_file": 14.0,
+        "boost_temporal_coupling": 4.198467,
+        "boost_focus_expansion": 2.4499999999999997,
+        "git_recency_decay_days": 30.0,
+        "git_recency_max_boost": 7.0,
+        "git_churn_threshold": 5.0,
+        "git_churn_max_boost": 6.0,
+        "focus_decay": 0.22295,
+        "focus_max_hops": 2.1530599999999995
+      },
+      "ndcg_before": 0.8822890479668013,
+      "reasoning": "Now I understand this is a meta-optimization system (inner/outer loop for prompt engineering). Let me analyze the situation as the inner optimizer:\n\n\n\n**Trajectory Analysis:**\n- NDCG has been oscillating between 0.878-0.882 for 7 episodes (plateau)\n- Current: 0.8823 is the highest so far, but within noise margin\n- Failure count reduced from 7 (E4) to 1 (E7) to 2 (current)\n- This is stagnation territory - small perturbations aren't breaking through\n\n**Failure Analysis:**\n\nFailure 1 (`crates/ignore/src/walk.rs`):\n- Expected: `hiargs.rs`, `dir.rs`, `gitignore.rs`, `tests/regression.rs`\n- Got: `lib/mod_8.rs`, `tests/regression.rs`, `dir.rs`, `helper_6.rs`, `test_4.rs`\n- **Pattern**: Noise files (`lib/mod_8.rs`, `helper_6.rs`, `test_4.rs`) drowning signal\n- `tests/regression.rs` made it through (temporal coupling working)\n- `dir.rs` made it through (graph/structural working)\n- Missing: `hiargs.rs`, `gitignore.rs` - these are cross-crate dependencies\n\nFailure 2 (`crates/core/flags/defs.rs`):\n- Expected: `tests/binary.rs`, `tests/regression.rs`\n- Got: ALL noise files (`deep_7.rs`, `deep_2.rs`, `helper_6.rs`, `mod_8.rs`, `distractor_5.rs`)\n- **Pattern**: Complete failure - tests aren't appearing at all\n- This is an \"Explore\" intent - test files should surface via temporal coupling\n- The `deep_*` and `internal/*` patterns are overwhelming\n\n**Key Observations:**\n1. **Depth gradient is INVERTED**: `depth_weight_moderate: 0.41 > depth_weight_root: 0.34` - this is backwards!\n2. The insights say \"depth gradient should monotonically decrease: root > moderate > deep > vendor\" but current params violate this\n3. `boost_mentioned_ident: 10.0` is still quite high - identifier noise from deep files\n4. Temporal coupling at 4.20 isn't strong enough to bridge the cross-crate gap for tests\n\n**The core problem**: The depth weights are inverted, causing moderate-depth noise files to outrank root-level important files. Additionally, identifier matching is feeding adversarial matches in deep utility files.\n\n**Proposed Fix**:\n1. **Fix depth gradient inversion**: root=0.45, moderate=0.30, deep=0.15\n2. **Slash identifier boost further**: 10.0 → 5.0 (half it - identifiers in helpers are noise)\n3. **Boost temporal coupling more aggressively**: 4.20 → 6.0 (tests discover implementation via temporal signal)\n4. **Increase PageRank alpha slightly**: 0.265 → 0.30 (more globalization to reach cross-crate tests)",
+      "strategy_capsule": "Correct inverted depth gradient, halve identifier noise, strengthen temporal for cross-crate test discovery",
+      "proposed_changes": {},
+      "param_interactions": [
+        "depth_weight_moderate > depth_weight_root creates adversarial ranking for helpers vs core files",
+        "boost_mentioned_ident amplifies lexical coincidence in utility files that share common names",
+        "Low temporal coupling relative to depth inversion prevents test discovery across crate boundaries"
+      ],
+      "structural_insights": [
+        "The curated repo has distractor files (lib/mod_*.rs, src/utils/helper_*.rs) that exploit identifier matching",
+        "Cross-crate test discovery (crates/ignore → tests/) requires temporal signal to be dominant over depth",
+        "Fixing the depth gradient inversion is the highest-leverage change - it's a fundamental violation of the stated policy"
+      ],
+      "confidence": 0.75
+    }
+  ],
+  "param_interactions": [
+    "depth_weight_deep × boost_mentioned_ident: deep files getting identity boosts that overcome depth penalty",
+    "pagerank_alpha × boost_mentioned_ident: local identity matches overwhelming structural importance",
+    "boost_mentioned_ident × depth_weight_deep: high ident boost amplifies any file with common tokens, including deep/distractor files",
+    "boost_temporal_coupling vs noise floor: at 4.2 the coupling signal may be below the noise from identifiers",
+    "boost_mentioned_ident(10.0) triggers on generic names in distractor/helper files",
+    "depth_weight_moderate(0.41) doesn't distinguish src/core/ from src/core/internal/",
+    "boost_temporal_coupling(4.20) insufficient to surface test→source relationships over noise",
+    "boost_mentioned_ident at 10.0 amplifies noise from generic helper files",
+    "boost_temporal_coupling at 4.20 is too weak vs identifier boost",
+    "depth_weight_deep at 0.20 not aggressive enough for internal/deep paths",
+    "depth_weight_moderate > depth_weight_root creates a hidden adversarial surface for mid-depth noise files",
+    "boost_mentioned_ident at 10.0 still amplifies generic identifiers in distractor files",
+    "boost_temporal_coupling at 4.20 cannot compete with combined depth + identifier signal",
+    "depth_weight_moderate > depth_weight_root rewards the exact distractor depth the curated repo uses",
+    "high boost_mentioned_ident + permissive depth_weights = identifier noise at moderate depth amplified",
+    "low boost_temporal_coupling + high focus_max_hops = true signal drowned by graph diffusion noise",
+    "focus_decay too gentle allows distant contamination to persist",
+    "depth_weight_moderate vs depth_weight_root: Currently inverted, causing moderate distractors to win",
+    "boost_temporal_coupling vs depth_weight_moderate: Temporal signal cannot overcome inflated moderate weight",
+    "boost_mentioned_ident vs temporal: High identifier boost (10.0) amplifies helper file matches",
+    "depth_weight_moderate > depth_weight_root creates adversarial ranking for helpers vs core files",
+    "boost_mentioned_ident amplifies lexical coincidence in utility files that share common names",
+    "Low temporal coupling relative to depth inversion prevents test discovery across crate boundaries"
+  ],
+  "failure_patterns": [],
+  "success_patterns": [],
+  "structural_proposals": [
+    "Files named 'distractor' and 'internal/deep_*' appearing in results suggests test corpus has intentional noise - depth penalties need strengthening",
+    "Test file seeds pulling other test files indicates test-to-test coupling might need special handling",
+    "Expected files consistently appearing in top 5 but not top 3 suggests ranking refinement not signal discovery problem",
+    "NDCG 0.356 on single failure suggests complete signal loss, not ranking refinement",
+    "Expected 'tests/regression.rs' implies test-source coupling - this is temporal/import signal",
+    "Distractor files named explicitly suggest test harness has adversarial examples - need hard path penalties",
+    "The 'Debug' intent should favor test files but current weights don't capture this",
+    "Files in same crate subpath (crates/X/Y/) need affinity beyond raw PageRank",
+    "Path patterns like 'internal/', 'distractor', 'helper' are adversarial - consider path-based penalties",
+    "Test files seeking source should weight import/temporal coupling higher than identifier matching",
+    "Curated 100-file repo has adversarial 'distractor', 'helper', 'internal/deep' files as traps",
+    "All failures show tests/regression.rs should rank higher - likely has temporal coupling with crates/* files",
+    "Intent 'Debug' appearing with no test affinity suggests intent->file_type mapping is absent",
+    "Identifier matching is domain-agnostic and rewards generic code; temporal coupling is relationship-aware",
+    "The curated repo intentionally plants distractors at moderate depth - the current depth gradient REWARDS them",
+    "Inverting depth_weight_root > depth_weight_moderate should immediately suppress src/utils/helper_* noise",
+    "Temporal coupling is the ONLY reliable relationship signal between crates/* and tests/* - needs 2x current strength",
+    "Reducing focus_max_hops prevents distractor contamination through graph diffusion",
+    "Curated repo distractors cluster at moderate depth (2 path components) - must penalize this stratum",
+    "Cross-crate relationships (crates/core → crates/printer) have no graph path but share commit history",
+    "Temporal coupling is the archaeological signal that reveals intent; identifiers reveal only lexical coincidence",
+    "The depth gradient should monotonically decrease: root > moderate > deep > vendor",
+    "Test files discover implementation through temporal coupling, not graph edges - they test via public API",
+    "Cross-crate discovery (tests → core, printer, searcher) requires temporal signal to bridge disconnected graph regions",
+    "Helper files at src/utils/* are lexical attractors that must be suppressed via depth gradient",
+    "The curated repo has distractor files (lib/mod_*.rs, src/utils/helper_*.rs) that exploit identifier matching",
+    "Cross-crate test discovery (crates/ignore → tests/) requires temporal signal to be dominant over depth",
+    "Fixing the depth gradient inversion is the highest-leverage change - it's a fundamental violation of the stated policy"
+  ],
+  "presets": {},
+  "heuristics": [],
+  "warnings": []
+}

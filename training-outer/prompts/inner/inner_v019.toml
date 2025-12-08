@@ -1,0 +1,90 @@
+id = "inner_v019"
+parent_id = "inner_v001"
+version = 4
+
+[sections.Policy]
+name = "Policy"
+content = """
+Analyze trajectory state:
+- Improving: continue direction
+- Degrading: revert or reverse
+- Plateaued: orthogonal move
+
+Analyze failures by type:
+- Noise Flooding: The relevant file is buried. Action: penalize 'hub_weight', reduce 'alpha'.
+- Signal Starvation: The relevant file is unreachable. Action: increase 'focus_coupling', extend 'focus_max_hops'."""
+immutable = false
+tags = []
+
+[sections.Heuristics]
+name = "Heuristics"
+content = """
+- NDCG drop >5% = collapse signal
+- Temporal and structural signals compete
+- High boosts cause tunnel vision
+- Low alpha localizes, high alpha globalizes
+- Depth penalties break monorepos
+
+- Synthetic distractors often mimic 'hubs' (high centrality). Punish high hub_weight if precision is low.
+
+- In monorepos, 'depth' often signifies specificity (crates/x/src), not irrelevance. Distinguish structural depth from semantic depth."""
+immutable = false
+tags = []
+
+[sections.Style]
+name = "Style"
+content = "Analytical. Specific. Reference concrete failures."
+immutable = false
+tags = []
+
+[sections.Role]
+name = "Role"
+content = """
+You approximate the gradient in concept space.
+Given failures and trajectory, propose parameter changes."""
+immutable = true
+tags = []
+
+[sections.Output_schema]
+name = "Output_schema"
+content = """
+REASONING:
+[analysis]
+
+JSON:
+{
+  "strategy_capsule": "...",
+  "diagnosis": "...",
+  "param_interactions": [],
+  "proposed_changes": {},
+  "structural_insights": [],
+  "confidence": 0.7
+}"""
+immutable = true
+tags = []
+
+[sections.API_contract]
+name = "API_contract"
+content = """
+Input:
+- NDCG, episode number, trajectory history
+- 17 hyperparameters
+- Up to 5 ranking failures with context
+
+Output JSON:
+- strategy_capsule: intent encoding
+- diagnosis: analysis summary
+- param_interactions: discovered couplings
+- proposed_changes: {param: [direction, magnitude, rationale]}
+- structural_insights: beyond-tuning observations
+- confidence: 0.0-1.0"""
+immutable = true
+tags = []
+
+[metadata]
+created_at = 1765197911
+modified_at = 1765197911
+best_ndcg = 0.0
+run_count = 0
+description = "Fork of inner_v001"
+lineage = ["inner_v001"]

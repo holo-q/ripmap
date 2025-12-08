@@ -1,0 +1,19 @@
+{
+  "pagerank_alpha": 0.18571734999999995,
+  "pagerank_chat_multiplier": 70.0,
+  "depth_weight_root": 0.24009999999999992,
+  "depth_weight_moderate": 0.41405,
+  "depth_weight_deep": 0.199927,
+  "depth_weight_vendor": 0.01,
+  "boost_mentioned_ident": 10.0,
+  "boost_mentioned_file": 5.0,
+  "boost_chat_file": 14.0,
+  "boost_temporal_coupling": 4.198467,
+  "boost_focus_expansion": 1.7149999999999996,
+  "git_recency_decay_days": 30.0,
+  "git_recency_max_boost": 7.0,
+  "git_churn_threshold": 5.0,
+  "git_churn_max_boost": 6.0,
+  "focus_decay": 0.22295,
+  "focus_max_hops": 1.5071419999999995
+}
