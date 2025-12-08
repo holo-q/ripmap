@@ -443,8 +443,8 @@ impl OuterLoop {
                 .parse()
                 .map_err(|e: String| e)?;
 
-            // Call L2 reasoning
-            match self.reason_about_prompt(&promptgram, &recent, outer_agent) {
+            // Call L2 reasoning with full history context
+            match self.reason_about_prompt(&promptgram, &recent, outer_scratchpad, outer_agent) {
                 Ok(proposal) => {
                     println!("  📝 L2 proposal: mode={}, confidence={:.2}", proposal.mode, proposal.confidence);
                     println!("     {} edits proposed", proposal.edits.len());
@@ -666,12 +666,13 @@ impl OuterLoop {
         &self,
         current_promptgram: &Promptgram,
         recent_summaries: &[&OuterEpisodeSummary],
+        outer_scratchpad: &OuterScratchpad,
         outer_agent: crate::training::reasoning::Agent,
     ) -> Result<OuterProposal, String> {
         use crate::training::call_agent;
 
-        // Build the L2 prompt
-        let prompt = self.build_l2_prompt(current_promptgram, recent_summaries);
+        // Build the L2 prompt with pre-queried history context
+        let prompt = self.build_l2_prompt(current_promptgram, recent_summaries, outer_scratchpad);
 
         println!("  🧠 Invoking L2 reasoning ({})...", outer_agent);
 
@@ -683,10 +684,14 @@ impl OuterLoop {
     }
 
     /// Build the prompt for L2 reasoning.
+    ///
+    /// Injects pre-queried history context so L2 can reason about patterns
+    /// without needing interactive tool access.
     fn build_l2_prompt(
         &self,
         current_promptgram: &Promptgram,
         recent_summaries: &[&OuterEpisodeSummary],
+        outer_scratchpad: &OuterScratchpad,
     ) -> String {
         let mut prompt = String::new();
 
@@ -697,14 +702,86 @@ impl OuterLoop {
         // Add current inner promptgram
         prompt.push_str("=== CURRENT INNER PROMPTGRAM ===\n");
         prompt.push_str(&format!("ID: {}\n", current_promptgram.id));
-        prompt.push_str(&format!("Version: {}\n\n", current_promptgram.version));
+        prompt.push_str(&format!("Version: {}\n", current_promptgram.version));
+        if let Some(ref parent) = current_promptgram.parent_id {
+            prompt.push_str(&format!("Parent: {}\n", parent));
+        }
+        prompt.push_str("\n");
         prompt.push_str(&current_promptgram.render());
         prompt.push_str("\n\n");
+
+        // === PRE-QUERIED HISTORY CONTEXT ===
+        // This replaces interactive tool calls - we inject the context L2 needs
+        prompt.push_str("=== HISTORY CONTEXT (auto-queried) ===\n\n");
+
+        // Promptgram stats
+        if let Some(stats) = outer_scratchpad.promptgram_stats(&current_promptgram.id) {
+            prompt.push_str(&format!("Promptgram '{}' stats:\n", stats.prompt_id));
+            prompt.push_str(&format!("  Runs: {} | Mean NDCG: {:.4} | Best: {:.4} | Worst: {:.4}\n",
+                stats.run_count, stats.mean_ndcg, stats.best_ndcg, stats.worst_ndcg));
+            prompt.push_str(&format!("  Active from step {} to {}\n\n", stats.first_step, stats.last_step));
+        }
+
+        // Diff against parent if exists
+        if let Some(ref parent_id) = current_promptgram.parent_id {
+            if let Some(parent) = self.population.iter().find(|p| &p.id == parent_id) {
+                let diffs = super::diff_prompts(parent, current_promptgram);
+                if !diffs.is_empty() {
+                    prompt.push_str(&format!("Changes from parent '{}':\n", parent_id));
+                    for diff in &diffs {
+                        prompt.push_str(&format!("  {}\n", diff.summary()));
+                    }
+                    prompt.push_str("\n");
+                }
+            }
+        }
+
+        // Search for common failure patterns
+        let failure_searches = ["depth", "temporal", "boost", "collapse", "oscillat"];
+        let mut found_patterns = Vec::new();
+        for pattern in failure_searches {
+            let matches = outer_scratchpad.search_failures(pattern);
+            if !matches.is_empty() {
+                found_patterns.push((pattern, matches.len()));
+            }
+        }
+        if !found_patterns.is_empty() {
+            prompt.push_str("Recurring failure patterns:\n");
+            for (pattern, count) in found_patterns {
+                prompt.push_str(&format!("  '{}': {} episodes\n", pattern, count));
+            }
+            prompt.push_str("\n");
+        }
+
+        // Population diversity
+        let unique_prompts = outer_scratchpad.unique_promptgrams();
+        prompt.push_str(&format!("Population: {} unique promptgrams tested\n", unique_prompts.len()));
+        if unique_prompts.len() > 1 {
+            prompt.push_str("  IDs: ");
+            prompt.push_str(&unique_prompts.join(", "));
+            prompt.push_str("\n");
+        }
+        prompt.push_str("\n");
+
+        // Extreme meta-lever episodes (what's been tried)
+        let extreme_exploration = outer_scratchpad.extreme_lever_episodes("exploration_bias");
+        let extreme_structural = outer_scratchpad.extreme_lever_episodes("structural_trust");
+        if !extreme_exploration.is_empty() || !extreme_structural.is_empty() {
+            prompt.push_str("Extreme lever episodes (what's been explored):\n");
+            for (step, val, _) in extreme_exploration.iter().take(3) {
+                prompt.push_str(&format!("  Step {}: exploration_bias={:.2}\n", step, val));
+            }
+            for (step, val, _) in extreme_structural.iter().take(3) {
+                prompt.push_str(&format!("  Step {}: structural_trust={:.2}\n", step, val));
+            }
+            prompt.push_str("\n");
+        }
 
         // Add recent episode summaries
         prompt.push_str("=== RECENT OUTER EPISODES ===\n");
         for (i, summary) in recent_summaries.iter().enumerate() {
-            prompt.push_str(&format!("\n--- Episode {} (step {}) ---\n", i + 1, summary.outer_step));
+            prompt.push_str(&format!("\n--- Episode {} (step {}) [{}] ---\n",
+                i + 1, summary.outer_step, summary.selection_mode));
             prompt.push_str(&format!("NDCG: {:.4} → {:.4} (Δ{:+.4})\n",
                 summary.baseline_metrics.ndcg,
                 summary.final_metrics.ndcg,
@@ -727,7 +804,7 @@ impl OuterLoop {
             // Strategy capsules
             if !summary.strategy_capsules.is_empty() {
                 prompt.push_str("Strategy capsules:\n");
-                for capsule in &summary.strategy_capsules {
+                for capsule in summary.strategy_capsules.iter().take(5) {
                     prompt.push_str(&format!("  • {}\n", capsule));
                 }
             }
@@ -739,6 +816,12 @@ impl OuterLoop {
                     prompt.push_str(&format!("  • {}\n", insight));
                 }
             }
+
+            // Previous proposal (if any)
+            if let Some(ref proposal) = summary.proposal {
+                prompt.push_str(&format!("Previous L2 proposal: mode={}, confidence={:.2}, {} edits\n",
+                    proposal.mode, proposal.confidence, proposal.edits.len()));
+            }
         }
 
         // Add trajectory summary
@@ -749,17 +832,23 @@ impl OuterLoop {
             prompt.push_str(&format!("\n=== TRAJECTORY ===\n"));
             prompt.push_str(&format!("Overall trend: {:+.4} NDCG over {} episodes\n", trend, recent_summaries.len()));
 
-            if trend < -0.02 {
-                prompt.push_str("⚠️ DEGRADING - consider reverting recent changes\n");
-            } else if trend.abs() < 0.01 {
-                prompt.push_str("⚠️ PLATEAUED - consider orthogonal exploration\n");
+            // Check for plateau/collapse using scratchpad methods
+            if outer_scratchpad.is_collapse(3, 0.02) {
+                prompt.push_str("⚠️ COLLAPSE DETECTED - NDCG degrading over last 3 episodes\n");
+            } else if outer_scratchpad.is_plateau(3, 0.01) {
+                prompt.push_str("⚠️ PLATEAU DETECTED - no improvement in last 3 episodes\n");
             } else if trend > 0.02 {
                 prompt.push_str("✓ IMPROVING - continue current direction\n");
             }
+
+            // Best vs current
+            prompt.push_str(&format!("Best NDCG ever: {:.4} (prompt: {})\n",
+                outer_scratchpad.best_ndcg, outer_scratchpad.best_prompt_id));
         }
 
         prompt.push_str("\n=== YOUR TASK ===\n");
-        prompt.push_str("Analyze the trajectory and propose edits to the inner promptgram.\n");
+        prompt.push_str("Analyze the trajectory and history context, then propose edits to the inner promptgram.\n");
+        prompt.push_str("Consider: What patterns recur? What hasn't been tried? What's the risk?\n");
         prompt.push_str("Output your reasoning, then a JSON block with your proposal.\n");
 
         prompt
