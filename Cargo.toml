@@ -51,6 +51,7 @@ tiktoken-rs = "0.6"
 
 # Utils
 anyhow = "1"
+chrono = { version = "0.4", features = ["serde"] }
 thiserror = "2"
 once_cell = "1"
 memmap2 = "0.9"
@@ -93,4 +94,5 @@ panic = "abort"
 strip = true
 
 [features]
+default = ["plotters"]
 plotters = ["dep:plotters"]

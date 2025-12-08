@@ -88,6 +88,14 @@ pub struct RankingFailure {
 /// One round of reasoning about failures.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReasoningEpisode {
+    /// Unix timestamp (epoch seconds) when this episode was created.
+    /// Used for sorting runs by date and displaying temporal context.
+    #[serde(default)]
+    pub timestamp: i64,
+    /// Duration of this episode in seconds (LLM call + evaluation).
+    /// Useful for benchmarking different agents and tracking cost.
+    #[serde(default)]
+    pub duration_secs: f64,
     /// Failures analyzed in this episode
     pub failures: Vec<RankingFailure>,
     /// Parameters at time of failure
@@ -275,6 +283,8 @@ pub fn reason_about_failures(
     agent: Agent,
     model: Option<&str>,
 ) -> Result<ReasoningEpisode, String> {
+    let episode_start = std::time::Instant::now();
+
     // Format failures for Claude
     let failure_desc: String = failures
         .iter()
@@ -557,7 +567,17 @@ JSON:
         .and_then(|v| v.as_f64())
         .unwrap_or(0.5);
 
+    // Capture the current timestamp for this episode
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+
+    let duration_secs = episode_start.elapsed().as_secs_f64();
+
     Ok(ReasoningEpisode {
+        timestamp,
+        duration_secs,
         failures: failures.to_vec(),
         params: current_params.clone(),
         ndcg_before: current_ndcg,

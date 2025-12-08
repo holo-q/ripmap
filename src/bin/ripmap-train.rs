@@ -32,6 +32,7 @@ use std::time::Instant;
 use clap::Parser;
 use rand::SeedableRng;
 use rayon::prelude::*;
+use chrono::{DateTime, Local, TimeZone};
 use serde::{Deserialize, Serialize};
 
 use ripmap::training::{
@@ -167,6 +168,14 @@ struct Args {
     #[arg(long)]
     show: Option<String>,
 
+    /// Pivot view: show structural insights as primary axis (insight-first, not episode-first)
+    #[arg(long)]
+    show_insights: Option<String>,
+
+    /// Pivot view: show parameter interactions as primary axis
+    #[arg(long)]
+    show_interactions: Option<String>,
+
     /// List all available training runs
     #[arg(long)]
     list: bool,
@@ -229,7 +238,31 @@ struct BenchmarkResults {
     strategy: String,
 }
 
-/// List all available training runs with summary stats.
+/// Summary info for a training run, used for sorting and display.
+struct RunInfo {
+    name: String,
+    episodes: usize,
+    first_ndcg: f64,
+    last_ndcg: f64,
+    delta: f64,
+    /// First episode timestamp (for sorting by start date)
+    start_ts: i64,
+    /// Last episode timestamp (for end date display)
+    end_ts: i64,
+}
+
+/// Format a Unix timestamp as a human-readable date string.
+fn format_timestamp(ts: i64) -> String {
+    if ts == 0 {
+        return "—".to_string();
+    }
+    Local.timestamp_opt(ts, 0)
+        .single()
+        .map(|dt: DateTime<Local>| dt.format("%b %d %H:%M").to_string())
+        .unwrap_or_else(|| "—".to_string())
+}
+
+/// List all available training runs with summary stats, sorted by date.
 fn list_training_runs() -> anyhow::Result<()> {
     let runs_dir = PathBuf::from("training/runs");
     if !runs_dir.exists() {
@@ -237,39 +270,96 @@ fn list_training_runs() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    println!("\n┌─ AVAILABLE TRAINING RUNS ────────────────────────────────────────────────────┐");
+    // Collect run info with timestamps
+    let mut runs: Vec<RunInfo> = Vec::new();
+    let mut empty_runs: Vec<(String, i64)> = Vec::new();  // (name, mtime) for runs with no data
 
-    let mut runs: Vec<_> = std::fs::read_dir(&runs_dir)?
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().is_dir())
-        .collect();
-
-    runs.sort_by_key(|e| e.file_name());
-
-    for entry in runs {
+    for entry in std::fs::read_dir(&runs_dir)?.filter_map(|e| e.ok()) {
+        if !entry.path().is_dir() {
+            continue;
+        }
         let name = entry.file_name().to_string_lossy().to_string();
         let scratchpad_path = entry.path().join("scratchpad.json");
+
+        // Fallback: use file modification time if no episode timestamps
+        let file_mtime = scratchpad_path.metadata()
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
 
         if scratchpad_path.exists() {
             if let Ok(file) = File::open(&scratchpad_path) {
                 if let Ok(sp) = serde_json::from_reader::<_, Scratchpad>(file) {
                     let eps = sp.episodes.len();
                     if eps > 0 {
-                        let first = sp.episodes.first().map(|e| e.ndcg_before).unwrap_or(0.0);
-                        let last = sp.episodes.last().map(|e| e.ndcg_before).unwrap_or(0.0);
-                        let delta = last - first;
-                        let trend = if delta > 0.01 { "↗" } else if delta < -0.01 { "↘" } else { "→" };
-                        println!("│  {:30} {:>3} eps  {:.3} {} {:.3}  ({:+.4})            │",
-                            name, eps, first, trend, last, delta);
+                        let first_ndcg = sp.episodes.first().map(|e| e.ndcg_before).unwrap_or(0.0);
+                        let last_ndcg = sp.episodes.last().map(|e| e.ndcg_before).unwrap_or(0.0);
+                        let delta = last_ndcg - first_ndcg;
+
+                        // Get timestamps from episodes (fall back to file mtime if 0)
+                        let start_ts = sp.episodes.first()
+                            .map(|e| if e.timestamp > 0 { e.timestamp } else { file_mtime })
+                            .unwrap_or(file_mtime);
+                        let end_ts = sp.episodes.last()
+                            .map(|e| if e.timestamp > 0 { e.timestamp } else { file_mtime })
+                            .unwrap_or(file_mtime);
+
+                        runs.push(RunInfo {
+                            name,
+                            episodes: eps,
+                            first_ndcg,
+                            last_ndcg,
+                            delta,
+                            start_ts,
+                            end_ts,
+                        });
                         continue;
                     }
                 }
             }
         }
-        println!("│  {:30} (no data)                                      │", name);
+        empty_runs.push((name, file_mtime));
     }
 
-    println!("└──────────────────────────────────────────────────────────────────────────────┘");
+    // Sort by start timestamp (oldest first, so most recent at bottom)
+    runs.sort_by_key(|r| r.start_ts);
+    empty_runs.sort_by_key(|(_, ts)| *ts);
+
+    // Build table without box drawing for cleaner output
+    use owo_colors::OwoColorize;
+
+    println!();
+    println!("{}", "TRAINING RUNS".bold());
+    println!("{}", "─".repeat(90));
+    println!("{:26} {:>4}  {:^17}  {:>8}   {:>24}",
+        "NAME", "EPS", "NDCG TRAJECTORY", "DELTA", "STARTED -> LAST");
+    println!("{}", "─".repeat(90));
+
+    for run in &runs {
+        let (trend, delta_colored) = if run.delta > 0.01 {
+            ("+", format!("{:>+8.4}", run.delta).green().to_string())
+        } else if run.delta < -0.01 {
+            ("-", format!("{:>+8.4}", run.delta).red().to_string())
+        } else {
+            ("=", format!("{:>+8.4}", run.delta).dimmed().to_string())
+        };
+        let start_str = format_timestamp(run.start_ts);
+        let end_str = format_timestamp(run.end_ts);
+        let time_range = format!("{} -> {}", start_str, end_str);
+
+        println!("{:26} {:>4}  {:.3} {} {:.3}  {}   {}",
+            run.name, run.episodes, run.first_ndcg, trend, run.last_ndcg, delta_colored, time_range.dimmed());
+    }
+
+    // Show empty runs at the bottom
+    for (name, mtime) in &empty_runs {
+        let ts_str = format_timestamp(*mtime);
+        println!("{:26}    -  (no data)                          {:>24}", name, ts_str);
+    }
+
+    println!("{}", "─".repeat(90));
     println!("\nUse --show <run-name> to see detailed visualization.\n");
     Ok(())
 }
@@ -360,7 +450,8 @@ fn show_training_run(path: &str) -> anyhow::Result<()> {
             let changes: Vec<String> = ep.proposed_changes.iter()
                 .map(|(k, (dir, mag, _))| {
                     let arrow = if dir == "increase" { "↑" } else { "↓" };
-                    format!("{}{}{}", k, arrow, &mag[..1].to_uppercase())
+                    let mag_short = mag.chars().next().map(|c| c.to_uppercase().to_string()).unwrap_or_default();
+                    format!("{}{}{}", k, arrow, mag_short)
                 })
                 .collect();
             println!("│      Changes: {}", changes.join(", "));
@@ -380,40 +471,6 @@ fn show_training_run(path: &str) -> anyhow::Result<()> {
 
     println!("│                                                                              │");
     println!("└──────────────────────────────────────────────────────────────────────────────┘\n");
-
-    // Parameter interactions discovered
-    if !scratchpad.param_interactions.is_empty() {
-        println!("┌─ DISCOVERED INTERACTIONS ────────────────────────────────────────────────────┐");
-        for interaction in scratchpad.param_interactions.iter().take(8) {
-            let truncated = if interaction.len() > 74 {
-                format!("{}...", &interaction[..71])
-            } else {
-                interaction.clone()
-            };
-            println!("│  • {:<74} │", truncated);
-        }
-        if scratchpad.param_interactions.len() > 8 {
-            println!("│  ... and {} more", scratchpad.param_interactions.len() - 8);
-        }
-        println!("└──────────────────────────────────────────────────────────────────────────────┘\n");
-    }
-
-    // Structural proposals
-    if !scratchpad.structural_proposals.is_empty() {
-        println!("┌─ STRUCTURAL INSIGHTS ────────────────────────────────────────────────────────┐");
-        for proposal in scratchpad.structural_proposals.iter().take(8) {
-            let truncated = if proposal.len() > 74 {
-                format!("{}...", &proposal[..71])
-            } else {
-                proposal.clone()
-            };
-            println!("│  • {:<74} │", truncated);
-        }
-        if scratchpad.structural_proposals.len() > 8 {
-            println!("│  ... and {} more", scratchpad.structural_proposals.len() - 8);
-        }
-        println!("└──────────────────────────────────────────────────────────────────────────────┘\n");
-    }
 
     // Final parameters (from last episode)
     if let Some(last_ep) = scratchpad.episodes.last() {
@@ -437,6 +494,111 @@ fn show_training_run(path: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Resolve a run name or path to a scratchpad file path.
+fn resolve_scratchpad_path(path: &str) -> PathBuf {
+    if path.ends_with(".json") {
+        PathBuf::from(path)
+    } else {
+        PathBuf::from(format!("training/runs/{}/scratchpad.json", path))
+    }
+}
+
+/// Pivot view: insights as primary axis.
+/// Shows each unique insight and which episodes produced it.
+fn show_insights_pivot(path: &str) -> anyhow::Result<()> {
+    use std::collections::HashMap;
+
+    let scratchpad_path = resolve_scratchpad_path(path);
+    if !scratchpad_path.exists() {
+        anyhow::bail!("Scratchpad not found: {}", scratchpad_path.display());
+    }
+
+    let file = File::open(&scratchpad_path)?;
+    let scratchpad: Scratchpad = serde_json::from_reader(file)?;
+
+    // Build insight -> [episode indices] map
+    let mut insight_episodes: HashMap<String, Vec<usize>> = HashMap::new();
+    for (i, ep) in scratchpad.episodes.iter().enumerate() {
+        for insight in &ep.structural_insights {
+            insight_episodes.entry(insight.clone()).or_default().push(i + 1);
+        }
+    }
+
+    // Sort by frequency (most common first)
+    let mut sorted: Vec<_> = insight_episodes.iter().collect();
+    sorted.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
+
+    println!("\nSTRUCTURAL INSIGHTS (pivot view)");
+    println!("─────────────────────────────────────────────────────────────────────────────────");
+    println!("{} unique insights from {} episodes\n", sorted.len(), scratchpad.episodes.len());
+
+    for (insight, episodes) in sorted.iter().take(30) {
+        let ep_list = if episodes.len() <= 5 {
+            episodes.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(", ")
+        } else {
+            format!("{}, ... (+{} more)",
+                episodes[..3].iter().map(|e| e.to_string()).collect::<Vec<_>>().join(", "),
+                episodes.len() - 3)
+        };
+        println!("[E{}] {}", ep_list, insight);
+        println!();
+    }
+
+    if sorted.len() > 30 {
+        println!("... and {} more insights", sorted.len() - 30);
+    }
+
+    Ok(())
+}
+
+/// Pivot view: parameter interactions as primary axis.
+/// Shows each unique interaction and which episodes discovered it.
+fn show_interactions_pivot(path: &str) -> anyhow::Result<()> {
+    use std::collections::HashMap;
+
+    let scratchpad_path = resolve_scratchpad_path(path);
+    if !scratchpad_path.exists() {
+        anyhow::bail!("Scratchpad not found: {}", scratchpad_path.display());
+    }
+
+    let file = File::open(&scratchpad_path)?;
+    let scratchpad: Scratchpad = serde_json::from_reader(file)?;
+
+    // Build interaction -> [episode indices] map
+    let mut interaction_episodes: HashMap<String, Vec<usize>> = HashMap::new();
+    for (i, ep) in scratchpad.episodes.iter().enumerate() {
+        for interaction in &ep.param_interactions {
+            interaction_episodes.entry(interaction.clone()).or_default().push(i + 1);
+        }
+    }
+
+    // Sort by frequency (most common first)
+    let mut sorted: Vec<_> = interaction_episodes.iter().collect();
+    sorted.sort_by(|a, b| b.1.len().cmp(&a.1.len()));
+
+    println!("\nPARAMETER INTERACTIONS (pivot view)");
+    println!("─────────────────────────────────────────────────────────────────────────────────");
+    println!("{} unique interactions from {} episodes\n", sorted.len(), scratchpad.episodes.len());
+
+    for (interaction, episodes) in sorted.iter().take(30) {
+        let ep_list = if episodes.len() <= 5 {
+            episodes.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(", ")
+        } else {
+            format!("{}, ... (+{} more)",
+                episodes[..3].iter().map(|e| e.to_string()).collect::<Vec<_>>().join(", "),
+                episodes.len() - 3)
+        };
+        println!("[E{}] {}", ep_list, interaction);
+        println!();
+    }
+
+    if sorted.len() > 30 {
+        println!("... and {} more interactions", sorted.len() - 30);
+    }
+
+    Ok(())
+}
+
 fn main() -> anyhow::Result<()> {
     let mut args = Args::parse();
 
@@ -448,6 +610,16 @@ fn main() -> anyhow::Result<()> {
     // Handle --show: visualize a past training run and exit
     if let Some(ref path) = args.show {
         return show_training_run(path);
+    }
+
+    // Handle --show-insights: pivot view with insights as primary axis
+    if let Some(ref path) = args.show_insights {
+        return show_insights_pivot(path);
+    }
+
+    // Handle --show-interactions: pivot view with interactions as primary axis
+    if let Some(ref path) = args.show_interactions {
+        return show_interactions_pivot(path);
     }
 
     // Handle --run-name: create run directory and override paths
@@ -971,7 +1143,7 @@ fn run_reasoning_training(
                 progress.display(episode_num + 1, args.episodes);
 
                 println!(); // Newline after sparkline for subsequent output
-                println!("Confidence: {:.2}", episode.confidence);
+                println!("Confidence: {:.2}  ⏱ {:.1}s", episode.confidence, episode.duration_secs);
                 println!("Proposed {} changes:", episode.proposed_changes.len());
                 for (param, (dir, mag, rationale)) in &episode.proposed_changes {
                     println!("  {} {} {} - \"{}\"", param, dir, mag, rationale);
@@ -1042,6 +1214,21 @@ fn run_reasoning_training(
 
     println!("Final NDCG@10: {:.4}", final_metrics.ndcg_at_10);
     println!("Final MRR:     {:.4}", final_metrics.mrr);
+
+    // Timing statistics
+    let durations: Vec<f64> = scratchpad.episodes.iter()
+        .map(|e| e.duration_secs)
+        .filter(|&d| d > 0.0)  // Filter out old episodes without timing
+        .collect();
+    if !durations.is_empty() {
+        let total_agent_time: f64 = durations.iter().sum();
+        let avg_time = total_agent_time / durations.len() as f64;
+        let min_time = durations.iter().cloned().fold(f64::INFINITY, f64::min);
+        let max_time = durations.iter().cloned().fold(0.0, f64::max);
+        println!("\n⏱ Agent timing ({} episodes with timing data):", durations.len());
+        println!("  Total: {:.1}s ({:.1}m)  Avg: {:.1}s  Min: {:.1}s  Max: {:.1}s",
+            total_agent_time, total_agent_time / 60.0, avg_time, min_time, max_time);
+    }
 
     // Save scratchpad
     std::fs::create_dir_all(args.scratchpad.parent().unwrap_or(Path::new(".")))?;
