@@ -1,0 +1,96 @@
+[package]
+name = "ripmap"
+version = "0.1.0"
+edition = "2024"
+description = "Ultra-fast codebase cartography - 1000x faster grepmap"
+authors = ["nuck"]
+license = "MIT"
+
+[dependencies]
+# Parsing - tree-sitter ecosystem
+tree-sitter = "0.24"
+tree-sitter-python = "0.23"
+tree-sitter-rust = "0.23"
+tree-sitter-javascript = "0.23"
+tree-sitter-typescript = "0.23"
+tree-sitter-go = "0.23"
+tree-sitter-java = "0.23"
+tree-sitter-c = "0.23"
+tree-sitter-cpp = "0.23"
+tree-sitter-ruby = "0.23"
+tree-sitter-php = "0.23"
+streaming-iterator = "0.1"
+
+# Graph algorithms
+petgraph = "0.6"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Parallelism (1000x speed target)
+rayon = "1.10"
+
+# File discovery
+ignore = "0.4"
+walkdir = "2"
+
+# Caching
+redb = "2"
+
+# Terminal
+crossterm = "0.28"
+owo-colors = "4"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+bincode = "1"
+
+# Token counting
+tiktoken-rs = "0.6"
+
+# Utils
+anyhow = "1"
+thiserror = "2"
+once_cell = "1"
+memmap2 = "0.9"
+regex = "1"
+rand = "0.8"
+
+# 1000x Performance
+bumpalo = "3"
+dashmap = "6"
+memchr = "2"
+string-interner = "0.17"
+parking_lot = "0.12"
+
+# MCP Server
+rmcp = { version = "0.3", features = ["server", "transport-io"] }
+tokio = { version = "1", features = ["full"] }
+schemars = "1"
+plotters = { version = "0.3.7", optional = true }
+
+[[bin]]
+name = "ripmap"
+path = "src/main.rs"
+
+[[bin]]
+name = "ripmap-mcp"
+path = "src/bin/ripmap-mcp.rs"
+
+[[bin]]
+name = "ripmap-train"
+path = "src/bin/ripmap-train.rs"
+
+[build-dependencies]
+cc = "1"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[features]
+plotters = ["dep:plotters"]

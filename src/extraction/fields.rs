@@ -1,0 +1,1 @@
+//! Class field extraction stub.

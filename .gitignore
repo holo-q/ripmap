@@ -1,0 +1,18 @@
+
+/target/
+Cargo.lock
+*.swp
+*.swo
+*~
+.DS_Store
+.ripmap.cache/
+
+# Training artifacts
+/training/corpus/
+/training/runs/
+/tmp/
+*.json.bak
+
+# Grepmap cache
+.grepmap.tags.cache*/
+gremapper-py/**
