@@ -782,37 +782,65 @@ fn main() -> anyhow::Result<()> {
     let grid = ParameterGrid::default();
     let mut points = sample_points(&grid, strategy, args.budget, args.seed);
 
-    println!("\nEvaluating {} parameter configurations...", points.len());
+    use indicatif::{ProgressBar, ProgressStyle};
 
     // Shared case data for parallel evaluation
     let cases = Arc::new(all_cases);
     let distractors_ref = distractors.clone();
 
-    // Evaluate all points in parallel
-    let mut evaluations: Vec<(ParameterPoint, EvalMetrics)> = points
+    // Evaluate all points in parallel with progress bar
+    let pb = ProgressBar::new(points.len() as u64);
+    pb.set_style(ProgressStyle::with_template(
+        "{prefix:.bold} {bar:40.cyan/dim} {pos}/{len} [{elapsed}<{eta}] {msg}"
+    ).unwrap());
+    pb.set_prefix("Evaluating");
+
+    let best_ndcg = std::sync::atomic::AtomicU64::new(0);
+    let evaluations: Vec<(ParameterPoint, EvalMetrics)> = points
         .par_iter()
         .map(|point| {
             let metrics = evaluate_point(point, &cases, distractors_ref.as_deref());
+            // Track best score seen so far (atomic for thread safety)
+            let current = (metrics.ndcg_at_10 * 10000.0) as u64;
+            best_ndcg.fetch_max(current, std::sync::atomic::Ordering::Relaxed);
+            let best = best_ndcg.load(std::sync::atomic::Ordering::Relaxed) as f64 / 10000.0;
+            pb.set_message(format!("best={:.4}", best));
+            pb.inc(1);
             (point.clone(), metrics)
         })
         .collect();
+    pb.finish_with_message(format!("best={:.4}", best_ndcg.load(std::sync::atomic::Ordering::Relaxed) as f64 / 10000.0));
 
     // For Bayesian strategy, do iterative refinement
+    let mut evaluations = evaluations; // make mutable for Bayesian
     if matches!(strategy, SearchStrategy::Bayesian) && evaluations.len() < args.budget {
-        println!("\nBayesian refinement...");
+        let remaining = args.budget - evaluations.len();
+        let pb = ProgressBar::new(remaining as u64);
+        pb.set_style(ProgressStyle::with_template(
+            "{prefix:.bold} {bar:40.green/dim} {pos}/{len} [{elapsed}<{eta}] {msg}"
+        ).unwrap());
+        pb.set_prefix("Bayesian");
+
         let mut rng = rand::rngs::StdRng::seed_from_u64(args.seed);
         let history: Vec<_> = evaluations.iter()
             .map(|(p, m)| (p.clone(), m.ndcg_at_10))
             .collect();
 
-        for i in evaluations.len()..args.budget {
+        let mut best_so_far = evaluations.iter()
+            .map(|(_, m)| m.ndcg_at_10)
+            .fold(0.0_f64, f64::max);
+
+        for _ in evaluations.len()..args.budget {
             let next = bayesian_next_sample(&grid, &history, &mut rng);
             let metrics = evaluate_point(&next, &cases, distractors.as_deref());
-            if args.verbose {
-                println!("  Iteration {}: NDCG@10 = {:.4}", i, metrics.ndcg_at_10);
+            if metrics.ndcg_at_10 > best_so_far {
+                best_so_far = metrics.ndcg_at_10;
             }
+            pb.set_message(format!("best={:.4}", best_so_far));
+            pb.inc(1);
             evaluations.push((next, metrics));
         }
+        pb.finish_with_message(format!("best={:.4}", best_so_far));
     }
 
     // Find best configuration
@@ -1054,6 +1082,8 @@ fn score_file(
 
 /// Ensure curated repos are cloned locally.
 fn ensure_repos_cloned(specs: &[&RepoSpec], base_dir: &Path) -> anyhow::Result<Vec<PathBuf>> {
+    use indicatif::{ProgressBar, ProgressStyle};
+
     std::fs::create_dir_all(base_dir)?;
 
     let mut paths = Vec::new();
@@ -1062,7 +1092,13 @@ fn ensure_repos_cloned(specs: &[&RepoSpec], base_dir: &Path) -> anyhow::Result<V
         let repo_dir = base_dir.join(&spec.name);
 
         if !repo_dir.exists() {
-            println!("Cloning {}...", spec.name);
+            let spinner = ProgressBar::new_spinner();
+            spinner.set_style(ProgressStyle::with_template(
+                "{spinner:.green} {msg}"
+            ).unwrap().tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]));
+            spinner.set_message(format!("Cloning {}...", spec.name));
+            spinner.enable_steady_tick(std::time::Duration::from_millis(80));
+
             let status = std::process::Command::new("git")
                 .args([
                     "clone",
@@ -1070,12 +1106,15 @@ fn ensure_repos_cloned(specs: &[&RepoSpec], base_dir: &Path) -> anyhow::Result<V
                     &spec.url,
                     repo_dir.to_str().unwrap(),
                 ])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
                 .status()?;
 
             if !status.success() {
-                eprintln!("Warning: Failed to clone {}", spec.name);
+                spinner.finish_with_message(format!("✗ Failed to clone {}", spec.name));
                 continue;
             }
+            spinner.finish_with_message(format!("✓ Cloned {}", spec.name));
         }
 
         paths.push(repo_dir);
@@ -1187,12 +1226,20 @@ fn run_reasoning_training(
             break;
         }
 
-        println!("Collected {} failures for reasoning", failures.len());
+        // Ask LLM to reason about failures with spinner
+        use indicatif::{ProgressBar, ProgressStyle};
+        let spinner = ProgressBar::new_spinner();
+        spinner.set_style(ProgressStyle::with_template(
+            "{prefix:.bold} {spinner:.cyan} {msg}"
+        ).unwrap().tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]));
+        spinner.set_prefix(format!("E{:02}", episode_num + 1));
+        spinner.set_message(format!("{} reasoning ({} failures)...", agent, failures.len()));
+        spinner.enable_steady_tick(std::time::Duration::from_millis(80));
 
-        // Ask LLM to reason about failures
-        println!("Calling {} for reasoning...", agent);
         match reason_about_failures(&prompt_template, &failures, &current_params, &scratchpad, metrics.ndcg_at_10, agent, model) {
             Ok(episode) => {
+                spinner.finish_and_clear();
+
                 // Record metrics for live progress visualization
                 progress.record(
                     metrics.ndcg_at_10,
@@ -1231,6 +1278,7 @@ fn run_reasoning_training(
                 update_scratchpad(&mut scratchpad, &episode);
             }
             Err(e) => {
+                spinner.finish_with_message("failed");
                 eprintln!("Warning: Reasoning failed: {}", e);
                 // Still record progress even on failure
                 progress.record(metrics.ndcg_at_10, failures.len(), 0.0, current_params.pagerank_alpha);
