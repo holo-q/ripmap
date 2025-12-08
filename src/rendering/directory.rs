@@ -195,6 +195,9 @@ impl DirectoryRenderer {
     }
 
     /// Render functions with call graph information.
+    ///
+    /// At Low/Medium detail (no call graph): compact block format
+    /// At High detail or with call graph: one per line with relationships
     fn render_functions_with_calls(
         &self,
         functions: &[&RankedTag],
@@ -204,69 +207,106 @@ impl DirectoryRenderer {
     ) -> String {
         let mut output = String::from("    def:\n");
 
-        for f in functions {
-            // Function name and signature
+        // Use compact format when: no call graph AND detail < High
+        let use_compact = call_graph.is_none() && detail < DetailLevel::High;
+
+        if use_compact {
+            // Compact block: names only, wrapped at ~70 chars
+            let names: Vec<_> = functions
+                .iter()
+                .map(|f| (Colorizer::function_name(&f.tag.name), f.tag.name.len()))
+                .collect();
+
             let mut line = String::from("      ");
-            line.push_str(&Colorizer::function_name(&f.tag.name));
+            let mut line_len = 0;
+            const MAX_LINE_LEN: usize = 70;
 
-            if let Some(sig) = &f.tag.signature {
-                line.push_str(&sig.render(detail));
-            } else if detail >= DetailLevel::Medium {
-                line.push_str("(...)");
-            }
+            for (colored_name, visible_len) in &names {
+                if line_len > 0 && line_len + visible_len + 1 > MAX_LINE_LEN {
+                    output.push_str(&line);
+                    output.push('\n');
+                    line = String::from("      ");
+                    line_len = 0;
+                }
 
-            // Add symbol-level badges if present
-            let badge_key = format!("{}::{}", f.tag.rel_fname, f.tag.name);
-            if let Some(symbol_badges) = badges.get(&badge_key) {
-                if !symbol_badges.is_empty() {
+                if line_len > 0 {
                     line.push(' ');
-                    line.push_str(&Colorizer::badge_group(symbol_badges));
+                    line_len += 1;
                 }
+                line.push_str(colored_name);
+                line_len += visible_len;
             }
 
-            output.push_str(&line);
-            output.push('\n');
+            if line_len > 0 {
+                output.push_str(&line);
+                output.push('\n');
+            }
+        } else {
+            // Detailed format: one per line with signatures and call relationships
+            for f in functions {
+                let mut line = String::from("      ");
+                line.push_str(&Colorizer::function_name(&f.tag.name));
 
-            // Add call relationships if call graph is available
-            if let Some(graph) = call_graph {
-                let func_id =
-                    FunctionId::new(f.tag.rel_fname.clone(), f.tag.name.clone(), f.tag.line);
-
-                // Show what this function calls
-                let calls = graph.calls_from(&func_id);
-                if !calls.is_empty() {
-                    let call_names: Vec<_> = calls
-                        .iter()
-                        .take(5)
-                        .map(|(target, edge)| {
-                            let conf_str = if edge.confidence < 1.0 {
-                                format!("({}%)", (edge.confidence * 100.0) as u32)
-                            } else {
-                                String::new()
-                            };
-                            format!("{}{}", target.qualified_name(), conf_str)
-                        })
-                        .collect();
-                    output.push_str(&format!(
-                        "        {} {}\n",
-                        Colorizer::dim("→ calls:"),
-                        call_names.join(", ")
-                    ));
+                if let Some(sig) = &f.tag.signature {
+                    line.push_str(&sig.render(detail));
+                } else if detail >= DetailLevel::High {
+                    // Only show (...) at High detail
+                    line.push_str("(...)");
                 }
 
-                // Show what calls this function
-                let callers = graph.calls_to(&func_id);
-                if !callers.is_empty() {
-                    let caller_names: Vec<_> = callers
-                        .iter()
-                        .take(5)
-                        .map(|(source, _)| source.qualified_name())
-                        .collect();
-                    output.push_str(&format!(
-                        "        {} {}\n",
-                        Colorizer::dim("← called by:"),
-                        caller_names.join(", ")
-                    ));
+                // Add symbol-level badges if present
+                let badge_key = format!("{}::{}", f.tag.rel_fname, f.tag.name);
+                if let Some(symbol_badges) = badges.get(&badge_key) {
+                    if !symbol_badges.is_empty() {
+                        line.push(' ');
+                        line.push_str(&Colorizer::badge_group(symbol_badges));
+                    }
+                }
+
+                output.push_str(&line);
+                output.push('\n');
+
+                // Add call relationships if call graph is available
+                if let Some(graph) = call_graph {
+                    let func_id =
+                        FunctionId::new(f.tag.rel_fname.clone(), f.tag.name.clone(), f.tag.line);
+
+                    // Show what this function calls
+                    let calls = graph.calls_from(&func_id);
+                    if !calls.is_empty() {
+                        let call_names: Vec<_> = calls
+                            .iter()
+                            .take(5)
+                            .map(|(target, edge)| {
+                                let conf_str = if edge.confidence < 1.0 {
+                                    format!("({}%)", (edge.confidence * 100.0) as u32)
+                                } else {
+                                    String::new()
+                                };
+                                format!("{}{}", target.qualified_name(), conf_str)
+                            })
+                            .collect();
+                        output.push_str(&format!(
+                            "        {} {}\n",
+                            Colorizer::dim("→ calls:"),
+                            call_names.join(", ")
+                        ));
+                    }
+
+                    // Show what calls this function
+                    let callers = graph.calls_to(&func_id);
+                    if !callers.is_empty() {
+                        let caller_names: Vec<_> = callers
+                            .iter()
+                            .take(5)
+                            .map(|(source, _)| source.qualified_name())
+                            .collect();
+                        output.push_str(&format!(
+                            "        {} {}\n",
+                            Colorizer::dim("← called by:"),
+                            caller_names.join(", ")
+                        ));
+                    }
                 }
             }
         }
@@ -325,30 +365,71 @@ impl DirectoryRenderer {
 
         // Render methods with call info
         if !methods.is_empty() {
-            output.push_str("      methods:\n");
-            for m in methods {
-                let method_name = self.render_method_inline(&m.tag, detail);
-                output.push_str(&format!("        {}\n", method_name));
+            // Use compact format when: no call graph AND detail < High
+            let use_compact = call_graph.is_none() && detail < DetailLevel::High;
 
-                // Add call relationships for methods
-                if let Some(graph) = call_graph {
-                    let func_id =
-                        FunctionId::new(m.tag.rel_fname.clone(), m.tag.name.clone(), m.tag.line)
-                            .with_parent(class_name);
+            if use_compact {
+                // Compact block: names only, wrapped
+                output.push_str("    def:\n");
+                let names: Vec<_> = methods
+                    .iter()
+                    .map(|m| (Colorizer::function_name(&m.tag.name), m.tag.name.len()))
+                    .collect();
 
-                    // Show what this method calls
-                    let calls = graph.calls_from(&func_id);
-                    if !calls.is_empty() {
-                        let call_names: Vec<_> = calls
-                            .iter()
-                            .take(3)
-                            .map(|(target, _)| target.qualified_name())
-                            .collect();
-                        output.push_str(&format!(
-                            "          {} {}\n",
-                            Colorizer::dim("→"),
-                            call_names.join(", ")
-                        ));
+                let mut line = String::from("      ");
+                let mut line_len = 0;
+                const MAX_LINE_LEN: usize = 70;
+
+                for (colored_name, visible_len) in &names {
+                    if line_len > 0 && line_len + visible_len + 1 > MAX_LINE_LEN {
+                        output.push_str(&line);
+                        output.push('\n');
+                        line = String::from("      ");
+                        line_len = 0;
+                    }
+
+                    if line_len > 0 {
+                        line.push(' ');
+                        line_len += 1;
+                    }
+                    line.push_str(colored_name);
+                    line_len += visible_len;
+                }
+
+                if line_len > 0 {
+                    output.push_str(&line);
+                    output.push('\n');
+                }
+            } else {
+                // Detailed format with call relationships
+                output.push_str("    def:\n");
+                for m in methods {
+                    let method_name = self.render_method_inline(&m.tag, detail);
+                    output.push_str(&format!("      {}\n", method_name));
+
+                    // Add call relationships for methods
+                    if let Some(graph) = call_graph {
+                        let func_id = FunctionId::new(
+                            m.tag.rel_fname.clone(),
+                            m.tag.name.clone(),
+                            m.tag.line,
+                        )
+                        .with_parent(class_name);
+
+                        // Show what this method calls
+                        let calls = graph.calls_from(&func_id);
+                        if !calls.is_empty() {
+                            let call_names: Vec<_> = calls
+                                .iter()
+                                .take(3)
+                                .map(|(target, _)| target.qualified_name())
+                                .collect();
+                            output.push_str(&format!(
+                                "        {} {}\n",
+                                Colorizer::dim("→"),
+                                call_names.join(", ")
+                            ));
+                        }
                     }
                 }
             }
@@ -551,13 +632,47 @@ impl DirectoryRenderer {
 
         // Render methods
         if !methods.is_empty() {
-            output.push_str("      def: ");
-            let method_strs: Vec<_> = methods
-                .iter()
-                .map(|m| self.render_method_inline(&m.tag, detail))
-                .collect();
-            output.push_str(&method_strs.join("\n           "));
-            output.push('\n');
+            if detail >= DetailLevel::High {
+                // High detail: one method per line with signatures
+                output.push_str("    def:\n");
+                for m in methods {
+                    output.push_str("      ");
+                    output.push_str(&self.render_method_inline(&m.tag, detail));
+                    output.push('\n');
+                }
+            } else {
+                // Low/Medium detail: compact block (names only, wrapped)
+                output.push_str("    def:\n");
+                let names: Vec<_> = methods
+                    .iter()
+                    .map(|m| (Colorizer::function_name(&m.tag.name), m.tag.name.len()))
+                    .collect();
+
+                let mut line = String::from("      ");
+                let mut line_len = 0;
+                const MAX_LINE_LEN: usize = 70;
+
+                for (colored_name, visible_len) in &names {
+                    if line_len > 0 && line_len + visible_len + 1 > MAX_LINE_LEN {
+                        output.push_str(&line);
+                        output.push('\n');
+                        line = String::from("      ");
+                        line_len = 0;
+                    }
+
+                    if line_len > 0 {
+                        line.push(' ');
+                        line_len += 1;
+                    }
+                    line.push_str(colored_name);
+                    line_len += visible_len;
+                }
+
+                if line_len > 0 {
+                    output.push_str(&line);
+                    output.push('\n');
+                }
+            }
         }
 
         output
@@ -578,22 +693,24 @@ impl DirectoryRenderer {
     }
 
     /// Render standalone functions.
+    ///
+    /// At Low/Medium detail: compact block format (names only, space-separated)
+    /// At High detail: one per line with full signatures
     fn render_functions(
         &self,
         functions: &[&RankedTag],
         detail: DetailLevel,
         badges: &HashMap<String, Vec<Badge>>,
     ) -> String {
-        let mut output = String::from("    def: ");
+        let mut output = String::from("    def:\n");
 
-        let func_strs: Vec<_> = functions
-            .iter()
-            .map(|f| {
-                let mut s = Colorizer::function_name(&f.tag.name);
+        if detail >= DetailLevel::High {
+            // High detail: one function per line with signatures
+            for f in functions {
+                let mut s = String::from("      ");
+                s.push_str(&Colorizer::function_name(&f.tag.name));
                 if let Some(sig) = &f.tag.signature {
                     s.push_str(&sig.render(detail));
-                } else if detail >= DetailLevel::Medium {
-                    s.push_str("(...)");
                 }
 
                 // Add symbol-level badges if present
@@ -605,12 +722,44 @@ impl DirectoryRenderer {
                     }
                 }
 
-                s
-            })
-            .collect();
+                output.push_str(&s);
+                output.push('\n');
+            }
+        } else {
+            // Low/Medium detail: compact block (names only, wrapped at ~70 chars)
+            let names: Vec<_> = functions
+                .iter()
+                .map(|f| (Colorizer::function_name(&f.tag.name), f.tag.name.len()))
+                .collect();
 
-        output.push_str(&func_strs.join("\n         "));
-        output.push('\n');
+            // Wrap names into lines of ~70 visible chars
+            let mut line = String::from("      ");
+            let mut line_len = 0;
+            const MAX_LINE_LEN: usize = 70;
+
+            for (colored_name, visible_len) in &names {
+                if line_len > 0 && line_len + visible_len + 1 > MAX_LINE_LEN {
+                    // Start new line
+                    output.push_str(&line);
+                    output.push('\n');
+                    line = String::from("      ");
+                    line_len = 0;
+                }
+
+                if line_len > 0 {
+                    line.push(' ');
+                    line_len += 1;
+                }
+                line.push_str(colored_name);
+                line_len += visible_len;
+            }
+
+            if line_len > 0 {
+                output.push_str(&line);
+                output.push('\n');
+            }
+        }
+
         output
     }
 

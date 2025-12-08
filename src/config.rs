@@ -298,7 +298,9 @@ impl Config {
             return true;
         }
         let path_str = path.to_string_lossy();
-        self.include.iter().any(|pattern| Self::matches_pattern(pattern, &path_str))
+        self.include
+            .iter()
+            .any(|pattern| Self::matches_pattern(pattern, &path_str))
     }
 
     /// Check if a path matches any exclude pattern.
