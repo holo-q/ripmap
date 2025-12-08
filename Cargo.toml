@@ -2,9 +2,14 @@
 name = "ripmap"
 version = "0.1.0"
 edition = "2024"
-description = "Ultra-fast codebase cartography - 1000x faster grepmap"
+description = "Ultra-fast codebase cartography for LLMs"
 authors = ["nuck"]
 license = "MIT"
+repository = "https://github.com/holo-q/ripmap"
+homepage = "https://github.com/holo-q/ripmap"
+readme = "README.md"
+keywords = ["llm", "codebase", "tree-sitter", "pagerank", "cli"]
+categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]
 # Parsing - tree-sitter ecosystem
