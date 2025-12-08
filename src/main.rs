@@ -476,11 +476,33 @@ fn run(cli: &Cli) -> Result<String> {
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    // Stage 4.6: Focus Expansion via Call Graph
+    // Stage 4.6: Test↔Source Coupling Detection
+    // ══════════════════════════════════════════════════════════════════════════
+    // Codex optimization identified "path-aware test↔crate coupling edges" as
+    // a missing architectural feature. Detect test files and link them to their
+    // corresponding source files, adding synthetic edges for graph expansion.
+    use ripmap::ranking::{FocusResolver, TestCouplingDetector};
+
+    let coupling_detector = TestCouplingDetector::new()
+        .with_min_confidence(config.test_coupling_min_confidence);
+
+    // Detect test↔source couplings from file list
+    let file_paths: Vec<_> = files.iter().map(|f| {
+        f.strip_prefix(&root).unwrap_or(f).to_path_buf()
+    }).collect();
+
+    let test_couplings = coupling_detector.detect_couplings(&file_paths);
+    let test_coupling_edges = coupling_detector.as_symbol_edges(&test_couplings);
+
+    if cli.verbose && !test_couplings.is_empty() {
+        eprintln!("✓ Detected {} test↔source couplings", test_couplings.len());
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // Stage 4.7: Focus Expansion via Call Graph
     // ══════════════════════════════════════════════════════════════════════════
     // When user provides --focus, we BFS through call relationships to find
     // related functions. This surfaces the call chain around focused symbols.
-    use ripmap::ranking::FocusResolver;
 
     let focus_expansion_weights = if cli.focus.is_some() {
         let focus_start = Instant::now();
@@ -498,7 +520,9 @@ fn run(cli: &Cli) -> Result<String> {
         let matched_set: HashSet<String> = matched_idents;
 
         // Get call graph edges for BFS expansion
-        let symbol_edges = call_graph.as_symbol_edges();
+        // Combine call graph edges with test↔source coupling edges
+        let mut symbol_edges = call_graph.as_symbol_edges();
+        symbol_edges.extend(test_coupling_edges.clone());
 
         // Expand through call relationships: callers and callees of focused functions
         // Uses configurable max_hops and decay from RankingConfig

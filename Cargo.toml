@@ -40,6 +40,8 @@ redb = "2"
 # Terminal
 crossterm = "0.28"
 owo-colors = "4"
+comfy-table = "7"
+indicatif = "0.17"
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
@@ -70,6 +72,7 @@ rmcp = { version = "0.3", features = ["server", "transport-io"] }
 tokio = { version = "1", features = ["full"] }
 schemars = "1"
 plotters = { version = "0.3.7", optional = true }
+toml = "0.9.8"
 
 [[bin]]
 name = "ripmap"

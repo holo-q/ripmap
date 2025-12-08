@@ -328,6 +328,21 @@ pub struct RankingConfig {
     pub focus_expansion_max_hops: usize,
     pub focus_expansion_decay: f64,
 
+    // Test↔source coupling settings
+    // Codex optimization identified this as a missing architectural feature:
+    // "path-aware test↔crate coupling edges" for surfacing related test files
+    pub boost_test_coupling: f64,
+    pub test_coupling_min_confidence: f64,
+
+    // Hub damping: penalizes "hub" nodes with excessive incoming edges.
+    // Codex identified "degree-normalized hub damping" as needed to prevent
+    // utility functions (log(), print()) from dominating rankings.
+    // Values:
+    //   0.0 = no damping (heavily-called functions get full boost)
+    //   1.0 = full damping (caller count is neutralized)
+    //   >1.0 = penalty (heavily-called functions are penalized as noise)
+    pub hub_damping: f64,
+
     // Git settings
     pub git_recency_decay_days: f64,
     pub git_recency_max_boost: f64,
@@ -375,6 +390,16 @@ impl Default for RankingConfig {
             // Call graph / focus expansion
             focus_expansion_max_hops: 2,  // BFS depth through call relationships
             focus_expansion_decay: 0.5,   // Weight decay per hop (0.5 = halve each hop)
+
+            // Test↔source coupling
+            boost_test_coupling: 5.0,      // Test files boost their source files
+            test_coupling_min_confidence: 0.5, // Minimum pattern match confidence
+
+            // Hub damping: balance between "called = important" and "utility = noise"
+            // 0.0 = no damping (heavily-called functions are boosted)
+            // 1.0 = neutralize caller boost entirely
+            // Future: Codex may tune this based on repo characteristics
+            hub_damping: 0.0,
 
             // Git
             git_recency_decay_days: 30.0,

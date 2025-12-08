@@ -3,17 +3,20 @@
 //! # Usage
 //!
 //! ```bash
-//! # Quick test on a single repo
-//! ripmap-bench --repo /path/to/repo --budget 50
+//! # Single repo for testing
+//! ripmap-train --repo /path/to/repo --budget 50
 //!
-//! # Full evaluation with curated repos
-//! ripmap-bench --curated --strategy bayesian --budget 500 --output results.json
+//! # Quick corpus (5 repos) for dev iteration
+//! ripmap-train --corpus quick --strategy bayesian --budget 100
+//!
+//! # Full curated corpus for training
+//! ripmap-train --corpus curated --strategy bayesian --budget 500
+//!
+//! # Reasoning-based training (uses LLM to analyze failures)
+//! ripmap-train --corpus curated --reason --prompt training-outer/prompts/inner/v001.md --episodes 50
 //!
 //! # Sensitivity analysis on best config
-//! ripmap-bench --repo /path/to/repo --sensitivity --config best_config.json
-//!
-//! # Just extract training data (no optimization)
-//! ripmap-bench --repo /path/to/repo --extract-only --output cases.json
+//! ripmap-train --repo /path/to/repo --sensitivity --config best_config.json
 //! ```
 //!
 //! # Output
@@ -55,13 +58,10 @@ struct Args {
     #[arg(long)]
     repo: Option<PathBuf>,
 
-    /// Use curated repository list (will clone if needed)
+    /// Corpus to use: quick (5 repos), curated (full set), or a path to custom list
+    /// Examples: --corpus quick, --corpus curated, --corpus ./my_repos.txt
     #[arg(long)]
-    curated: bool,
-
-    /// Use quick subset of curated repos
-    #[arg(long)]
-    quick: bool,
+    corpus: Option<String>,
 
     /// Search strategy: grid, lhs, random, bayesian
     #[arg(long, default_value = "lhs")]
@@ -117,6 +117,11 @@ struct Args {
     distractors: Option<PathBuf>,
 
     // === Reasoning-Based Training ===
+
+    /// Path to prompt template file (required for --reason mode)
+    /// Contains placeholders: {current_ndcg:.4}, {episode_num}, {episode_history}, {params_desc}, {failure_desc}
+    #[arg(long)]
+    prompt: Option<PathBuf>,
 
     /// Use reasoning-based training via Claude (universal function approximator)
     /// Instead of blind parameter search, Claude analyzes WHY rankings fail
@@ -367,7 +372,8 @@ fn list_training_runs() -> anyhow::Result<()> {
 /// Rich text visualization of a past training run.
 /// Shows the full optimization journey: trajectory, strategies, insights.
 fn show_training_run(path: &str) -> anyhow::Result<()> {
-    use ripmap::training::ReasoningEpisode;
+    use comfy_table::{Table, Cell, ContentArrangement, presets::UTF8_FULL_CONDENSED};
+    use owo_colors::OwoColorize;
 
     // Resolve path: either a run name or direct path to scratchpad
     let scratchpad_path = if path.ends_with(".json") {
@@ -394,10 +400,10 @@ fn show_training_run(path: &str) -> anyhow::Result<()> {
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_else(|| "unknown".to_string());
 
-    println!("\n╔══════════════════════════════════════════════════════════════════════════════╗");
-    println!("║  TRAINING RUN: {:^60} ║", run_name);
-    println!("║  Episodes: {:^63} ║", scratchpad.episodes.len());
-    println!("╚══════════════════════════════════════════════════════════════════════════════╝\n");
+    println!();
+    println!("{}", format!(" TRAINING RUN: {} ", run_name).bold().on_blue());
+    println!("  Episodes: {}", scratchpad.episodes.len());
+    println!();
 
     // NDCG trajectory sparkline
     let ndcgs: Vec<f64> = scratchpad.episodes.iter().map(|e| e.ndcg_before).collect();
@@ -411,38 +417,49 @@ fn show_training_run(path: &str) -> anyhow::Result<()> {
         spark_chars[normalized.min(7)]
     }).collect();
 
-    println!("┌─ NDCG TRAJECTORY ─────────────────────────────────────────────────────────────┐");
-    println!("│  {:.3} {} {:.3}  │", min_ndcg, sparkline, max_ndcg);
-    println!("│  {:^74} │", format!("Δ = {:+.4}", ndcgs.last().unwrap_or(&0.0) - ndcgs.first().unwrap_or(&0.0)));
-    println!("└──────────────────────────────────────────────────────────────────────────────┘\n");
+    let delta = ndcgs.last().unwrap_or(&0.0) - ndcgs.first().unwrap_or(&0.0);
+    let delta_str = if delta > 0.0 {
+        format!("{:+.4}", delta).green().to_string()
+    } else if delta < 0.0 {
+        format!("{:+.4}", delta).red().to_string()
+    } else {
+        format!("{:+.4}", delta).dimmed().to_string()
+    };
 
-    // Episode-by-episode breakdown
-    println!("┌─ EPISODES ─────────────────────────────────────────────────────────────────────┐");
+    println!("{}", "NDCG TRAJECTORY".bold());
+    println!("  {:.3} {} {:.3}  Δ = {}", min_ndcg, sparkline.cyan(), max_ndcg, delta_str);
+    println!();
+
+    // Episode-by-episode breakdown as a table
+    println!("{}", "EPISODES".bold());
+
+    let mut table = Table::new();
+    table.load_preset(UTF8_FULL_CONDENSED);
+    table.set_content_arrangement(ContentArrangement::Dynamic);
+    table.set_header(vec!["#", "Trend", "NDCG", "Fail", "Conf", "Strategy / Changes / Insight"]);
 
     for (i, ep) in scratchpad.episodes.iter().enumerate() {
         let ep_num = i + 1;
         let trend = if i == 0 {
-            ' '
+            "·".to_string()
         } else {
             let prev = scratchpad.episodes[i - 1].ndcg_before;
-            if ep.ndcg_before > prev + 0.005 { '↗' }
-            else if ep.ndcg_before < prev - 0.005 { '↘' }
-            else { '→' }
+            if ep.ndcg_before > prev + 0.005 { "↗".green().to_string() }
+            else if ep.ndcg_before < prev - 0.005 { "↘".red().to_string() }
+            else { "→".dimmed().to_string() }
         };
 
-        // Episode header
-        println!("│                                                                              │");
-        println!("│  E{:02} {} NDCG={:.4}  failures={}  conf={:.2}                                   │",
-            ep_num, trend, ep.ndcg_before, ep.failures.len(), ep.confidence);
+        // Build the description column with strategy, changes, insight
+        let mut desc_parts: Vec<String> = Vec::new();
 
         // Strategy capsule
         if !ep.strategy_capsule.is_empty() {
-            let capsule = if ep.strategy_capsule.len() > 70 {
-                format!("{}...", &ep.strategy_capsule[..67])
+            let capsule = if ep.strategy_capsule.len() > 60 {
+                format!("⟨{}...⟩", &ep.strategy_capsule[..57])
             } else {
-                ep.strategy_capsule.clone()
+                format!("⟨{}⟩", &ep.strategy_capsule)
             };
-            println!("│      ⟨ {} ⟩", capsule);
+            desc_parts.push(capsule);
         }
 
         // Parameter changes (compact format)
@@ -454,41 +471,71 @@ fn show_training_run(path: &str) -> anyhow::Result<()> {
                     format!("{}{}{}", k, arrow, mag_short)
                 })
                 .collect();
-            println!("│      Changes: {}", changes.join(", "));
+            desc_parts.push(changes.join(", "));
         }
 
         // Key insight from this episode
         if !ep.structural_insights.is_empty() {
             let insight = &ep.structural_insights[0];
-            let truncated = if insight.len() > 68 {
-                format!("{}...", &insight[..65])
+            let truncated = if insight.len() > 55 {
+                format!("💡 {}...", &insight[..52])
             } else {
-                insight.clone()
+                format!("💡 {}", insight)
             };
-            println!("│      Insight: {}", truncated);
+            desc_parts.push(truncated);
         }
+
+        table.add_row(vec![
+            Cell::new(format!("E{:02}", ep_num)),
+            Cell::new(&trend),
+            Cell::new(format!("{:.4}", ep.ndcg_before)),
+            Cell::new(format!("{}", ep.failures.len())),
+            Cell::new(format!("{:.2}", ep.confidence)),
+            Cell::new(desc_parts.join("\n")),
+        ]);
     }
 
-    println!("│                                                                              │");
-    println!("└──────────────────────────────────────────────────────────────────────────────┘\n");
+    println!("{table}");
+    println!();
 
-    // Final parameters (from last episode)
+    // Final parameters (from last episode) as a compact table
     if let Some(last_ep) = scratchpad.episodes.last() {
-        println!("┌─ FINAL PARAMETERS ───────────────────────────────────────────────────────────┐");
+        println!("{}", "FINAL PARAMETERS".bold());
+
+        let mut ptable = Table::new();
+        ptable.load_preset(UTF8_FULL_CONDENSED);
+        ptable.set_content_arrangement(ContentArrangement::Dynamic);
+        ptable.set_header(vec!["Category", "Parameters"]);
+
         let p = &last_ep.params;
-        println!("│  PageRank:  α={:.3}  chat_mult={:.1}                                         │",
-            p.pagerank_alpha, p.pagerank_chat_multiplier);
-        println!("│  Depth:     root={:.2}  mod={:.2}  deep={:.2}  vendor={:.4}                  │",
-            p.depth_weight_root, p.depth_weight_moderate, p.depth_weight_deep, p.depth_weight_vendor);
-        println!("│  Boosts:    ident={:.1}  file={:.1}  chat={:.1}  temp={:.2}  focus={:.2}     │",
-            p.boost_mentioned_ident, p.boost_mentioned_file, p.boost_chat_file,
-            p.boost_temporal_coupling, p.boost_focus_expansion);
-        println!("│  Git:       decay={:.0}d  recency_max={:.1}  churn_th={:.0}  churn_max={:.1} │",
-            p.git_recency_decay_days, p.git_recency_max_boost,
-            p.git_churn_threshold, p.git_churn_max_boost);
-        println!("│  Focus:     decay={:.2}  max_hops={:.0}                                      │",
-            p.focus_decay, p.focus_max_hops);
-        println!("└──────────────────────────────────────────────────────────────────────────────┘\n");
+        ptable.add_row(vec![
+            "PageRank",
+            &format!("α={:.3}  chat_mult={:.1}", p.pagerank_alpha, p.pagerank_chat_multiplier),
+        ]);
+        ptable.add_row(vec![
+            "Depth",
+            &format!("root={:.2}  mod={:.2}  deep={:.2}  vendor={:.4}",
+                p.depth_weight_root, p.depth_weight_moderate, p.depth_weight_deep, p.depth_weight_vendor),
+        ]);
+        ptable.add_row(vec![
+            "Boosts",
+            &format!("ident={:.1}  file={:.1}  chat={:.1}  temp={:.2}  focus={:.2}",
+                p.boost_mentioned_ident, p.boost_mentioned_file, p.boost_chat_file,
+                p.boost_temporal_coupling, p.boost_focus_expansion),
+        ]);
+        ptable.add_row(vec![
+            "Git",
+            &format!("decay={:.0}d  recency_max={:.1}  churn_th={:.0}  churn_max={:.1}",
+                p.git_recency_decay_days, p.git_recency_max_boost,
+                p.git_churn_threshold, p.git_churn_max_boost),
+        ]);
+        ptable.add_row(vec![
+            "Focus",
+            &format!("decay={:.2}  max_hops={:.0}", p.focus_decay, p.focus_max_hops),
+        ]);
+
+        println!("{ptable}");
+        println!();
     }
 
     Ok(())
@@ -641,11 +688,19 @@ fn main() -> anyhow::Result<()> {
     // Determine repos to use
     let repos: Vec<PathBuf> = if let Some(ref repo) = args.repo {
         vec![repo.clone()]
-    } else if args.curated || args.quick {
-        let specs = if args.quick { quick_repos() } else { CURATED_REPOS.iter().collect() };
+    } else if let Some(ref corpus) = args.corpus {
+        let specs = match corpus.as_str() {
+            "quick" => quick_repos(),
+            "curated" => CURATED_REPOS.iter().collect(),
+            // Future: could load from file path
+            other => {
+                eprintln!("Error: Unknown corpus '{}'. Use 'quick' or 'curated'", other);
+                std::process::exit(1);
+            }
+        };
         ensure_repos_cloned(&specs, &args.clone_dir)?
     } else {
-        eprintln!("Error: Specify --repo or --curated");
+        eprintln!("Error: Specify --repo or --corpus");
         std::process::exit(1);
     };
 
@@ -1077,12 +1132,19 @@ fn run_reasoning_training(
 ) -> anyhow::Result<()> {
     use ripmap::training::LiveProgress;
 
+    // Load prompt template (required)
+    let prompt_path = args.prompt.as_ref()
+        .ok_or_else(|| anyhow::anyhow!("--prompt is required for reasoning mode. Example: --prompt training-outer/prompts/inner/v001.md"))?;
+    let prompt_template = std::fs::read_to_string(prompt_path)
+        .map_err(|e| anyhow::anyhow!("Failed to read prompt template '{}': {}", prompt_path.display(), e))?;
+
     // Parse agent type
     let agent: Agent = args.agent.parse()
         .map_err(|e: String| anyhow::anyhow!(e))?;
     let model = args.model.as_deref();
 
     println!("\n=== REASONING-BASED TRAINING ===");
+    println!("Prompt: {}", prompt_path.display());
     println!("Using {} as universal function approximator\n", agent);
 
     // Load or create scratchpad
@@ -1129,7 +1191,7 @@ fn run_reasoning_training(
 
         // Ask LLM to reason about failures
         println!("Calling {} for reasoning...", agent);
-        match reason_about_failures(&failures, &current_params, &scratchpad, metrics.ndcg_at_10, agent, model) {
+        match reason_about_failures(&prompt_template, &failures, &current_params, &scratchpad, metrics.ndcg_at_10, agent, model) {
             Ok(episode) => {
                 // Record metrics for live progress visualization
                 progress.record(

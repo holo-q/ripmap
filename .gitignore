@@ -12,6 +12,7 @@ Cargo.lock
 /training/runs/
 /tmp/
 *.json.bak
+training/**
 
 # Grepmap cache
 .grepmap.tags.cache*/

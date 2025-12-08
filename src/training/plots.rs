@@ -111,38 +111,52 @@ impl LiveProgress {
 
     /// Print final summary with full sparklines.
     pub fn final_summary(&self) {
+        use owo_colors::OwoColorize;
+
         println!("\n");
-        println!("╔══════════════════════════════════════════════════════════════╗");
-        println!("║              TRAINING COMPLETE                               ║");
-        println!("╠══════════════════════════════════════════════════════════════╣");
+        println!("{}", " TRAINING COMPLETE ".bold().on_green());
+        println!();
 
         if !self.ndcg_history.is_empty() {
             let first = self.ndcg_history.first().unwrap();
             let last = self.ndcg_history.last().unwrap();
             let delta = last - first;
-            let arrow = if delta > 0.0 { "↑" } else if delta < 0.0 { "↓" } else { "→" };
-            println!("║  NDCG@10:  {:.4} {} {:.4}  ({:+.4})                        ║",
-                     first, arrow, last, delta);
-            println!("║           [{}]            ║", Self::sparkline(&self.ndcg_history, 40));
+            let (arrow, delta_str) = if delta > 0.0 {
+                ("↑", format!("{:+.4}", delta).green().to_string())
+            } else if delta < 0.0 {
+                ("↓", format!("{:+.4}", delta).red().to_string())
+            } else {
+                ("→", format!("{:+.4}", delta).dimmed().to_string())
+            };
+            println!("  {}: {:.4} {} {:.4}  ({})",
+                     "NDCG@10".bold(), first, arrow, last, delta_str);
+            println!("          [{}]", Self::sparkline(&self.ndcg_history, 40).cyan());
         }
 
         if !self.failure_history.is_empty() {
             let first = self.failure_history.first().unwrap();
             let last = self.failure_history.last().unwrap();
             let fail_f64: Vec<f64> = self.failure_history.iter().map(|&f| f as f64).collect();
-            println!("║  Failures: {:3} → {:3}  ({:+})                                  ║",
-                     first, last, (*last as i32) - (*first as i32));
-            println!("║           [{}]            ║", Self::sparkline(&fail_f64, 40));
+            let delta = (*last as i32) - (*first as i32);
+            let delta_str = if delta < 0 {
+                format!("{:+}", delta).green().to_string()
+            } else if delta > 0 {
+                format!("{:+}", delta).red().to_string()
+            } else {
+                format!("{:+}", delta).dimmed().to_string()
+            };
+            println!("  {}: {:3} → {:3}  ({})",
+                     "Failures".bold(), first, last, delta_str);
+            println!("          [{}]", Self::sparkline(&fail_f64, 40).cyan());
         }
 
         if !self.alpha_history.is_empty() {
             let first = self.alpha_history.first().unwrap();
             let last = self.alpha_history.last().unwrap();
-            println!("║  α:       {:.3} → {:.3}                                      ║", first, last);
-            println!("║           [{}]            ║", Self::sparkline(&self.alpha_history, 40));
+            println!("  {}: {:.3} → {:.3}", "α".bold(), first, last);
+            println!("          [{}]", Self::sparkline(&self.alpha_history, 40).cyan());
         }
-
-        println!("╚══════════════════════════════════════════════════════════════╝");
+        println!();
     }
 }
 

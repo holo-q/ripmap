@@ -115,6 +115,7 @@ fn create_mock_codebase() -> (
                 parent_line: None,
                 signature: None,
                 fields: None,
+                metadata: None,
             },
             Tag {
                 rel_fname: "src/auth.rs".into(),
@@ -127,6 +128,7 @@ fn create_mock_codebase() -> (
                 parent_line: None,
                 signature: None,
                 fields: None,
+                metadata: None,
             },
             Tag {
                 rel_fname: "src/auth.rs".into(),
@@ -139,6 +141,7 @@ fn create_mock_codebase() -> (
                 parent_line: None,
                 signature: None,
                 fields: None,
+                metadata: None,
             },
         ],
     );
@@ -158,6 +161,7 @@ fn create_mock_codebase() -> (
                 parent_line: None,
                 signature: None,
                 fields: None,
+                metadata: None,
             },
             Tag {
                 rel_fname: "src/parser.rs".into(),
@@ -170,6 +174,7 @@ fn create_mock_codebase() -> (
                 parent_line: None,
                 signature: None,
                 fields: None,
+                metadata: None,
             },
         ],
     );
@@ -189,6 +194,7 @@ fn create_mock_codebase() -> (
                 parent_line: None,
                 signature: None,
                 fields: None,
+                metadata: None,
             },
             Tag {
                 rel_fname: "src/config.rs".into(),
@@ -201,6 +207,7 @@ fn create_mock_codebase() -> (
                 parent_line: None,
                 signature: None,
                 fields: None,
+                metadata: None,
             },
         ],
     );
@@ -219,6 +226,7 @@ fn create_mock_codebase() -> (
             parent_line: None,
             signature: None,
             fields: None,
+            metadata: None,
         }],
     );
 

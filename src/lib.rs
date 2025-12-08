@@ -30,6 +30,7 @@ pub mod rendering;
 pub mod cache;
 pub mod mcp;
 pub mod training;
+pub mod training_outer;
 pub mod callgraph;
 
 // Re-export core types

@@ -174,6 +174,7 @@ fn make_tag(rel_fname: &str, name: &str, kind: TagKind) -> Tag {
         parent_line: None,
         signature: None,
         fields: None,
+        metadata: None,
     }
 }
 

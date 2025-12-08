@@ -273,9 +273,17 @@ pub fn call_agent(agent: Agent, prompt: &str, model: Option<&str>) -> Result<Str
 /// This is where the LLM acts as a universal function approximator:
 /// f(failures, params, history) -> (reasoning, proposals, insights)
 ///
+/// The `prompt_template` should contain placeholders:
+/// - `{current_ndcg:.4}` - current NDCG score
+/// - `{episode_num}` - current episode number
+/// - `{episode_history}` - formatted history of recent episodes
+/// - `{params_desc}` - current parameter values
+/// - `{failure_desc}` - formatted failure cases
+///
 /// Supports multiple agents via the `agent` parameter.
 /// Optionally specify a model (e.g., "opus", "o3", "gemini-2.0-flash").
 pub fn reason_about_failures(
+    prompt_template: &str,
     failures: &[RankingFailure],
     current_params: &ParameterPoint,
     scratchpad: &Scratchpad,
@@ -422,70 +430,13 @@ Repo: {} ({} files)"#,
         history
     };
 
-    // The prompt is designed to let the LLM act as a mesa-optimizer:
-    // - Full trajectory context lets it recognize patterns (collapse, improvement, plateau)
-    // - Free-form reasoning section before JSON lets it think naturally
-    // - The model already has holographic heuristics for optimization; we just show it the gradient
-    let prompt = format!(
-        r#"You are a REASONING-BASED OPTIMIZER for ripmap, a code ranking system.
-
-You are approximating the gradient in CONCEPT SPACE. Your goal: analyze ranking failures
-and propose hyperparameter changes that improve NDCG.
-
-=== OPTIMIZATION TRAJECTORY ===
-Current NDCG: {current_ndcg:.4}
-Episode: {episode_num}
-
-{episode_history}
-
-=== CURRENT PARAMETERS ===
-{params_desc}
-
-=== THIS EPISODE'S FAILURES ===
-{failure_desc}
-
-=== THINK STEP BY STEP ===
-
-First, analyze the trajectory:
-- Is NDCG improving, degrading, or plateaued?
-- If degrading: what recent changes might have caused this?
-- If improving: what's working and should continue?
-- If plateaued: what new direction might help?
-
-Second, analyze the failures:
-- What signal is missing or overwhelming in each failure?
-- Are there parameter interactions causing problems?
-
-Third, decide your action:
-- If in collapse (NDCG dropping): consider REVERTING recent changes or trying opposite direction
-- If stable/improving: make incremental adjustments
-- If plateaued: consider larger changes or different parameters
-
-=== OUTPUT ===
-
-Reason freely first, then output JSON in this EXACT format:
-
-REASONING:
-[Your analysis here - be specific about trajectory patterns and causal hypotheses]
-
-JSON:
-{{
-  "strategy_capsule": "1-2 sentence description of your intent (exploring, testing counterfactual, reverting, etc.)",
-  "diagnosis": "summary of your analysis",
-  "param_interactions": ["any interactions discovered"],
-  "proposed_changes": {{
-    "param_name": ["increase|decrease", "small|medium|large", "rationale"]
-  }},
-  "structural_insights": ["insights beyond parameter tuning"],
-  "confidence": 0.7
-}}
-"#,
-        current_ndcg = current_ndcg,
-        episode_num = scratchpad.episodes.len() + 1,
-        episode_history = episode_history,
-        params_desc = params_desc,
-        failure_desc = failure_desc,
-    );
+    // Inject dynamic context into the prompt template
+    let prompt = prompt_template
+        .replace("{current_ndcg:.4}", &format!("{:.4}", current_ndcg))
+        .replace("{episode_num}", &(scratchpad.episodes.len() + 1).to_string())
+        .replace("{episode_history}", &episode_history)
+        .replace("{params_desc}", &params_desc)
+        .replace("{failure_desc}", &failure_desc);
 
     let response = call_agent(agent, &prompt, model)?;
 

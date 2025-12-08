@@ -1,0 +1,413 @@
+//! Promptgram: treating prompts as structured programs.
+//!
+//! A promptgram is not a blob of text but a structured program with sections
+//! that can be independently evolved by the outer loop.
+
+use std::collections::HashMap;
+use std::path::Path;
+use serde::{Deserialize, Serialize};
+
+/// A promptgram: a structured prompt treated as a program.
+///
+/// Each section serves a specific role and can be independently modified
+/// by the outer loop optimizer.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Promptgram {
+    /// Unique identifier for this promptgram
+    pub id: String,
+
+    /// Parent promptgram ID (if this was derived from another)
+    #[serde(default)]
+    pub parent_id: Option<String>,
+
+    /// Version number (increments with each edit)
+    pub version: usize,
+
+    /// The structured sections of the prompt
+    pub sections: HashMap<String, PromptSection>,
+
+    /// Metadata about this promptgram
+    pub metadata: PromptgramMetadata,
+}
+
+/// A section of a promptgram.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromptSection {
+    /// Section name (Role, Policy, Heuristics, etc.)
+    pub name: String,
+
+    /// Section content (markdown/text)
+    pub content: String,
+
+    /// Is this section immutable (cannot be edited by L2)?
+    #[serde(default)]
+    pub immutable: bool,
+
+    /// Tags for categorization
+    #[serde(default)]
+    pub tags: Vec<String>,
+}
+
+/// Metadata about a promptgram.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PromptgramMetadata {
+    /// When this promptgram was created
+    pub created_at: i64,
+
+    /// Last modified timestamp
+    pub modified_at: i64,
+
+    /// Best NDCG achieved with this promptgram
+    pub best_ndcg: f64,
+
+    /// Number of inner runs using this promptgram
+    pub run_count: usize,
+
+    /// Human-readable description
+    pub description: String,
+
+    /// Lineage: IDs of ancestor promptgrams
+    #[serde(default)]
+    pub lineage: Vec<String>,
+}
+
+/// Standard section names for inner promptgrams (L1).
+pub mod sections {
+    pub const ROLE: &str = "Role";
+    pub const API_CONTRACT: &str = "API_contract";
+    pub const POLICY: &str = "Policy";
+    pub const HEURISTICS: &str = "Heuristics";
+    pub const CURRICULUM: &str = "Curriculum";
+    pub const OUTPUT_SCHEMA: &str = "Output_schema";
+    pub const STYLE: &str = "Style";
+}
+
+impl Promptgram {
+    /// Create a new promptgram with the given ID.
+    pub fn new(id: impl Into<String>) -> Self {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+
+        Promptgram {
+            id: id.into(),
+            parent_id: None,
+            version: 1,
+            sections: HashMap::new(),
+            metadata: PromptgramMetadata {
+                created_at: now,
+                modified_at: now,
+                ..Default::default()
+            },
+        }
+    }
+
+    /// Add or update a section.
+    pub fn with_section(mut self, name: &str, content: &str, immutable: bool) -> Self {
+        self.sections.insert(name.to_string(), PromptSection {
+            name: name.to_string(),
+            content: content.to_string(),
+            immutable,
+            tags: vec![],
+        });
+        self
+    }
+
+    /// Get a section by name.
+    pub fn get_section(&self, name: &str) -> Option<&PromptSection> {
+        self.sections.get(name)
+    }
+
+    /// Render the promptgram to a single prompt string.
+    ///
+    /// Sections are rendered in a canonical order with markdown headers.
+    pub fn render(&self) -> String {
+        let section_order = [
+            sections::ROLE,
+            sections::API_CONTRACT,
+            sections::POLICY,
+            sections::HEURISTICS,
+            sections::CURRICULUM,
+            sections::OUTPUT_SCHEMA,
+            sections::STYLE,
+        ];
+
+        let mut output = String::new();
+
+        // Render sections in canonical order
+        for section_name in &section_order {
+            if let Some(section) = self.sections.get(*section_name) {
+                output.push_str(&format!("## {}\n\n", section.name));
+                output.push_str(&section.content);
+                output.push_str("\n\n");
+            }
+        }
+
+        // Render any additional sections not in canonical order
+        for (name, section) in &self.sections {
+            if !section_order.contains(&name.as_str()) {
+                output.push_str(&format!("## {}\n\n", section.name));
+                output.push_str(&section.content);
+                output.push_str("\n\n");
+            }
+        }
+
+        output.trim().to_string()
+    }
+
+    /// Create a child promptgram (fork with new ID, linked lineage).
+    pub fn fork(&self, new_id: impl Into<String>) -> Self {
+        let new_id = new_id.into();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+
+        let mut lineage = self.metadata.lineage.clone();
+        lineage.push(self.id.clone());
+
+        Promptgram {
+            id: new_id,
+            parent_id: Some(self.id.clone()),
+            version: 1,
+            sections: self.sections.clone(),
+            metadata: PromptgramMetadata {
+                created_at: now,
+                modified_at: now,
+                best_ndcg: 0.0,
+                run_count: 0,
+                description: format!("Fork of {}", self.id),
+                lineage,
+            },
+        }
+    }
+
+    /// Apply an edit to a section.
+    ///
+    /// Returns Err if the section is immutable or doesn't exist (for replace/delete).
+    pub fn apply_edit(&mut self, edit: &super::PromptEdit) -> Result<(), String> {
+        let section = self.sections.get_mut(&edit.section)
+            .ok_or_else(|| format!("Section '{}' not found", edit.section))?;
+
+        if section.immutable {
+            return Err(format!("Section '{}' is immutable", edit.section));
+        }
+
+        match edit.edit_type.as_str() {
+            "append" => {
+                section.content.push_str("\n\n");
+                section.content.push_str(&edit.content);
+            }
+            "replace" => {
+                if edit.target.is_empty() {
+                    // Replace entire section
+                    section.content = edit.content.clone();
+                } else {
+                    // Replace specific target text
+                    section.content = section.content.replace(&edit.target, &edit.content);
+                }
+            }
+            "delete" => {
+                section.content = section.content.replace(&edit.target, "");
+            }
+            _ => return Err(format!("Unknown edit type: {}", edit.edit_type)),
+        }
+
+        self.version += 1;
+        self.metadata.modified_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+
+        Ok(())
+    }
+
+    /// Load a promptgram from a TOML file.
+    pub fn load(path: impl AsRef<Path>) -> Result<Self, String> {
+        let content = std::fs::read_to_string(path.as_ref())
+            .map_err(|e| format!("Failed to read promptgram: {}", e))?;
+        toml::from_str(&content)
+            .map_err(|e| format!("Failed to parse promptgram: {}", e))
+    }
+
+    /// Save the promptgram to a TOML file.
+    pub fn save(&self, path: impl AsRef<Path>) -> Result<(), String> {
+        let content = toml::to_string_pretty(self)
+            .map_err(|e| format!("Failed to serialize promptgram: {}", e))?;
+        std::fs::write(path.as_ref(), content)
+            .map_err(|e| format!("Failed to write promptgram: {}", e))
+    }
+
+    /// Load from markdown with section headers.
+    ///
+    /// Format:
+    /// ```markdown
+    /// ## Role
+    /// Content here...
+    ///
+    /// ## Policy
+    /// More content...
+    /// ```
+    pub fn from_markdown(id: &str, content: &str) -> Self {
+        let mut promptgram = Self::new(id);
+        let mut current_section: Option<String> = None;
+        let mut current_content = String::new();
+
+        for line in content.lines() {
+            if line.starts_with("## ") {
+                // Save previous section if any
+                if let Some(section_name) = current_section.take() {
+                    let immutable = matches!(
+                        section_name.as_str(),
+                        "Role" | "API_contract" | "Output_schema"
+                    );
+                    promptgram = promptgram.with_section(
+                        &section_name,
+                        current_content.trim(),
+                        immutable,
+                    );
+                    current_content.clear();
+                }
+
+                // Start new section
+                current_section = Some(line[3..].trim().to_string());
+            } else if current_section.is_some() {
+                current_content.push_str(line);
+                current_content.push('\n');
+            }
+        }
+
+        // Save last section
+        if let Some(section_name) = current_section {
+            let immutable = matches!(
+                section_name.as_str(),
+                "Role" | "API_contract" | "Output_schema"
+            );
+            promptgram = promptgram.with_section(
+                &section_name,
+                current_content.trim(),
+                immutable,
+            );
+        }
+
+        promptgram
+    }
+}
+
+/// Create baseline inner promptgram (L1 v001).
+///
+/// This is the seed promptgram - L2 will mutate it over time.
+/// Version numbers track lineage, not archetypes.
+pub fn baseline_promptgram() -> Promptgram {
+    Promptgram::new("inner_v001")
+        .with_section(sections::ROLE, r#"You approximate the gradient in concept space.
+Given failures and trajectory, propose parameter changes."#, true)
+
+        .with_section(sections::API_CONTRACT, r#"Input:
+- NDCG, episode number, trajectory history
+- 17 hyperparameters
+- Up to 5 ranking failures with context
+
+Output JSON:
+- strategy_capsule: intent encoding
+- diagnosis: analysis summary
+- param_interactions: discovered couplings
+- proposed_changes: {param: [direction, magnitude, rationale]}
+- structural_insights: beyond-tuning observations
+- confidence: 0.0-1.0"#, true)
+
+        .with_section(sections::POLICY, r#"Analyze trajectory state:
+- Improving: continue direction
+- Degrading: revert or reverse
+- Plateaued: orthogonal move
+
+Analyze failures:
+- Missing signal vs overwhelming signal
+- Parameter interactions"#, false)
+
+        .with_section(sections::HEURISTICS, r#"- NDCG drop >5% = collapse signal
+- Temporal and structural signals compete
+- High boosts cause tunnel vision
+- Low alpha localizes, high alpha globalizes
+- Depth penalties break monorepos"#, false)
+
+        .with_section(sections::OUTPUT_SCHEMA, r#"REASONING:
+[analysis]
+
+JSON:
+{
+  "strategy_capsule": "...",
+  "diagnosis": "...",
+  "param_interactions": [],
+  "proposed_changes": {},
+  "structural_insights": [],
+  "confidence": 0.7
+}"#, true)
+
+        .with_section(sections::STYLE, r#"Analytical. Specific. Reference concrete failures."#, false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_promptgram_render() {
+        let pg = Promptgram::new("test")
+            .with_section(sections::ROLE, "You are a test", true)
+            .with_section(sections::POLICY, "Do the thing", false);
+
+        let rendered = pg.render();
+        assert!(rendered.contains("## Role"));
+        assert!(rendered.contains("You are a test"));
+        assert!(rendered.contains("## Policy"));
+    }
+
+    #[test]
+    fn test_promptgram_fork() {
+        let parent = Promptgram::new("parent")
+            .with_section(sections::POLICY, "Original", false);
+
+        let child = parent.fork("child");
+
+        assert_eq!(child.parent_id, Some("parent".to_string()));
+        assert_eq!(child.metadata.lineage, vec!["parent"]);
+        assert!(child.get_section(sections::POLICY).is_some());
+    }
+
+    #[test]
+    fn test_promptgram_edit_immutable() {
+        let mut pg = Promptgram::new("test")
+            .with_section(sections::ROLE, "Original", true);
+
+        let edit = super::super::PromptEdit {
+            section: sections::ROLE.to_string(),
+            edit_type: "replace".to_string(),
+            target: String::new(),
+            content: "Modified".to_string(),
+            rationale: "test".to_string(),
+        };
+
+        assert!(pg.apply_edit(&edit).is_err());
+    }
+
+    #[test]
+    fn test_from_markdown() {
+        let md = r#"## Role
+You are a test optimizer.
+
+## Policy
+Do smart things.
+Make good choices.
+
+## Style
+Be brief.
+"#;
+
+        let pg = Promptgram::from_markdown("test", md);
+        assert!(pg.get_section("Role").is_some());
+        assert!(pg.get_section("Policy").is_some());
+        assert!(pg.get_section("Style").is_some());
+    }
+}

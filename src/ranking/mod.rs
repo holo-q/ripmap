@@ -14,6 +14,7 @@ mod focus;
 mod git;
 mod bridges;
 mod intent;
+mod coupling;
 
 pub use pagerank::PageRanker;
 pub use symbols::SymbolRanker;
@@ -22,3 +23,4 @@ pub use focus::FocusResolver;
 pub use git::{GitWeightCalculator, FileStats};
 pub use bridges::BridgeDetector;
 pub use intent::IntentClassifier;
+pub use coupling::TestCouplingDetector;

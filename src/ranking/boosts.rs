@@ -93,16 +93,27 @@ impl BoostCalculator {
                 .and_then(|w| w.get(&rel_fname))
                 .copied()
                 .unwrap_or(1.0);
-            // Caller weight: files with heavily-called functions get boosted.
-            // boost_caller_weight scales the effect:
-            //   0.0 = no effect (weight always 1.0)
-            //   1.0 = use raw weight directly
-            //   2.0 = amplify the weight difference by 2x
+            // Caller weight with hub damping: balance between "called = important"
+            // and "utility function = noise".
+            //
+            // The interplay between boost_caller_weight and hub_damping:
+            //   - boost_caller_weight amplifies the caller signal
+            //   - hub_damping counteracts it to penalize "hub" nodes
+            //
+            // Effective formula:
+            //   effective_boost = boost_caller_weight * (1.0 - hub_damping)
+            //
+            // With hub_damping = 0.0: full boost (called functions are important)
+            // With hub_damping = 1.0: boost neutralized (caller count ignored)
+            // With hub_damping > 1.0: penalty (hubs are downranked)
             let raw_caller_weight = caller_weights
                 .and_then(|w| w.get(&rel_fname))
                 .copied()
                 .unwrap_or(1.0);
-            let caller_weight = 1.0 + (raw_caller_weight - 1.0) * self.config.boost_caller_weight;
+
+            // Apply hub damping: reduce or invert the caller weight effect
+            let effective_boost = self.config.boost_caller_weight * (1.0 - self.config.hub_damping);
+            let caller_weight = (1.0 + (raw_caller_weight - 1.0) * effective_boost).max(0.01);
 
             // Process only definition tags
             for tag in tags.iter().filter(|t| t.kind == TagKind::Def) {
