@@ -292,22 +292,35 @@ impl Config {
 
     /// Check if a path matches any include pattern.
     /// Returns true if no include patterns (include all), or if path matches any pattern.
+    /// Handles both glob patterns (with *, ?, [) and directory prefixes (e.g., "src").
     pub fn matches_include(&self, path: &Path) -> bool {
         if self.include.is_empty() {
             return true;
         }
         let path_str = path.to_string_lossy();
-        self.include
-            .iter()
-            .any(|pattern| glob_match::glob_match(pattern, &path_str))
+        self.include.iter().any(|pattern| Self::matches_pattern(pattern, &path_str))
     }
 
     /// Check if a path matches any exclude pattern.
+    /// Handles both glob patterns and directory prefixes.
     pub fn matches_exclude(&self, path: &Path) -> bool {
         let path_str = path.to_string_lossy();
         self.effective_excludes()
             .iter()
-            .any(|pattern| glob_match::glob_match(pattern, &path_str))
+            .any(|pattern| Self::matches_pattern(pattern, &path_str))
+    }
+
+    /// Match a pattern against a path, handling both globs and directory prefixes.
+    fn matches_pattern(pattern: &str, path: &str) -> bool {
+        // If pattern contains glob characters, use glob matching
+        if pattern.contains('*') || pattern.contains('?') || pattern.contains('[') {
+            glob_match::glob_match(pattern, path)
+        } else {
+            // Treat as directory prefix: "src" matches "src/foo.py", "src/bar/baz.rs"
+            // Also handle trailing slash: "src/" same as "src"
+            let prefix = pattern.trim_end_matches('/');
+            path == prefix || path.starts_with(&format!("{}/", prefix))
+        }
     }
 
     /// Check if a path should be included (matches include AND not exclude).
@@ -386,5 +399,27 @@ mod tests {
         assert!(config.matches_exclude(Path::new("node_modules/foo.js")));
         // Plus the extension
         assert!(config.matches_exclude(Path::new("src/generated/schema.py")));
+    }
+
+    #[test]
+    fn test_directory_prefix_patterns() {
+        // Test include with directory prefix (no glob chars)
+        let config = Config {
+            include: vec!["src".to_string()],
+            ..Default::default()
+        };
+        assert!(config.matches_include(Path::new("src/main.py")));
+        assert!(config.matches_include(Path::new("src/lib/utils.py")));
+        assert!(!config.matches_include(Path::new("tests/test_main.py")));
+        assert!(!config.matches_include(Path::new("srcfoo/bar.py"))); // "srcfoo" != "src/"
+
+        // Test exclude with directory prefix
+        let config = Config {
+            exclude: vec!["vendor".to_string(), "src/gui/old/".to_string()],
+            ..Default::default()
+        };
+        assert!(config.matches_exclude(Path::new("vendor/lib.py")));
+        assert!(config.matches_exclude(Path::new("src/gui/old/widget.py")));
+        assert!(!config.matches_exclude(Path::new("src/gui/new/widget.py")));
     }
 }
