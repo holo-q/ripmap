@@ -6,8 +6,8 @@
 //! - `Arc` for shared ownership of interned strings
 //! - Frozen/immutable by default (like Python's frozen dataclasses)
 
-use std::sync::Arc;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::sync::Arc;
 
 /// Serde serialization helpers for Arc<str> fields
 mod arc_str_serde {
@@ -112,7 +112,11 @@ impl SignatureInfo {
                         }
                     })
                     .collect();
-                let ret = self.return_type.as_ref().map(|t| format!(" -> {}", simplify_type(t))).unwrap_or_default();
+                let ret = self
+                    .return_type
+                    .as_ref()
+                    .map(|t| format!(" -> {}", simplify_type(t)))
+                    .unwrap_or_default();
                 format!("({}){}", parts.join(", "), ret)
             }
             DetailLevel::High => {
@@ -128,7 +132,11 @@ impl SignatureInfo {
                         }
                     })
                     .collect();
-                let ret = self.return_type.as_ref().map(|t| format!(" -> {}", t)).unwrap_or_default();
+                let ret = self
+                    .return_type
+                    .as_ref()
+                    .map(|t| format!(" -> {}", t))
+                    .unwrap_or_default();
                 format!("({}){}", parts.join(", "), ret)
             }
         }
@@ -216,7 +224,10 @@ pub struct Tag {
     #[serde(with = "arc_str_serde")]
     pub node_type: Arc<str>,
     /// Enclosing scope's name (class or function containing this symbol)
-    #[serde(serialize_with = "arc_str_serde::serialize_opt", deserialize_with = "arc_str_serde::deserialize_opt")]
+    #[serde(
+        serialize_with = "arc_str_serde::serialize_opt",
+        deserialize_with = "arc_str_serde::deserialize_opt"
+    )]
     pub parent_name: Option<Arc<str>>,
     /// Line of the enclosing scope
     pub parent_line: Option<u32>,
@@ -296,7 +307,10 @@ impl PartialOrd for RankedTag {
 impl Ord for RankedTag {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         // Reverse order - higher rank comes first
-        other.rank.partial_cmp(&self.rank).unwrap_or(std::cmp::Ordering::Equal)
+        other
+            .rank
+            .partial_cmp(&self.rank)
+            .unwrap_or(std::cmp::Ordering::Equal)
     }
 }
 
@@ -385,14 +399,14 @@ impl Default for RankingConfig {
             boost_chat_file: 20.0,
             boost_temporal_coupling: 3.0,
             boost_focus_expansion: 5.0,
-            boost_caller_weight: 2.0,  // Files with heavily-called functions
+            boost_caller_weight: 2.0, // Files with heavily-called functions
 
             // Call graph / focus expansion
-            focus_expansion_max_hops: 2,  // BFS depth through call relationships
-            focus_expansion_decay: 0.5,   // Weight decay per hop (0.5 = halve each hop)
+            focus_expansion_max_hops: 2, // BFS depth through call relationships
+            focus_expansion_decay: 0.5,  // Weight decay per hop (0.5 = halve each hop)
 
             // Test↔source coupling
-            boost_test_coupling: 5.0,      // Test files boost their source files
+            boost_test_coupling: 5.0, // Test files boost their source files
             test_coupling_min_confidence: 0.5, // Minimum pattern match confidence
 
             // Hub damping: balance between "called = important" and "utility = noise"
@@ -532,8 +546,14 @@ mod tests {
         };
 
         assert_eq!(sig.render(DetailLevel::Low), "(host, port)");
-        assert_eq!(sig.render(DetailLevel::Medium), "(host: str, port: int) -> bool");
-        assert_eq!(sig.render(DetailLevel::High), "(host: str, port: int) -> bool");
+        assert_eq!(
+            sig.render(DetailLevel::Medium),
+            "(host: str, port: int) -> bool"
+        );
+        assert_eq!(
+            sig.render(DetailLevel::High),
+            "(host: str, port: int) -> bool"
+        );
     }
 
     #[test]

@@ -17,9 +17,9 @@
 //! - Make defaults sane (--color=true, --directory=true)
 //! - Verbose mode for debugging the debugger
 
+use anyhow::Result;
 use clap::Parser;
 use std::path::PathBuf;
-use anyhow::Result;
 
 /// Ultra-fast codebase cartography - 1000x faster grepmap
 ///
@@ -223,8 +223,13 @@ fn run_join_mode(cli: &Cli) -> Result<()> {
     let use_color = cli.color && !cli.no_color;
 
     // Canonicalize root path
-    let root = cli.root.canonicalize()
-        .map_err(|e| anyhow::anyhow!("Failed to resolve root path '{}': {}", cli.root.display(), e))?;
+    let root = cli.root.canonicalize().map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to resolve root path '{}': {}",
+            cli.root.display(),
+            e
+        )
+    })?;
 
     if cli.verbose {
         eprintln!("🔗 ripmap join mode");
@@ -238,10 +243,13 @@ fn run_join_mode(cli: &Cli) -> Result<()> {
     let files: Vec<_> = if cli.extensions.is_empty() {
         all_files
     } else {
-        let exts: std::collections::HashSet<_> = cli.extensions.iter()
+        let exts: std::collections::HashSet<_> = cli
+            .extensions
+            .iter()
             .map(|e| e.strip_prefix('.').unwrap_or(e).to_lowercase())
             .collect();
-        all_files.into_iter()
+        all_files
+            .into_iter()
             .filter(|f| {
                 f.extension()
                     .map(|e| exts.contains(&e.to_string_lossy().to_lowercase()))
@@ -251,7 +259,9 @@ fn run_join_mode(cli: &Cli) -> Result<()> {
     };
 
     if files.is_empty() {
-        return Err(anyhow::anyhow!("No files to join. Provide paths or directories, or check --ext filters."));
+        return Err(anyhow::anyhow!(
+            "No files to join. Provide paths or directories, or check --ext filters."
+        ));
     }
 
     // Collect all content and compute total size
@@ -265,7 +275,8 @@ fn run_join_mode(cli: &Cli) -> Result<()> {
         };
 
         // Compute relative path for display
-        let rel_path = fpath.strip_prefix(&root)
+        let rel_path = fpath
+            .strip_prefix(&root)
             .unwrap_or(fpath)
             .to_string_lossy()
             .to_string();
@@ -280,12 +291,19 @@ fn run_join_mode(cli: &Cli) -> Result<()> {
     // Warn if output is large
     if total_size > JOIN_SIZE_WARNING_THRESHOLD {
         let size_kb = total_size / 1024;
-        eprintln!("⚠️  Warning: Output is {}KB ({} files). Consider using the default map mode for large codebases.",
-            size_kb, segments.len());
+        eprintln!(
+            "⚠️  Warning: Output is {}KB ({} files). Consider using the default map mode for large codebases.",
+            size_kb,
+            segments.len()
+        );
     }
 
     if cli.verbose {
-        eprintln!("✓ Joining {} files ({:.1}KB)", segments.len(), total_size as f64 / 1024.0);
+        eprintln!(
+            "✓ Joining {} files ({:.1}KB)",
+            segments.len(),
+            total_size as f64 / 1024.0
+        );
     }
 
     // Output with separators
@@ -333,22 +351,27 @@ fn run_join_mode(cli: &Cli) -> Result<()> {
 /// 5. Contextual Boosts - focus, git, intent multipliers
 /// 6. Rendering - rich terminal output within token budget
 fn run(cli: &Cli) -> Result<String> {
-    use std::collections::{HashMap, HashSet};
-    use std::sync::Arc;
-    use std::time::Instant;
+    use ripmap::callgraph::ResolverBuilder;
     use ripmap::config::Config;
     use ripmap::discovery::find_source_files_with_config;
     use ripmap::extraction::{Parser, extract_tags};
-    use ripmap::ranking::{PageRanker, BoostCalculator};
+    use ripmap::ranking::{BoostCalculator, PageRanker};
     use ripmap::rendering::DirectoryRenderer;
-    use ripmap::types::{RankingConfig, DetailLevel};
-    use ripmap::callgraph::ResolverBuilder;
+    use ripmap::types::{DetailLevel, RankingConfig};
+    use std::collections::{HashMap, HashSet};
+    use std::sync::Arc;
+    use std::time::Instant;
 
     let start = Instant::now();
 
     // Canonicalize root path for consistent cache keys
-    let root = cli.root.canonicalize()
-        .map_err(|e| anyhow::anyhow!("Failed to resolve root path '{}': {}", cli.root.display(), e))?;
+    let root = cli.root.canonicalize().map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to resolve root path '{}': {}",
+            cli.root.display(),
+            e
+        )
+    })?;
 
     // Load configuration from pyproject.toml or ripmap.toml
     let file_config = Config::load(&root);
@@ -381,7 +404,8 @@ fn run(cli: &Cli) -> Result<String> {
     let mut total_tags = 0;
 
     for file in &files {
-        let rel_fname = file.strip_prefix(&root)
+        let rel_fname = file
+            .strip_prefix(&root)
             .unwrap_or(file)
             .to_string_lossy()
             .to_string();
@@ -398,8 +422,12 @@ fn run(cli: &Cli) -> Result<String> {
     }
 
     if cli.verbose {
-        eprintln!("✓ Extracted {} tags from {} files ({:.2?})",
-            total_tags, tags_by_file.len(), extract_start.elapsed());
+        eprintln!(
+            "✓ Extracted {} tags from {} files ({:.2?})",
+            total_tags,
+            tags_by_file.len(),
+            extract_start.elapsed()
+        );
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -414,11 +442,14 @@ fn run(cli: &Cli) -> Result<String> {
     let page_ranker = PageRanker::new(config.clone());
 
     // Determine chat files (focus files get boost)
-    let chat_fnames: Vec<String> = cli.files.iter()
+    let chat_fnames: Vec<String> = cli
+        .files
+        .iter()
         .filter_map(|f| {
             let path = std::path::Path::new(f);
             if path.exists() {
-                path.strip_prefix(&root).ok()
+                path.strip_prefix(&root)
+                    .ok()
                     .or(Some(path))
                     .map(|p| p.to_string_lossy().to_string())
             } else {
@@ -430,8 +461,11 @@ fn run(cli: &Cli) -> Result<String> {
     let file_ranks = page_ranker.compute_ranks(&tags_by_file, &chat_fnames);
 
     if cli.verbose {
-        eprintln!("✓ Computed PageRank for {} files ({:.2?})",
-            file_ranks.len(), rank_start.elapsed());
+        eprintln!(
+            "✓ Computed PageRank for {} files ({:.2?})",
+            file_ranks.len(),
+            rank_start.elapsed()
+        );
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -443,7 +477,8 @@ fn run(cli: &Cli) -> Result<String> {
     let cg_start = Instant::now();
 
     // Flatten all tags for call graph construction
-    let all_tags: Vec<ripmap::Tag> = tags_by_file.values()
+    let all_tags: Vec<ripmap::Tag> = tags_by_file
+        .values()
         .flat_map(|tags| tags.iter().cloned())
         .collect();
 
@@ -460,10 +495,18 @@ fn run(cli: &Cli) -> Result<String> {
     if cli.verbose {
         let stats = resolver.stats(&all_tags);
         let resolved = stats.total_calls - stats.unresolved;
-        eprintln!("✓ Built call graph: {} functions, {} calls ({:.2?})",
-            call_graph.function_count(), call_graph.call_count(), cg_start.elapsed());
-        eprintln!("  Resolution: {:.1}% success ({} resolved, {} unresolved)",
-            stats.resolution_rate() * 100.0, resolved, stats.unresolved);
+        eprintln!(
+            "✓ Built call graph: {} functions, {} calls ({:.2?})",
+            call_graph.function_count(),
+            call_graph.call_count(),
+            cg_start.elapsed()
+        );
+        eprintln!(
+            "  Resolution: {:.1}% success ({} resolved, {} unresolved)",
+            stats.resolution_rate() * 100.0,
+            resolved,
+            stats.unresolved
+        );
     }
 
     // Compute function-level PageRank on the call graph
@@ -477,7 +520,10 @@ fn run(cli: &Cli) -> Result<String> {
         .collect();
 
     if cli.verbose && !symbol_ranks.is_empty() {
-        eprintln!("✓ Computed function-level PageRank for {} symbols", symbol_ranks.len());
+        eprintln!(
+            "✓ Computed function-level PageRank for {} symbols",
+            symbol_ranks.len()
+        );
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -488,13 +534,14 @@ fn run(cli: &Cli) -> Result<String> {
     // corresponding source files, adding synthetic edges for graph expansion.
     use ripmap::ranking::{FocusResolver, TestCouplingDetector};
 
-    let coupling_detector = TestCouplingDetector::new()
-        .with_min_confidence(config.test_coupling_min_confidence);
+    let coupling_detector =
+        TestCouplingDetector::new().with_min_confidence(config.test_coupling_min_confidence);
 
     // Detect test↔source couplings from file list
-    let file_paths: Vec<_> = files.iter().map(|f| {
-        f.strip_prefix(&root).unwrap_or(f).to_path_buf()
-    }).collect();
+    let file_paths: Vec<_> = files
+        .iter()
+        .map(|f| f.strip_prefix(&root).unwrap_or(f).to_path_buf())
+        .collect();
 
     let test_couplings = coupling_detector.detect_couplings(&file_paths);
     let test_coupling_edges = coupling_detector.as_symbol_edges(&test_couplings);
@@ -514,12 +561,15 @@ fn run(cli: &Cli) -> Result<String> {
         let focus_resolver = FocusResolver::new(&root);
 
         // Parse focus targets from query
-        let focus_targets: Vec<String> = cli.focus.as_ref()
+        let focus_targets: Vec<String> = cli
+            .focus
+            .as_ref()
             .map(|f| f.split_whitespace().map(String::from).collect())
             .unwrap_or_default();
 
         // Resolve focus targets to matched symbols
-        let (_matched_files, matched_idents) = focus_resolver.resolve(&focus_targets, &tags_by_file);
+        let (_matched_files, matched_idents) =
+            focus_resolver.resolve(&focus_targets, &tags_by_file);
 
         // Convert matched idents to the format expand_via_graph expects
         let matched_set: HashSet<String> = matched_idents;
@@ -539,8 +589,11 @@ fn run(cli: &Cli) -> Result<String> {
         );
 
         if cli.verbose && !expanded.is_empty() {
-            eprintln!("✓ Focus expansion: {} symbols via call graph ({:.2?})",
-                expanded.len(), focus_start.elapsed());
+            eprintln!(
+                "✓ Focus expansion: {} symbols via call graph ({:.2?})",
+                expanded.len(),
+                focus_start.elapsed()
+            );
         }
 
         Some(expanded)
@@ -558,7 +611,8 @@ fn run(cli: &Cli) -> Result<String> {
     let mentioned_fnames: HashSet<String> = cli.files.iter().cloned().collect();
 
     // Extract identifiers from focus query
-    let mentioned_idents: HashSet<String> = cli.focus
+    let mentioned_idents: HashSet<String> = cli
+        .focus
         .as_ref()
         .map(|f| f.split_whitespace().map(String::from).collect())
         .unwrap_or_default();
@@ -579,19 +633,30 @@ fn run(cli: &Cli) -> Result<String> {
     let ranked_tags = boost_calculator.apply_boosts(
         &tags_by_file,
         &file_ranks,
-        if symbol_ranks.is_empty() { None } else { Some(&symbol_ranks) },
+        if symbol_ranks.is_empty() {
+            None
+        } else {
+            Some(&symbol_ranks)
+        },
         &chat_fnames_set,
         &mentioned_fnames,
         &mentioned_idents,
         &HashSet::new(), // temporal_boost_files - TODO with git
-        None, // git_weights - TODO
-        if caller_weights.is_empty() { None } else { Some(&caller_weights) },
+        None,            // git_weights - TODO
+        if caller_weights.is_empty() {
+            None
+        } else {
+            Some(&caller_weights)
+        },
         focus_expansion_weights.as_ref(),
     );
 
     if cli.verbose {
-        eprintln!("✓ Applied boosts to {} tags ({:.2?})",
-            ranked_tags.len(), boost_start.elapsed());
+        eprintln!(
+            "✓ Applied boosts to {} tags ({:.2?})",
+            ranked_tags.len(),
+            boost_start.elapsed()
+        );
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -630,7 +695,11 @@ fn run(cli: &Cli) -> Result<String> {
     // Prepend header
     let header = format!(
         "# Ranking: {} | {} symbols | ~{} tokens\n",
-        if ranked_tags.len() > 100 { "high (dense)" } else { "low (sparse)" },
+        if ranked_tags.len() > 100 {
+            "high (dense)"
+        } else {
+            "low (sparse)"
+        },
         ranked_tags.len(),
         token_counter(&output)
     );

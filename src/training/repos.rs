@@ -176,7 +176,6 @@ pub const CURATED_REPOS: &[RepoSpec] = &[
         size: RepoSize::Medium,
         active: true,
     },
-
     // === Python ===
     RepoSpec {
         url: "https://github.com/encode/httpx",
@@ -223,7 +222,6 @@ pub const CURATED_REPOS: &[RepoSpec] = &[
         size: RepoSize::Large,
         active: true,
     },
-
     // === TypeScript ===
     RepoSpec {
         url: "https://github.com/colinhacks/zod",
@@ -234,7 +232,6 @@ pub const CURATED_REPOS: &[RepoSpec] = &[
         size: RepoSize::Small,
         active: true,
     },
-
     // === Go ===
     RepoSpec {
         url: "https://github.com/charmbracelet/bubbletea",

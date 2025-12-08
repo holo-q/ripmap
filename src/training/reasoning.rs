@@ -50,7 +50,10 @@ impl FromStr for Agent {
             "claude" => Ok(Agent::Claude),
             "gemini" => Ok(Agent::Gemini),
             "codex" | "openai" | "o3" => Ok(Agent::Codex),
-            _ => Err(format!("Unknown agent: {}. Use 'claude', 'gemini', or 'codex'", s)),
+            _ => Err(format!(
+                "Unknown agent: {}. Use 'claude', 'gemini', or 'codex'",
+                s
+            )),
         }
     }
 }
@@ -161,7 +164,11 @@ pub struct Scratchpad {
 /// - Enables Read, Grep, Glob tools for single-shot file exploration
 /// - Grants access to scratchpad and episode history
 /// - Agent can read files before reasoning, but still produces response in one turn
-pub fn call_claude(prompt: &str, model: Option<&str>, run_dir: Option<&str>) -> Result<String, String> {
+pub fn call_claude(
+    prompt: &str,
+    model: Option<&str>,
+    run_dir: Option<&str>,
+) -> Result<String, String> {
     let mut args = vec!["--print"];
     let model_str;
     if let Some(m) = model {
@@ -205,7 +212,11 @@ pub fn call_claude(prompt: &str, model: Option<&str>, run_dir: Option<&str>) -> 
 /// - Gemini is ALREADY agentic with `-y` (yolo mode)
 /// - Adds `--include-directories` to grant file access to scratchpad/episodes
 /// - Agent can explore files during single-shot reasoning
-pub fn call_gemini(prompt: &str, model: Option<&str>, run_dir: Option<&str>) -> Result<String, String> {
+pub fn call_gemini(
+    prompt: &str,
+    model: Option<&str>,
+    run_dir: Option<&str>,
+) -> Result<String, String> {
     let mut cmd = Command::new("gemini");
     cmd.args(["-o", "text", "-y"]);
     if let Some(m) = model {
@@ -220,7 +231,8 @@ pub fn call_gemini(prompt: &str, model: Option<&str>, run_dir: Option<&str>) -> 
 
     cmd.arg(prompt);
 
-    let output = cmd.output()
+    let output = cmd
+        .output()
         .map_err(|e| format!("Failed to execute gemini: {}", e))?;
 
     if !output.status.success() {
@@ -240,7 +252,11 @@ pub fn call_gemini(prompt: &str, model: Option<&str>, run_dir: Option<&str>) -> 
 /// - Codex is ALREADY agentic with `exec`
 /// - Adds `--add-dir` to grant file access to scratchpad/episodes
 /// - Agent can explore files during execution before producing final output
-pub fn call_codex(prompt: &str, model: Option<&str>, run_dir: Option<&str>) -> Result<String, String> {
+pub fn call_codex(
+    prompt: &str,
+    model: Option<&str>,
+    run_dir: Option<&str>,
+) -> Result<String, String> {
     use std::io::Write;
 
     // Create temp file for output
@@ -264,7 +280,7 @@ pub fn call_codex(prompt: &str, model: Option<&str>, run_dir: Option<&str>) -> R
 
     args.push("-o".to_string());
     args.push(output_file.to_str().unwrap().to_string());
-    args.push("-".to_string());  // read prompt from stdin
+    args.push("-".to_string()); // read prompt from stdin
 
     // Run codex exec with prompt from stdin, output to file
     let mut child = Command::new("codex")
@@ -277,11 +293,13 @@ pub fn call_codex(prompt: &str, model: Option<&str>, run_dir: Option<&str>) -> R
 
     // Write prompt to stdin
     if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(prompt.as_bytes())
+        stdin
+            .write_all(prompt.as_bytes())
             .map_err(|e| format!("Failed to write to codex stdin: {}", e))?;
     }
 
-    let output = child.wait_with_output()
+    let output = child
+        .wait_with_output()
         .map_err(|e| format!("Failed to wait for codex: {}", e))?;
 
     if !output.status.success() {
@@ -290,28 +308,44 @@ pub fn call_codex(prompt: &str, model: Option<&str>, run_dir: Option<&str>) -> R
         let exit_code = output.status.code().unwrap_or(-1);
 
         // Save failed prompt for debugging
-        let debug_file = std::env::temp_dir().join(format!("codex_failed_{}.txt", std::process::id()));
-        let _ = std::fs::write(&debug_file, format!(
-            "=== CODEX CALL FAILED ===\nExit code: {}\nArgs: {:?}\n\n=== PROMPT ({} chars) ===\n{}\n\n=== STDOUT ===\n{}\n\n=== STDERR ===\n{}",
-            exit_code, args, prompt.len(), prompt, stdout, stderr
-        ));
+        let debug_file =
+            std::env::temp_dir().join(format!("codex_failed_{}.txt", std::process::id()));
+        let _ = std::fs::write(
+            &debug_file,
+            format!(
+                "=== CODEX CALL FAILED ===\nExit code: {}\nArgs: {:?}\n\n=== PROMPT ({} chars) ===\n{}\n\n=== STDOUT ===\n{}\n\n=== STDERR ===\n{}",
+                exit_code,
+                args,
+                prompt.len(),
+                prompt,
+                stdout,
+                stderr
+            ),
+        );
 
         // Extract actual error from stderr (skip Codex session header noise)
-        let error_lines: Vec<&str> = stderr.lines()
-            .filter(|l| !l.starts_with("OpenAI Codex") &&
-                       !l.starts_with("--------") &&
-                       !l.starts_with("workdir:") &&
-                       !l.starts_with("model:") &&
-                       !l.starts_with("provider:") &&
-                       !l.starts_with("approval:") &&
-                       !l.starts_with("sandbox:") &&
-                       !l.starts_with("reasoning") &&
-                       !l.starts_with("session id:") &&
-                       !l.trim().is_empty())
+        let error_lines: Vec<&str> = stderr
+            .lines()
+            .filter(|l| {
+                !l.starts_with("OpenAI Codex")
+                    && !l.starts_with("--------")
+                    && !l.starts_with("workdir:")
+                    && !l.starts_with("model:")
+                    && !l.starts_with("provider:")
+                    && !l.starts_with("approval:")
+                    && !l.starts_with("sandbox:")
+                    && !l.starts_with("reasoning")
+                    && !l.starts_with("session id:")
+                    && !l.trim().is_empty()
+            })
             .collect();
 
         let clean_error = if error_lines.is_empty() {
-            format!("Exit code {} (no error message, check {})", exit_code, debug_file.display())
+            format!(
+                "Exit code {} (no error message, check {})",
+                exit_code,
+                debug_file.display()
+            )
         } else {
             error_lines.join("\n")
         };
@@ -319,8 +353,15 @@ pub fn call_codex(prompt: &str, model: Option<&str>, run_dir: Option<&str>) -> R
         // Clean up temp file
         let _ = std::fs::remove_file(&output_file);
 
-        eprintln!("[codex] Failed with exit code {}. Debug saved to: {}", exit_code, debug_file.display());
-        return Err(format!("Codex failed (exit {}): {}", exit_code, clean_error));
+        eprintln!(
+            "[codex] Failed with exit code {}. Debug saved to: {}",
+            exit_code,
+            debug_file.display()
+        );
+        return Err(format!(
+            "Codex failed (exit {}): {}",
+            exit_code, clean_error
+        ));
     }
 
     // Read output from file
@@ -339,7 +380,12 @@ pub fn call_codex(prompt: &str, model: Option<&str>, run_dir: Option<&str>) -> R
 /// - Grants agents read-only file access to scratchpad and episode history
 /// - Agents can explore files during reasoning before producing structured output
 /// - Still single-shot execution (no multi-turn iteration)
-pub fn call_agent(agent: Agent, prompt: &str, model: Option<&str>, run_dir: Option<&str>) -> Result<String, String> {
+pub fn call_agent(
+    agent: Agent,
+    prompt: &str,
+    model: Option<&str>,
+    run_dir: Option<&str>,
+) -> Result<String, String> {
     match agent {
         Agent::Claude => call_claude(prompt, model, run_dir),
         Agent::Gemini => call_gemini(prompt, model, run_dir),
@@ -402,8 +448,18 @@ Repo: {} ({} files)"#,
                 i + 1,
                 f.query,
                 f.seed_file,
-                f.expected_top.iter().take(5).cloned().collect::<Vec<_>>().join(", "),
-                f.actual_top.iter().take(5).cloned().collect::<Vec<_>>().join(", "),
+                f.expected_top
+                    .iter()
+                    .take(5)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                f.actual_top
+                    .iter()
+                    .take(5)
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", "),
                 f.ndcg,
                 f.commit_context,
                 f.repo_name,
@@ -461,20 +517,38 @@ Repo: {} ({} files)"#,
         // Show NDCG trajectory with strategy intent - the model sees both WHAT happened and WHY
         history.push_str("EPISODE HISTORY (recent → older):\n");
         for (i, ep) in recent_episodes.iter().enumerate() {
-            let trend = if i == 0 { "" } else {
-                let prev_ndcg = recent_episodes.get(i - 1).map(|e| e.ndcg_before).unwrap_or(0.0);
-                if ep.ndcg_before > prev_ndcg + 0.01 { " ↗" }
-                else if ep.ndcg_before < prev_ndcg - 0.01 { " ↘" }
-                else { " →" }
+            let trend = if i == 0 {
+                ""
+            } else {
+                let prev_ndcg = recent_episodes
+                    .get(i - 1)
+                    .map(|e| e.ndcg_before)
+                    .unwrap_or(0.0);
+                if ep.ndcg_before > prev_ndcg + 0.01 {
+                    " ↗"
+                } else if ep.ndcg_before < prev_ndcg - 0.01 {
+                    " ↘"
+                } else {
+                    " →"
+                }
             };
             let ep_num = scratchpad.episodes.len() - i;
             let strategy = if ep.strategy_capsule.is_empty() {
                 String::new()
             } else {
-                format!("\n      Strategy: \"{}\"", ep.strategy_capsule.chars().take(100).collect::<String>())
+                format!(
+                    "\n      Strategy: \"{}\"",
+                    ep.strategy_capsule.chars().take(100).collect::<String>()
+                )
             };
-            history.push_str(&format!("  E{}: NDCG={:.3}{} | failures={}{}\n",
-                ep_num, ep.ndcg_before, trend, ep.failures.len(), strategy));
+            history.push_str(&format!(
+                "  E{}: NDCG={:.3}{} | failures={}{}\n",
+                ep_num,
+                ep.ndcg_before,
+                trend,
+                ep.failures.len(),
+                strategy
+            ));
         }
 
         // Show recent parameter changes - THE GRADIENT
@@ -482,12 +556,18 @@ Repo: {} ({} files)"#,
         for (i, ep) in recent_episodes.iter().take(5).enumerate() {
             let ep_num = scratchpad.episodes.len() - i;
             if !ep.proposed_changes.is_empty() {
-                let changes: Vec<_> = ep.proposed_changes.iter()
+                let changes: Vec<_> = ep
+                    .proposed_changes
+                    .iter()
                     .map(|(k, (dir, mag, _))| format!("{} {} {}", k, dir, mag))
                     .take(3)
                     .collect();
-                history.push_str(&format!("  E{}: {} (conf={:.2})\n",
-                    ep_num, changes.join(", "), ep.confidence));
+                history.push_str(&format!(
+                    "  E{}: {} (conf={:.2})\n",
+                    ep_num,
+                    changes.join(", "),
+                    ep.confidence
+                ));
             }
         }
 
@@ -500,11 +580,18 @@ Repo: {} ({} files)"#,
 
             history.push_str(&format!("\n⚠️ TRAJECTORY ANALYSIS:\n"));
             if trend < -0.05 {
-                history.push_str(&format!("  ALERT: NDCG dropped {:.3} over last {} episodes!\n", -trend, recent_episodes.len()));
+                history.push_str(&format!(
+                    "  ALERT: NDCG dropped {:.3} over last {} episodes!\n",
+                    -trend,
+                    recent_episodes.len()
+                ));
                 history.push_str("  Consider: Are recent changes making things WORSE?\n");
                 history.push_str("  Consider: Should we REVERT to earlier params?\n");
             } else if trend > 0.02 {
-                history.push_str(&format!("  Good: NDCG improved {:.3} - current direction is working\n", trend));
+                history.push_str(&format!(
+                    "  Good: NDCG improved {:.3} - current direction is working\n",
+                    trend
+                ));
             } else {
                 history.push_str("  Plateau: NDCG stable - may need different approach\n");
             }
@@ -525,13 +612,21 @@ Repo: {} ({} files)"#,
     // This is separate from the evolved policy to prevent L2 from corrupting the structured output
     let protocol_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("training/prompts/protocol/inner_output_schema.md");
-    let protocol = std::fs::read_to_string(&protocol_path)
-        .map_err(|e| format!("Failed to load protocol from {}: {}", protocol_path.display(), e))?;
+    let protocol = std::fs::read_to_string(&protocol_path).map_err(|e| {
+        format!(
+            "Failed to load protocol from {}: {}",
+            protocol_path.display(),
+            e
+        )
+    })?;
 
     // Inject dynamic context into the prompt template (evolved policy)
     let evolved_policy = prompt_template
         .replace("{current_ndcg:.4}", &format!("{:.4}", current_ndcg))
-        .replace("{episode_num}", &(scratchpad.episodes.len() + 1).to_string())
+        .replace(
+            "{episode_num}",
+            &(scratchpad.episodes.len() + 1).to_string(),
+        )
         .replace("{episode_history}", &episode_history)
         .replace("{params_desc}", &params_desc)
         .replace("{failure_desc}", &failure_desc);
@@ -547,7 +642,10 @@ Repo: {} ({} files)"#,
 
     // Extract the reasoning section (everything before JSON:) for storage
     let reasoning_text = if let Some(json_marker) = response.find("JSON:") {
-        response[..json_marker].replace("REASONING:", "").trim().to_string()
+        response[..json_marker]
+            .replace("REASONING:", "")
+            .trim()
+            .to_string()
     } else {
         // No explicit sections, use everything before first {
         response.split('{').next().unwrap_or("").trim().to_string()
@@ -573,7 +671,13 @@ Repo: {} ({} files)"#,
                 "No JSON found in response",
             )))
         })
-        .map_err(|e| format!("Failed to parse response as JSON: {}\nResponse: {}", e, &response[..response.len().min(500)]))?;
+        .map_err(|e| {
+            format!(
+                "Failed to parse response as JSON: {}\nResponse: {}",
+                e,
+                &response[..response.len().min(500)]
+            )
+        })?;
 
     // Extract fields
     let mut proposed_changes = HashMap::new();
@@ -637,8 +741,8 @@ Repo: {} ({} files)"#,
         failures: failures.to_vec(),
         params: current_params.clone(),
         ndcg_before: current_ndcg,
-        reasoning: reasoning_text,  // Store the free-form reasoning, not the raw JSON
-        strategy_capsule,           // The intent/mode for this episode
+        reasoning: reasoning_text, // Store the free-form reasoning, not the raw JSON
+        strategy_capsule,          // The intent/mode for this episode
         proposed_changes,
         param_interactions,
         structural_insights,
@@ -666,7 +770,10 @@ pub fn update_scratchpad(scratchpad: &mut Scratchpad, episode: &ReasoningEpisode
 }
 
 /// Apply proposed changes to create a new parameter point.
-pub fn apply_changes(params: &ParameterPoint, changes: &HashMap<String, (String, String, String)>) -> ParameterPoint {
+pub fn apply_changes(
+    params: &ParameterPoint,
+    changes: &HashMap<String, (String, String, String)>,
+) -> ParameterPoint {
     let mut new_params = params.clone();
 
     for (param_name, (direction, magnitude, _rationale)) in changes {
@@ -713,7 +820,12 @@ pub fn apply_changes(params: &ParameterPoint, changes: &HashMap<String, (String,
 /// ## Phase 1 Agentic Mode (when `run_dir` is provided):
 /// - Agent can read episode files to extract deeper patterns
 /// - Enables more comprehensive distillation of insights
-pub fn distill_scratchpad(scratchpad: &Scratchpad, agent: Agent, model: Option<&str>, run_dir: Option<&str>) -> Result<String, String> {
+pub fn distill_scratchpad(
+    scratchpad: &Scratchpad,
+    agent: Agent,
+    model: Option<&str>,
+    run_dir: Option<&str>,
+) -> Result<String, String> {
     if scratchpad.episodes.is_empty() {
         return Err("No episodes to distill".to_string());
     }
@@ -770,9 +882,22 @@ Distill these insights into operator wisdom. Return JSON:
 }}
 "#,
         scratchpad.episodes.len(),
-        all_interactions.iter().map(|i| format!("• {}", i)).collect::<Vec<_>>().join("\n"),
-        all_structural.iter().map(|s| format!("• {}", s)).collect::<Vec<_>>().join("\n"),
-        sorted_changes.iter().take(10).map(|(k, v)| format!("• {}: {} episodes", k, v)).collect::<Vec<_>>().join("\n"),
+        all_interactions
+            .iter()
+            .map(|i| format!("• {}", i))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        all_structural
+            .iter()
+            .map(|s| format!("• {}", s))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        sorted_changes
+            .iter()
+            .take(10)
+            .map(|(k, v)| format!("• {}: {} episodes", k, v))
+            .collect::<Vec<_>>()
+            .join("\n"),
     );
 
     // Phase 1 agentic mode: agent can read episode files if run_dir provided
@@ -783,8 +908,14 @@ Distill these insights into operator wisdom. Return JSON:
 pub fn print_scratchpad_summary(scratchpad: &Scratchpad) {
     println!("\n=== SCRATCHPAD SUMMARY ===\n");
     println!("Episodes: {}", scratchpad.episodes.len());
-    println!("Parameter interactions: {}", scratchpad.param_interactions.len());
-    println!("Structural proposals: {}", scratchpad.structural_proposals.len());
+    println!(
+        "Parameter interactions: {}",
+        scratchpad.param_interactions.len()
+    );
+    println!(
+        "Structural proposals: {}",
+        scratchpad.structural_proposals.len()
+    );
 
     if !scratchpad.param_interactions.is_empty() {
         println!("\nTop Interactions:");
@@ -811,7 +942,11 @@ mod tests {
         let mut changes = HashMap::new();
         changes.insert(
             "boost_chat_file".to_string(),
-            ("decrease".to_string(), "medium".to_string(), "too dominant".to_string()),
+            (
+                "decrease".to_string(),
+                "medium".to_string(),
+                "too dominant".to_string(),
+            ),
         );
 
         let new_params = apply_changes(&params, &changes);

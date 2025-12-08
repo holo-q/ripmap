@@ -6,11 +6,11 @@
 //! 3. Picks highest-confidence resolution
 //! 4. Builds the final CallGraph
 
+use super::graph::{CallEdge, CallGraph, FunctionId};
+use super::strategies::{Candidate, ResolutionContext, ResolutionStrategy};
+use crate::types::{Tag, TagKind};
 use std::collections::HashMap;
 use std::sync::Arc;
-use crate::types::{Tag, TagKind};
-use super::graph::{CallGraph, CallEdge, FunctionId};
-use super::strategies::{ResolutionStrategy, ResolutionContext, Candidate};
 
 /// Configuration for the resolver
 #[derive(Debug, Clone)]
@@ -80,11 +80,8 @@ impl CallResolver {
                 // Only add functions/methods, not classes or variables
                 let node_type = tag.node_type.as_ref();
                 if node_type.contains("function") || node_type.contains("method") {
-                    let id = FunctionId::new(
-                        tag.rel_fname.clone(),
-                        tag.name.clone(),
-                        tag.line,
-                    ).with_parent_opt(tag.parent_name.clone());
+                    let id = FunctionId::new(tag.rel_fname.clone(), tag.name.clone(), tag.line)
+                        .with_parent_opt(tag.parent_name.clone());
                     graph.add_function(id);
                 }
             }
@@ -120,17 +117,11 @@ impl CallResolver {
             }
 
             // Pick the highest confidence candidate
-            all_candidates.sort_by(|a, b| {
-                b.0.confidence.partial_cmp(&a.0.confidence).unwrap()
-            });
+            all_candidates.sort_by(|a, b| b.0.confidence.partial_cmp(&a.0.confidence).unwrap());
 
             if let Some((best, strategy_name)) = all_candidates.first() {
                 if best.confidence >= self.config.min_confidence {
-                    let edge = CallEdge::new(
-                        best.confidence,
-                        *strategy_name,
-                        tag.line,
-                    );
+                    let edge = CallEdge::new(best.confidence, *strategy_name, tag.line);
                     let edge = if let Some(ref hint) = best.type_hint {
                         edge.with_type_hint(hint.clone())
                     } else {
@@ -173,11 +164,10 @@ impl CallResolver {
         // Find the first function defined before this tag's line
         for func in functions {
             if func.line <= tag.line {
-                return Some(FunctionId::new(
-                    func.rel_fname.clone(),
-                    func.name.clone(),
-                    func.line,
-                ).with_parent_opt(func.parent_name.clone()));
+                return Some(
+                    FunctionId::new(func.rel_fname.clone(), func.name.clone(), func.line)
+                        .with_parent_opt(func.parent_name.clone()),
+                );
             }
         }
 
@@ -200,7 +190,10 @@ impl CallResolver {
             for strategy in &self.strategies {
                 let candidates = strategy.resolve(tag, &context);
                 if !candidates.is_empty() {
-                    *stats.by_strategy.entry(strategy.name().to_string()).or_insert(0) += 1;
+                    *stats
+                        .by_strategy
+                        .entry(strategy.name().to_string())
+                        .or_insert(0) += 1;
                     resolved = true;
                     break;
                 }

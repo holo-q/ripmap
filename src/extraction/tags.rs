@@ -14,14 +14,14 @@
 //! This ensures we always get results while maximizing accuracy for supported
 //! languages.
 
-use std::path::Path;
 use std::cell::RefCell;
+use std::path::Path;
 
 use anyhow::Result;
 
-use crate::types::Tag;
 use crate::extraction::Parser;
 use crate::extraction::treesitter::{TreeSitterParser, extension_to_language};
+use crate::types::Tag;
 
 thread_local! {
     /// Thread-local tree-sitter parser (tree-sitter parsers are not thread-safe)
@@ -45,15 +45,9 @@ thread_local! {
 /// # Parser Selection
 /// - Python, Rust, JavaScript, TypeScript, Go, Java, C, C++, Ruby, PHP → tree-sitter
 /// - Other languages → regex fallback
-pub fn extract_tags(
-    path: &Path,
-    rel_fname: &str,
-    parser: &Parser,
-) -> Result<Vec<Tag>> {
+pub fn extract_tags(path: &Path, rel_fname: &str, parser: &Parser) -> Result<Vec<Tag>> {
     // Determine language from extension
-    let ext = path.extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("");
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
 
     let language = extension_to_language(ext);
 
@@ -64,7 +58,8 @@ pub fn extract_tags(
             let fname = path.to_string_lossy().to_string();
 
             let tags = TS_PARSER.with(|p| {
-                p.borrow_mut().extract_tags(&content, lang, &fname, rel_fname)
+                p.borrow_mut()
+                    .extract_tags(&content, lang, &fname, rel_fname)
             });
 
             // If tree-sitter found tags, use them
@@ -90,7 +85,8 @@ pub fn extract_tags_treesitter(
     rel_fname: &str,
 ) -> Vec<Tag> {
     TS_PARSER.with(|p| {
-        p.borrow_mut().extract_tags(content, language, fname, rel_fname)
+        p.borrow_mut()
+            .extract_tags(content, language, fname, rel_fname)
     })
 }
 
@@ -152,9 +148,21 @@ def standalone():
         let tags = extract_tags_treesitter(code, "python", "/test.py", "test.py");
 
         let names: Vec<&str> = tags.iter().map(|t| t.name.as_ref()).collect();
-        assert!(names.contains(&"MyClass"), "Should find MyClass, got: {:?}", names);
-        assert!(names.contains(&"method"), "Should find method, got: {:?}", names);
-        assert!(names.contains(&"standalone"), "Should find standalone, got: {:?}", names);
+        assert!(
+            names.contains(&"MyClass"),
+            "Should find MyClass, got: {:?}",
+            names
+        );
+        assert!(
+            names.contains(&"method"),
+            "Should find method, got: {:?}",
+            names
+        );
+        assert!(
+            names.contains(&"standalone"),
+            "Should find standalone, got: {:?}",
+            names
+        );
     }
 
     #[test]
@@ -171,8 +179,16 @@ fn standalone() {
         let tags = extract_tags_treesitter(code, "rust", "/test.rs", "test.rs");
 
         let names: Vec<&str> = tags.iter().map(|t| t.name.as_ref()).collect();
-        assert!(names.contains(&"MyStruct"), "Should find MyStruct, got: {:?}", names);
-        assert!(names.contains(&"standalone"), "Should find standalone, got: {:?}", names);
+        assert!(
+            names.contains(&"MyStruct"),
+            "Should find MyStruct, got: {:?}",
+            names
+        );
+        assert!(
+            names.contains(&"standalone"),
+            "Should find standalone, got: {:?}",
+            names
+        );
     }
 
     #[test]
@@ -189,8 +205,20 @@ function standalone() {
         let tags = extract_tags_treesitter(code, "javascript", "/test.js", "test.js");
 
         let names: Vec<&str> = tags.iter().map(|t| t.name.as_ref()).collect();
-        assert!(names.contains(&"MyClass"), "Should find MyClass, got: {:?}", names);
-        assert!(names.contains(&"method"), "Should find method, got: {:?}", names);
-        assert!(names.contains(&"standalone"), "Should find standalone, got: {:?}", names);
+        assert!(
+            names.contains(&"MyClass"),
+            "Should find MyClass, got: {:?}",
+            names
+        );
+        assert!(
+            names.contains(&"method"),
+            "Should find method, got: {:?}",
+            names
+        );
+        assert!(
+            names.contains(&"standalone"),
+            "Should find standalone, got: {:?}",
+            names
+        );
     }
 }

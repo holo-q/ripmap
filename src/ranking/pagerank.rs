@@ -17,8 +17,8 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::Direction;
+use petgraph::graph::{DiGraph, NodeIndex};
 
 use crate::types::{RankingConfig, Tag};
 
@@ -136,7 +136,11 @@ impl PageRanker {
         &self,
         tags_by_file: &HashMap<String, Vec<Tag>>,
         defines: &HashMap<Arc<str>, HashSet<String>>,
-    ) -> (DiGraph<(), ()>, HashMap<String, NodeIndex>, HashMap<NodeIndex, String>) {
+    ) -> (
+        DiGraph<(), ()>,
+        HashMap<String, NodeIndex>,
+        HashMap<NodeIndex, String>,
+    ) {
         let mut graph = DiGraph::new();
         let mut node_map: HashMap<String, NodeIndex> = HashMap::new();
         let mut index_map: HashMap<NodeIndex, String> = HashMap::new();
@@ -283,7 +287,8 @@ impl PageRanker {
 
         // Initialize ranks uniformly
         let init_rank = 1.0 / n as f64;
-        let mut ranks: HashMap<NodeIndex, f64> = graph.node_indices().map(|idx| (idx, init_rank)).collect();
+        let mut ranks: HashMap<NodeIndex, f64> =
+            graph.node_indices().map(|idx| (idx, init_rank)).collect();
         let mut new_ranks = ranks.clone();
 
         // Power iteration
@@ -305,7 +310,9 @@ impl PageRanker {
                 // Sum over all incoming edges
                 for predecessor in graph.neighbors_directed(node, Direction::Incoming) {
                     let pred_rank = ranks[&predecessor];
-                    let out_degree = graph.neighbors_directed(predecessor, Direction::Outgoing).count();
+                    let out_degree = graph
+                        .neighbors_directed(predecessor, Direction::Outgoing)
+                        .count();
 
                     if out_degree > 0 {
                         // Each outgoing edge contributes equally (standard PageRank)
@@ -317,12 +324,15 @@ impl PageRanker {
                 // (1-α) portion: teleport according to personalization distribution
                 // α portion: follow edges from predecessors
                 // Also handle dangling node mass redistribution
-                let personalization_value = normalized_personalization.get(&node).copied().unwrap_or(1.0 / n as f64);
+                let personalization_value = normalized_personalization
+                    .get(&node)
+                    .copied()
+                    .unwrap_or(1.0 / n as f64);
                 new_ranks.insert(
                     node,
                     (1.0 - alpha) * personalization_value
                         + alpha * incoming_sum
-                        + alpha * dangling_sum * personalization_value,  // Redistribute dangling mass
+                        + alpha * dangling_sum * personalization_value, // Redistribute dangling mass
                 );
             }
 
@@ -350,10 +360,7 @@ impl PageRanker {
     fn extract_rel_fname(&self, abs_fname: &str) -> String {
         // Simple heuristic: strip common prefixes
         // In practice, would use proper path canonicalization
-        abs_fname
-            .strip_prefix("/")
-            .unwrap_or(abs_fname)
-            .to_string()
+        abs_fname.strip_prefix("/").unwrap_or(abs_fname).to_string()
     }
 
     /// Compute PageRank scores on a call graph (function-level ranking).
@@ -434,12 +441,13 @@ impl PageRanker {
                     }
                 }
 
-                let p_value = personalization.get(&node).copied().unwrap_or(1.0 / n as f64);
+                let p_value = personalization
+                    .get(&node)
+                    .copied()
+                    .unwrap_or(1.0 / n as f64);
                 new_ranks.insert(
                     node,
-                    (1.0 - alpha) * p_value
-                        + alpha * incoming_sum
-                        + alpha * dangling_sum * p_value,
+                    (1.0 - alpha) * p_value + alpha * incoming_sum + alpha * dangling_sum * p_value,
                 );
             }
 
@@ -485,7 +493,7 @@ mod tests {
             parent_line: None,
             signature: None,
             fields: None,
-        metadata: None,
+            metadata: None,
         }
     }
 
@@ -629,18 +637,32 @@ mod tests {
         // All ranks should sum to approximately 1.0 (standard PageRank property)
         // Our implementation follows the standard formula which preserves this invariant
         let total: f64 = ranks.values().sum();
-        assert!((total - 1.0).abs() < 0.01, "Total rank should be close to 1.0, got {}", total);
+        assert!(
+            (total - 1.0).abs() < 0.01,
+            "Total rank should be close to 1.0, got {}",
+            total
+        );
 
         // c should have highest rank (pointed to by b)
         // b should have second (pointed to by a)
         // a should have lowest (points but not pointed to)
-        assert!(ranks["c.rs"] >= ranks["b.rs"], "c.rs rank {} should be >= b.rs rank {}", ranks["c.rs"], ranks["b.rs"]);
-        assert!(ranks["b.rs"] >= ranks["a.rs"], "b.rs rank {} should be >= a.rs rank {}", ranks["b.rs"], ranks["a.rs"]);
+        assert!(
+            ranks["c.rs"] >= ranks["b.rs"],
+            "c.rs rank {} should be >= b.rs rank {}",
+            ranks["c.rs"],
+            ranks["b.rs"]
+        );
+        assert!(
+            ranks["b.rs"] >= ranks["a.rs"],
+            "b.rs rank {} should be >= a.rs rank {}",
+            ranks["b.rs"],
+            ranks["a.rs"]
+        );
     }
 
     #[test]
     fn test_function_level_pagerank() {
-        use crate::callgraph::{CallGraph, CallEdge, FunctionId};
+        use crate::callgraph::{CallEdge, CallGraph, FunctionId};
 
         let config = RankingConfig::default();
         let ranker = PageRanker::new(config);
@@ -677,12 +699,14 @@ mod tests {
         assert!(
             ranks[&util] >= ranks[&helper],
             "util rank {} should be >= helper rank {}",
-            ranks[&util], ranks[&helper]
+            ranks[&util],
+            ranks[&helper]
         );
         assert!(
             ranks[&util] >= ranks[&main],
             "util rank {} should be >= main rank {}",
-            ranks[&util], ranks[&main]
+            ranks[&util],
+            ranks[&main]
         );
     }
 }

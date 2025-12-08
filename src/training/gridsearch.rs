@@ -154,11 +154,19 @@ pub struct ParamRange {
 
 impl ParamRange {
     pub fn linear(min: f64, max: f64) -> Self {
-        Self { min, max, log_scale: false }
+        Self {
+            min,
+            max,
+            log_scale: false,
+        }
     }
 
     pub fn log(min: f64, max: f64) -> Self {
-        Self { min, max, log_scale: true }
+        Self {
+            min,
+            max,
+            log_scale: true,
+        }
     }
 
     /// Convert normalized [0, 1] value to actual parameter value.
@@ -199,7 +207,10 @@ impl Default for ParameterGrid {
 
         // PageRank
         ranges.insert("pagerank_alpha".into(), ParamRange::linear(0.70, 0.95));
-        ranges.insert("pagerank_chat_multiplier".into(), ParamRange::log(10.0, 200.0));
+        ranges.insert(
+            "pagerank_chat_multiplier".into(),
+            ParamRange::log(10.0, 200.0),
+        );
 
         // Depth weights (log scale - multiplicative effect)
         ranges.insert("depth_weight_root".into(), ParamRange::linear(0.5, 2.0));
@@ -215,7 +226,10 @@ impl Default for ParameterGrid {
         ranges.insert("boost_focus_expansion".into(), ParamRange::log(1.0, 20.0));
 
         // Git
-        ranges.insert("git_recency_decay_days".into(), ParamRange::linear(7.0, 90.0));
+        ranges.insert(
+            "git_recency_decay_days".into(),
+            ParamRange::linear(7.0, 90.0),
+        );
         ranges.insert("git_recency_max_boost".into(), ParamRange::log(2.0, 20.0));
         ranges.insert("git_churn_threshold".into(), ParamRange::linear(3.0, 15.0));
         ranges.insert("git_churn_max_boost".into(), ParamRange::log(2.0, 15.0));
@@ -300,15 +314,9 @@ pub fn sample_points(
     let mut rng = StdRng::seed_from_u64(seed);
 
     match strategy {
-        SearchStrategy::Grid { points_per_dim } => {
-            sample_grid(grid, points_per_dim)
-        }
-        SearchStrategy::LatinHypercube => {
-            sample_lhs(grid, n_samples, &mut rng)
-        }
-        SearchStrategy::Random => {
-            sample_random(grid, n_samples, &mut rng)
-        }
+        SearchStrategy::Grid { points_per_dim } => sample_grid(grid, points_per_dim),
+        SearchStrategy::LatinHypercube => sample_lhs(grid, n_samples, &mut rng),
+        SearchStrategy::Random => sample_random(grid, n_samples, &mut rng),
         SearchStrategy::Bayesian => {
             // Bayesian needs iterative sampling - start with LHS
             // The actual BO loop is in the training runner
@@ -353,11 +361,7 @@ fn sample_grid(grid: &ParameterGrid, points_per_dim: usize) -> Vec<ParameterPoin
 ///
 /// Each dimension is divided into N equal strata, and exactly one
 /// sample is placed in each stratum per dimension.
-fn sample_lhs<R: Rng>(
-    grid: &ParameterGrid,
-    n_samples: usize,
-    rng: &mut R,
-) -> Vec<ParameterPoint> {
+fn sample_lhs<R: Rng>(grid: &ParameterGrid, n_samples: usize, rng: &mut R) -> Vec<ParameterPoint> {
     let ndim = grid.ndim();
 
     // For each dimension, create a random permutation of strata
@@ -419,7 +423,10 @@ pub fn bayesian_next_sample<R: Rng>(
     }
 
     // Find best score so far
-    let best_score = history.iter().map(|(_, s)| *s).fold(f64::NEG_INFINITY, f64::max);
+    let best_score = history
+        .iter()
+        .map(|(_, s)| *s)
+        .fold(f64::NEG_INFINITY, f64::max);
 
     // Simple acquisition: generate candidates and pick highest EI
     // (This is a placeholder - real BO would use a GP)
@@ -438,7 +445,9 @@ pub fn bayesian_next_sample<R: Rng>(
             let score_a = dist_a + 0.3 * similarity_to_best(a, history, best_score);
             let score_b = dist_b + 0.3 * similarity_to_best(b, history, best_score);
 
-            score_a.partial_cmp(&score_b).unwrap_or(std::cmp::Ordering::Equal)
+            score_a
+                .partial_cmp(&score_b)
+                .unwrap_or(std::cmp::Ordering::Equal)
         })
         .unwrap_or_else(|| grid.decode(&vec![0.5; grid.ndim()]))
 }

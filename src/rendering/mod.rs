@@ -6,10 +6,10 @@
 //!
 //! Optimizes for token budget via binary search.
 
+mod colors;
 mod directory;
 mod tree;
-mod colors;
 
+pub use colors::{Badge, colorize};
 pub use directory::DirectoryRenderer;
 pub use tree::TreeRenderer;
-pub use colors::{colorize, Badge};

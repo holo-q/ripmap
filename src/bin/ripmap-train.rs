@@ -32,22 +32,39 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
+use chrono::{DateTime, Local, TimeZone};
 use clap::Parser;
 use rand::SeedableRng;
 use rayon::prelude::*;
-use chrono::{DateTime, Local, TimeZone};
 use serde::{Deserialize, Serialize};
 
 use ripmap::training::{
-    extract_cases, compute_coupling_weights, weight_cases,
-    WeightedCase, EvalMetrics, CaseMetrics,
-    ParameterPoint, ParameterGrid, SearchStrategy, sample_points, bayesian_next_sample,
-    SensitivityAnalysis, full_analysis, print_summary,
-    CURATED_REPOS, quick_repos, RepoSpec,
     // Reasoning-based training
-    Agent, RankingFailure, Scratchpad,
-    reason_about_failures, update_scratchpad, apply_changes,
-    distill_scratchpad, print_scratchpad_summary,
+    Agent,
+    CURATED_REPOS,
+    CaseMetrics,
+    EvalMetrics,
+    ParameterGrid,
+    ParameterPoint,
+    RankingFailure,
+    RepoSpec,
+    Scratchpad,
+    SearchStrategy,
+    SensitivityAnalysis,
+    WeightedCase,
+    apply_changes,
+    bayesian_next_sample,
+    compute_coupling_weights,
+    distill_scratchpad,
+    extract_cases,
+    full_analysis,
+    print_scratchpad_summary,
+    print_summary,
+    quick_repos,
+    reason_about_failures,
+    sample_points,
+    update_scratchpad,
+    weight_cases,
 };
 
 #[derive(Parser, Debug)]
@@ -117,7 +134,6 @@ struct Args {
     distractors: Option<PathBuf>,
 
     // === Reasoning-Based Training ===
-
     /// Path to prompt template file (required for --reason mode)
     /// Contains placeholders: {current_ndcg:.4}, {episode_num}, {episode_history}, {params_desc}, {failure_desc}
     #[arg(long)]
@@ -261,7 +277,8 @@ fn format_timestamp(ts: i64) -> String {
     if ts == 0 {
         return "—".to_string();
     }
-    Local.timestamp_opt(ts, 0)
+    Local
+        .timestamp_opt(ts, 0)
         .single()
         .map(|dt: DateTime<Local>| dt.format("%b %d %H:%M").to_string())
         .unwrap_or_else(|| "—".to_string())
@@ -277,7 +294,7 @@ fn list_training_runs() -> anyhow::Result<()> {
 
     // Collect run info with timestamps
     let mut runs: Vec<RunInfo> = Vec::new();
-    let mut empty_runs: Vec<(String, i64)> = Vec::new();  // (name, mtime) for runs with no data
+    let mut empty_runs: Vec<(String, i64)> = Vec::new(); // (name, mtime) for runs with no data
 
     for entry in std::fs::read_dir(&runs_dir)?.filter_map(|e| e.ok()) {
         if !entry.path().is_dir() {
@@ -287,7 +304,8 @@ fn list_training_runs() -> anyhow::Result<()> {
         let scratchpad_path = entry.path().join("scratchpad.json");
 
         // Fallback: use file modification time if no episode timestamps
-        let file_mtime = scratchpad_path.metadata()
+        let file_mtime = scratchpad_path
+            .metadata()
             .and_then(|m| m.modified())
             .ok()
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
@@ -304,11 +322,27 @@ fn list_training_runs() -> anyhow::Result<()> {
                         let delta = last_ndcg - first_ndcg;
 
                         // Get timestamps from episodes (fall back to file mtime if 0)
-                        let start_ts = sp.episodes.first()
-                            .map(|e| if e.timestamp > 0 { e.timestamp } else { file_mtime })
+                        let start_ts = sp
+                            .episodes
+                            .first()
+                            .map(|e| {
+                                if e.timestamp > 0 {
+                                    e.timestamp
+                                } else {
+                                    file_mtime
+                                }
+                            })
                             .unwrap_or(file_mtime);
-                        let end_ts = sp.episodes.last()
-                            .map(|e| if e.timestamp > 0 { e.timestamp } else { file_mtime })
+                        let end_ts = sp
+                            .episodes
+                            .last()
+                            .map(|e| {
+                                if e.timestamp > 0 {
+                                    e.timestamp
+                                } else {
+                                    file_mtime
+                                }
+                            })
                             .unwrap_or(file_mtime);
 
                         runs.push(RunInfo {
@@ -338,8 +372,10 @@ fn list_training_runs() -> anyhow::Result<()> {
     println!();
     println!("{}", "TRAINING RUNS".bold());
     println!("{}", "─".repeat(90));
-    println!("{:26} {:>4}  {:^17}  {:>8}   {:>24}",
-        "NAME", "EPS", "NDCG TRAJECTORY", "DELTA", "STARTED -> LAST");
+    println!(
+        "{:26} {:>4}  {:^17}  {:>8}   {:>24}",
+        "NAME", "EPS", "NDCG TRAJECTORY", "DELTA", "STARTED -> LAST"
+    );
     println!("{}", "─".repeat(90));
 
     for run in &runs {
@@ -354,14 +390,25 @@ fn list_training_runs() -> anyhow::Result<()> {
         let end_str = format_timestamp(run.end_ts);
         let time_range = format!("{} -> {}", start_str, end_str);
 
-        println!("{:26} {:>4}  {:.3} {} {:.3}  {}   {}",
-            run.name, run.episodes, run.first_ndcg, trend, run.last_ndcg, delta_colored, time_range.dimmed());
+        println!(
+            "{:26} {:>4}  {:.3} {} {:.3}  {}   {}",
+            run.name,
+            run.episodes,
+            run.first_ndcg,
+            trend,
+            run.last_ndcg,
+            delta_colored,
+            time_range.dimmed()
+        );
     }
 
     // Show empty runs at the bottom
     for (name, mtime) in &empty_runs {
         let ts_str = format_timestamp(*mtime);
-        println!("{:26}    -  (no data)                          {:>24}", name, ts_str);
+        println!(
+            "{:26}    -  (no data)                          {:>24}",
+            name, ts_str
+        );
     }
 
     println!("{}", "─".repeat(90));
@@ -372,7 +419,7 @@ fn list_training_runs() -> anyhow::Result<()> {
 /// Rich text visualization of a past training run.
 /// Shows the full optimization journey: trajectory, strategies, insights.
 fn show_training_run(path: &str) -> anyhow::Result<()> {
-    use comfy_table::{Table, Cell, ContentArrangement, presets::UTF8_FULL_CONDENSED};
+    use comfy_table::{Cell, ContentArrangement, Table, presets::UTF8_FULL_CONDENSED};
     use owo_colors::OwoColorize;
 
     // Resolve path: either a run name or direct path to scratchpad
@@ -395,13 +442,17 @@ fn show_training_run(path: &str) -> anyhow::Result<()> {
     }
 
     // Header
-    let run_name = scratchpad_path.parent()
+    let run_name = scratchpad_path
+        .parent()
         .and_then(|p| p.file_name())
         .map(|s| s.to_string_lossy().to_string())
         .unwrap_or_else(|| "unknown".to_string());
 
     println!();
-    println!("{}", format!(" TRAINING RUN: {} ", run_name).bold().on_blue());
+    println!(
+        "{}",
+        format!(" TRAINING RUN: {} ", run_name).bold().on_blue()
+    );
     println!("  Episodes: {}", scratchpad.episodes.len());
     println!();
 
@@ -412,10 +463,13 @@ fn show_training_run(path: &str) -> anyhow::Result<()> {
     let range = (max_ndcg - min_ndcg).max(0.001);
 
     let spark_chars = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
-    let sparkline: String = ndcgs.iter().map(|&n| {
-        let normalized = ((n - min_ndcg) / range * 7.0).round() as usize;
-        spark_chars[normalized.min(7)]
-    }).collect();
+    let sparkline: String = ndcgs
+        .iter()
+        .map(|&n| {
+            let normalized = ((n - min_ndcg) / range * 7.0).round() as usize;
+            spark_chars[normalized.min(7)]
+        })
+        .collect();
 
     let delta = ndcgs.last().unwrap_or(&0.0) - ndcgs.first().unwrap_or(&0.0);
     let delta_str = if delta > 0.0 {
@@ -427,7 +481,13 @@ fn show_training_run(path: &str) -> anyhow::Result<()> {
     };
 
     println!("{}", "NDCG TRAJECTORY".bold());
-    println!("  {:.3} {} {:.3}  Δ = {}", min_ndcg, sparkline.cyan(), max_ndcg, delta_str);
+    println!(
+        "  {:.3} {} {:.3}  Δ = {}",
+        min_ndcg,
+        sparkline.cyan(),
+        max_ndcg,
+        delta_str
+    );
     println!();
 
     // Episode-by-episode breakdown as a table
@@ -436,7 +496,14 @@ fn show_training_run(path: &str) -> anyhow::Result<()> {
     let mut table = Table::new();
     table.load_preset(UTF8_FULL_CONDENSED);
     table.set_content_arrangement(ContentArrangement::Dynamic);
-    table.set_header(vec!["#", "Trend", "NDCG", "Fail", "Conf", "Strategy / Changes / Insight"]);
+    table.set_header(vec![
+        "#",
+        "Trend",
+        "NDCG",
+        "Fail",
+        "Conf",
+        "Strategy / Changes / Insight",
+    ]);
 
     for (i, ep) in scratchpad.episodes.iter().enumerate() {
         let ep_num = i + 1;
@@ -444,9 +511,13 @@ fn show_training_run(path: &str) -> anyhow::Result<()> {
             "·".to_string()
         } else {
             let prev = scratchpad.episodes[i - 1].ndcg_before;
-            if ep.ndcg_before > prev + 0.005 { "↗".green().to_string() }
-            else if ep.ndcg_before < prev - 0.005 { "↘".red().to_string() }
-            else { "→".dimmed().to_string() }
+            if ep.ndcg_before > prev + 0.005 {
+                "↗".green().to_string()
+            } else if ep.ndcg_before < prev - 0.005 {
+                "↘".red().to_string()
+            } else {
+                "→".dimmed().to_string()
+            }
         };
 
         // Build the description column with strategy, changes, insight
@@ -464,10 +535,16 @@ fn show_training_run(path: &str) -> anyhow::Result<()> {
 
         // Parameter changes (compact format)
         if !ep.proposed_changes.is_empty() {
-            let changes: Vec<String> = ep.proposed_changes.iter()
+            let changes: Vec<String> = ep
+                .proposed_changes
+                .iter()
                 .map(|(k, (dir, mag, _))| {
                     let arrow = if dir == "increase" { "↑" } else { "↓" };
-                    let mag_short = mag.chars().next().map(|c| c.to_uppercase().to_string()).unwrap_or_default();
+                    let mag_short = mag
+                        .chars()
+                        .next()
+                        .map(|c| c.to_uppercase().to_string())
+                        .unwrap_or_default();
                     format!("{}{}{}", k, arrow, mag_short)
                 })
                 .collect();
@@ -510,28 +587,48 @@ fn show_training_run(path: &str) -> anyhow::Result<()> {
         let p = &last_ep.params;
         ptable.add_row(vec![
             "PageRank",
-            &format!("α={:.3}  chat_mult={:.1}", p.pagerank_alpha, p.pagerank_chat_multiplier),
+            &format!(
+                "α={:.3}  chat_mult={:.1}",
+                p.pagerank_alpha, p.pagerank_chat_multiplier
+            ),
         ]);
         ptable.add_row(vec![
             "Depth",
-            &format!("root={:.2}  mod={:.2}  deep={:.2}  vendor={:.4}",
-                p.depth_weight_root, p.depth_weight_moderate, p.depth_weight_deep, p.depth_weight_vendor),
+            &format!(
+                "root={:.2}  mod={:.2}  deep={:.2}  vendor={:.4}",
+                p.depth_weight_root,
+                p.depth_weight_moderate,
+                p.depth_weight_deep,
+                p.depth_weight_vendor
+            ),
         ]);
         ptable.add_row(vec![
             "Boosts",
-            &format!("ident={:.1}  file={:.1}  chat={:.1}  temp={:.2}  focus={:.2}",
-                p.boost_mentioned_ident, p.boost_mentioned_file, p.boost_chat_file,
-                p.boost_temporal_coupling, p.boost_focus_expansion),
+            &format!(
+                "ident={:.1}  file={:.1}  chat={:.1}  temp={:.2}  focus={:.2}",
+                p.boost_mentioned_ident,
+                p.boost_mentioned_file,
+                p.boost_chat_file,
+                p.boost_temporal_coupling,
+                p.boost_focus_expansion
+            ),
         ]);
         ptable.add_row(vec![
             "Git",
-            &format!("decay={:.0}d  recency_max={:.1}  churn_th={:.0}  churn_max={:.1}",
-                p.git_recency_decay_days, p.git_recency_max_boost,
-                p.git_churn_threshold, p.git_churn_max_boost),
+            &format!(
+                "decay={:.0}d  recency_max={:.1}  churn_th={:.0}  churn_max={:.1}",
+                p.git_recency_decay_days,
+                p.git_recency_max_boost,
+                p.git_churn_threshold,
+                p.git_churn_max_boost
+            ),
         ]);
         ptable.add_row(vec![
             "Focus",
-            &format!("decay={:.2}  max_hops={:.0}", p.focus_decay, p.focus_max_hops),
+            &format!(
+                "decay={:.2}  max_hops={:.0}",
+                p.focus_decay, p.focus_max_hops
+            ),
         ]);
 
         println!("{ptable}");
@@ -567,7 +664,10 @@ fn show_insights_pivot(path: &str) -> anyhow::Result<()> {
     let mut insight_episodes: HashMap<String, Vec<usize>> = HashMap::new();
     for (i, ep) in scratchpad.episodes.iter().enumerate() {
         for insight in &ep.structural_insights {
-            insight_episodes.entry(insight.clone()).or_default().push(i + 1);
+            insight_episodes
+                .entry(insight.clone())
+                .or_default()
+                .push(i + 1);
         }
     }
 
@@ -577,15 +677,29 @@ fn show_insights_pivot(path: &str) -> anyhow::Result<()> {
 
     println!("\nSTRUCTURAL INSIGHTS (pivot view)");
     println!("─────────────────────────────────────────────────────────────────────────────────");
-    println!("{} unique insights from {} episodes\n", sorted.len(), scratchpad.episodes.len());
+    println!(
+        "{} unique insights from {} episodes\n",
+        sorted.len(),
+        scratchpad.episodes.len()
+    );
 
     for (insight, episodes) in sorted.iter().take(30) {
         let ep_list = if episodes.len() <= 5 {
-            episodes.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(", ")
+            episodes
+                .iter()
+                .map(|e| e.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
         } else {
-            format!("{}, ... (+{} more)",
-                episodes[..3].iter().map(|e| e.to_string()).collect::<Vec<_>>().join(", "),
-                episodes.len() - 3)
+            format!(
+                "{}, ... (+{} more)",
+                episodes[..3]
+                    .iter()
+                    .map(|e| e.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                episodes.len() - 3
+            )
         };
         println!("[E{}] {}", ep_list, insight);
         println!();
@@ -615,7 +729,10 @@ fn show_interactions_pivot(path: &str) -> anyhow::Result<()> {
     let mut interaction_episodes: HashMap<String, Vec<usize>> = HashMap::new();
     for (i, ep) in scratchpad.episodes.iter().enumerate() {
         for interaction in &ep.param_interactions {
-            interaction_episodes.entry(interaction.clone()).or_default().push(i + 1);
+            interaction_episodes
+                .entry(interaction.clone())
+                .or_default()
+                .push(i + 1);
         }
     }
 
@@ -625,15 +742,29 @@ fn show_interactions_pivot(path: &str) -> anyhow::Result<()> {
 
     println!("\nPARAMETER INTERACTIONS (pivot view)");
     println!("─────────────────────────────────────────────────────────────────────────────────");
-    println!("{} unique interactions from {} episodes\n", sorted.len(), scratchpad.episodes.len());
+    println!(
+        "{} unique interactions from {} episodes\n",
+        sorted.len(),
+        scratchpad.episodes.len()
+    );
 
     for (interaction, episodes) in sorted.iter().take(30) {
         let ep_list = if episodes.len() <= 5 {
-            episodes.iter().map(|e| e.to_string()).collect::<Vec<_>>().join(", ")
+            episodes
+                .iter()
+                .map(|e| e.to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
         } else {
-            format!("{}, ... (+{} more)",
-                episodes[..3].iter().map(|e| e.to_string()).collect::<Vec<_>>().join(", "),
-                episodes.len() - 3)
+            format!(
+                "{}, ... (+{} more)",
+                episodes[..3]
+                    .iter()
+                    .map(|e| e.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                episodes.len() - 3
+            )
         };
         println!("[E{}] {}", ep_list, interaction);
         println!();
@@ -694,7 +825,10 @@ fn main() -> anyhow::Result<()> {
             "curated" => CURATED_REPOS.iter().collect(),
             // Future: could load from file path
             other => {
-                eprintln!("Error: Unknown corpus '{}'. Use 'quick' or 'curated'", other);
+                eprintln!(
+                    "Error: Unknown corpus '{}'. Use 'quick' or 'curated'",
+                    other
+                );
                 std::process::exit(1);
             }
         };
@@ -732,7 +866,10 @@ fn main() -> anyhow::Result<()> {
         match load_distractors(path) {
             Ok(lookup) => Some(Arc::new(lookup)),
             Err(e) => {
-                eprintln!("Warning: Failed to load distractors: {}. Using synthetic.", e);
+                eprintln!(
+                    "Warning: Failed to load distractors: {}. Using synthetic.",
+                    e
+                );
                 None
             }
         }
@@ -790,9 +927,12 @@ fn main() -> anyhow::Result<()> {
 
     // Evaluate all points in parallel with progress bar
     let pb = ProgressBar::new(points.len() as u64);
-    pb.set_style(ProgressStyle::with_template(
-        "{prefix:.bold} {bar:40.cyan/dim} {pos}/{len} [{elapsed}<{eta}] {msg}"
-    ).unwrap());
+    pb.set_style(
+        ProgressStyle::with_template(
+            "{prefix:.bold} {bar:40.cyan/dim} {pos}/{len} [{elapsed}<{eta}] {msg}",
+        )
+        .unwrap(),
+    );
     pb.set_prefix("Evaluating");
 
     let best_ndcg = std::sync::atomic::AtomicU64::new(0);
@@ -809,24 +949,32 @@ fn main() -> anyhow::Result<()> {
             (point.clone(), metrics)
         })
         .collect();
-    pb.finish_with_message(format!("best={:.4}", best_ndcg.load(std::sync::atomic::Ordering::Relaxed) as f64 / 10000.0));
+    pb.finish_with_message(format!(
+        "best={:.4}",
+        best_ndcg.load(std::sync::atomic::Ordering::Relaxed) as f64 / 10000.0
+    ));
 
     // For Bayesian strategy, do iterative refinement
     let mut evaluations = evaluations; // make mutable for Bayesian
     if matches!(strategy, SearchStrategy::Bayesian) && evaluations.len() < args.budget {
         let remaining = args.budget - evaluations.len();
         let pb = ProgressBar::new(remaining as u64);
-        pb.set_style(ProgressStyle::with_template(
-            "{prefix:.bold} {bar:40.green/dim} {pos}/{len} [{elapsed}<{eta}] {msg}"
-        ).unwrap());
+        pb.set_style(
+            ProgressStyle::with_template(
+                "{prefix:.bold} {bar:40.green/dim} {pos}/{len} [{elapsed}<{eta}] {msg}",
+            )
+            .unwrap(),
+        );
         pb.set_prefix("Bayesian");
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(args.seed);
-        let history: Vec<_> = evaluations.iter()
+        let history: Vec<_> = evaluations
+            .iter()
             .map(|(p, m)| (p.clone(), m.ndcg_at_10))
             .collect();
 
-        let mut best_so_far = evaluations.iter()
+        let mut best_so_far = evaluations
+            .iter()
             .map(|(_, m)| m.ndcg_at_10)
             .fold(0.0_f64, f64::max);
 
@@ -917,10 +1065,7 @@ fn evaluate_point(
             let ranking = simulate_ranking(point, case, distractors);
 
             // Ground truth
-            let ground_truth: Vec<_> = case.expected_related
-                .iter()
-                .cloned()
-                .collect();
+            let ground_truth: Vec<_> = case.expected_related.iter().cloned().collect();
 
             CaseMetrics::compute(&ranking, &ground_truth, 0.1)
         })
@@ -959,7 +1104,8 @@ fn simulate_ranking(
     let mut rng = rand::thread_rng();
 
     // Score ground truth files (have coupling signal)
-    let mut scored: Vec<_> = case.expected_related
+    let mut scored: Vec<_> = case
+        .expected_related
         .iter()
         .map(|(file, coupling_weight)| {
             let score = score_file(point, file, *coupling_weight, &mut rng);
@@ -970,7 +1116,8 @@ fn simulate_ranking(
     // Get distractor file paths - either semantic (Claude) or synthetic (fallback)
     let distractor_paths: Vec<String> = if let Some(lookup) = distractors {
         // Try to find semantic distractors for this case by seed file
-        lookup.get(&case.seed_file)
+        lookup
+            .get(&case.seed_file)
             .cloned()
             .unwrap_or_else(|| generate_synthetic_distractors(case.expected_related.len()))
     } else {
@@ -995,11 +1142,11 @@ fn generate_synthetic_distractors(n_ground_truth: usize) -> Vec<String> {
     let n_distractors = (n_ground_truth * 3).max(10);
     (0..n_distractors)
         .map(|i| match i % 5 {
-            0 => format!("src/distractor_{}.rs", i),           // depth 1
-            1 => format!("src/utils/helper_{}.rs", i),         // depth 2
-            2 => format!("src/core/internal/deep_{}.rs", i),   // depth 3
-            3 => format!("lib/mod_{}.rs", i),                  // depth 1
-            _ => format!("tests/test_{}.rs", i),               // depth 1
+            0 => format!("src/distractor_{}.rs", i),         // depth 1
+            1 => format!("src/utils/helper_{}.rs", i),       // depth 2
+            2 => format!("src/core/internal/deep_{}.rs", i), // depth 3
+            3 => format!("lib/mod_{}.rs", i),                // depth 1
+            _ => format!("tests/test_{}.rs", i),             // depth 1
         })
         .collect()
 }
@@ -1056,8 +1203,8 @@ fn score_file(
 
     if is_recent {
         // Recent files get boosted based on recency config
-        let recency_boost = 1.0 + (point.git_recency_max_boost - 1.0)
-            * (1.0 - rng.r#gen::<f64>() * 0.3);  // 70-100% of max boost
+        let recency_boost =
+            1.0 + (point.git_recency_max_boost - 1.0) * (1.0 - rng.r#gen::<f64>() * 0.3); // 70-100% of max boost
         score *= recency_boost;
     }
 
@@ -1093,16 +1240,19 @@ fn ensure_repos_cloned(specs: &[&RepoSpec], base_dir: &Path) -> anyhow::Result<V
 
         if !repo_dir.exists() {
             let spinner = ProgressBar::new_spinner();
-            spinner.set_style(ProgressStyle::with_template(
-                "{spinner:.green} {msg}"
-            ).unwrap().tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]));
+            spinner.set_style(
+                ProgressStyle::with_template("{spinner:.green} {msg}")
+                    .unwrap()
+                    .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
+            );
             spinner.set_message(format!("Cloning {}...", spec.name));
             spinner.enable_steady_tick(std::time::Duration::from_millis(80));
 
             let status = std::process::Command::new("git")
                 .args([
                     "clone",
-                    "--depth", &spec.estimated_commits().to_string(),
+                    "--depth",
+                    &spec.estimated_commits().to_string(),
                     &spec.url,
                     repo_dir.to_str().unwrap(),
                 ])
@@ -1174,12 +1324,16 @@ fn run_reasoning_training(
     // Load prompt template (required)
     let prompt_path = args.prompt.as_ref()
         .ok_or_else(|| anyhow::anyhow!("--prompt is required for reasoning mode. Example: --prompt training-outer/prompts/inner/v001.md"))?;
-    let prompt_template = std::fs::read_to_string(prompt_path)
-        .map_err(|e| anyhow::anyhow!("Failed to read prompt template '{}': {}", prompt_path.display(), e))?;
+    let prompt_template = std::fs::read_to_string(prompt_path).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to read prompt template '{}': {}",
+            prompt_path.display(),
+            e
+        )
+    })?;
 
     // Parse agent type
-    let agent: Agent = args.agent.parse()
-        .map_err(|e: String| anyhow::anyhow!(e))?;
+    let agent: Agent = args.agent.parse().map_err(|e: String| anyhow::anyhow!(e))?;
     let model = args.model.as_deref();
 
     println!("\n=== REASONING-BASED TRAINING ===");
@@ -1214,31 +1368,38 @@ fn run_reasoning_training(
         let metrics = evaluate_point(&current_params, cases, distractors);
 
         // Collect failures (cases where NDCG < threshold)
-        let failures = collect_failures(
-            &current_params,
-            cases,
-            distractors,
-            args.failure_threshold,
-        );
+        let failures =
+            collect_failures(&current_params, cases, distractors, args.failure_threshold);
 
         if failures.is_empty() {
-            println!("No failures below threshold {:.2}. Training converged!", args.failure_threshold);
+            println!(
+                "No failures below threshold {:.2}. Training converged!",
+                args.failure_threshold
+            );
             break;
         }
 
         // Ask LLM to reason about failures with spinner
         use indicatif::{ProgressBar, ProgressStyle};
         let spinner = ProgressBar::new_spinner();
-        spinner.set_style(ProgressStyle::with_template(
-            "{prefix:.bold} {spinner:.cyan} {msg}"
-        ).unwrap().tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]));
+        spinner.set_style(
+            ProgressStyle::with_template("{prefix:.bold} {spinner:.cyan} {msg}")
+                .unwrap()
+                .tick_strings(&["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]),
+        );
         spinner.set_prefix(format!("E{:02}", episode_num + 1));
-        spinner.set_message(format!("{} reasoning ({} failures)...", agent, failures.len()));
+        spinner.set_message(format!(
+            "{} reasoning ({} failures)...",
+            agent,
+            failures.len()
+        ));
         spinner.enable_steady_tick(std::time::Duration::from_millis(80));
 
         // Phase 1 agentic mode: pass run directory for file access
         // Extract directory from scratchpad path (e.g., "training/runs/my-run/scratchpad.json" -> "training/runs/my-run")
-        let run_dir = args.scratchpad.parent()
+        let run_dir = args
+            .scratchpad
+            .parent()
             .and_then(|p| p.to_str())
             .map(|s| s.to_string());
 
@@ -1267,7 +1428,10 @@ fn run_reasoning_training(
                 progress.display(episode_num + 1, args.episodes);
 
                 println!(); // Newline after sparkline for subsequent output
-                println!("Confidence: {:.2}  ⏱ {:.1}s", episode.confidence, episode.duration_secs);
+                println!(
+                    "Confidence: {:.2}  ⏱ {:.1}s",
+                    episode.confidence, episode.duration_secs
+                );
                 println!("Proposed {} changes:", episode.proposed_changes.len());
                 for (param, (dir, mag, rationale)) in &episode.proposed_changes {
                     println!("  {} {} {} - \"{}\"", param, dir, mag, rationale);
@@ -1286,7 +1450,10 @@ fn run_reasoning_training(
                     println!("\nApplied changes. New params:");
                     print_config(&current_params);
                 } else {
-                    println!("\nConfidence too low ({:.2}), skipping changes", episode.confidence);
+                    println!(
+                        "\nConfidence too low ({:.2}), skipping changes",
+                        episode.confidence
+                    );
                 }
 
                 // Update scratchpad
@@ -1296,7 +1463,12 @@ fn run_reasoning_training(
                 spinner.finish_with_message("failed");
                 eprintln!("Warning: Reasoning failed: {}", e);
                 // Still record progress even on failure
-                progress.record(metrics.ndcg_at_10, failures.len(), 0.0, current_params.pagerank_alpha);
+                progress.record(
+                    metrics.ndcg_at_10,
+                    failures.len(),
+                    0.0,
+                    current_params.pagerank_alpha,
+                );
                 progress.display(episode_num + 1, args.episodes);
                 println!();
             }
@@ -1311,9 +1483,14 @@ fn run_reasoning_training(
 
             // Save current params to checkpoints dir if using run_name, otherwise alongside output
             let checkpoint_path = if args.run_name.is_some() {
-                args.output.parent().unwrap().join("checkpoints").join(format!("ep{:03}.json", episode_num + 1))
+                args.output
+                    .parent()
+                    .unwrap()
+                    .join("checkpoints")
+                    .join(format!("ep{:03}.json", episode_num + 1))
             } else {
-                args.output.with_extension(format!("ep{}.json", episode_num + 1))
+                args.output
+                    .with_extension(format!("ep{}.json", episode_num + 1))
             };
             let checkpoint_file = File::create(&checkpoint_path)?;
             serde_json::to_writer_pretty(checkpoint_file, &current_params)?;
@@ -1322,7 +1499,10 @@ fn run_reasoning_training(
             #[cfg(feature = "plotters")]
             if let Some(plot_path) = &args.plot {
                 use ripmap::training::plots::plot_training_progress;
-                let _ = plot_training_progress(&scratchpad, plot_path.to_str().unwrap_or("training.png"));
+                let _ = plot_training_progress(
+                    &scratchpad,
+                    plot_path.to_str().unwrap_or("training.png"),
+                );
             }
 
             println!("  [checkpoint saved at episode {}]", episode_num + 1);
@@ -1341,18 +1521,29 @@ fn run_reasoning_training(
     println!("Final MRR:     {:.4}", final_metrics.mrr);
 
     // Timing statistics
-    let durations: Vec<f64> = scratchpad.episodes.iter()
+    let durations: Vec<f64> = scratchpad
+        .episodes
+        .iter()
         .map(|e| e.duration_secs)
-        .filter(|&d| d > 0.0)  // Filter out old episodes without timing
+        .filter(|&d| d > 0.0) // Filter out old episodes without timing
         .collect();
     if !durations.is_empty() {
         let total_agent_time: f64 = durations.iter().sum();
         let avg_time = total_agent_time / durations.len() as f64;
         let min_time = durations.iter().cloned().fold(f64::INFINITY, f64::min);
         let max_time = durations.iter().cloned().fold(0.0, f64::max);
-        println!("\n⏱ Agent timing ({} episodes with timing data):", durations.len());
-        println!("  Total: {:.1}s ({:.1}m)  Avg: {:.1}s  Min: {:.1}s  Max: {:.1}s",
-            total_agent_time, total_agent_time / 60.0, avg_time, min_time, max_time);
+        println!(
+            "\n⏱ Agent timing ({} episodes with timing data):",
+            durations.len()
+        );
+        println!(
+            "  Total: {:.1}s ({:.1}m)  Avg: {:.1}s  Min: {:.1}s  Max: {:.1}s",
+            total_agent_time,
+            total_agent_time / 60.0,
+            avg_time,
+            min_time,
+            max_time
+        );
     }
 
     // Save scratchpad
@@ -1375,7 +1566,8 @@ fn run_reasoning_training(
         #[cfg(feature = "plotters")]
         {
             use ripmap::training::plots::plot_training_progress;
-            match plot_training_progress(&scratchpad, plot_path.to_str().unwrap_or("training.png")) {
+            match plot_training_progress(&scratchpad, plot_path.to_str().unwrap_or("training.png"))
+            {
                 Ok(()) => println!("Training chart saved to {}", plot_path.display()),
                 Err(e) => eprintln!("Failed to generate chart: {}", e),
             }
@@ -1399,14 +1591,16 @@ fn collect_failures(
 ) -> Vec<RankingFailure> {
     let mut failures = Vec::new();
 
-    for case in cases.iter().take(50) { // Sample up to 50 cases
+    for case in cases.iter().take(50) {
+        // Sample up to 50 cases
         let ranking = simulate_ranking(params, case, distractors);
 
         // Ground truth as (file, weight) pairs for metrics computation
         let ground_truth_weighted: Vec<_> = case.expected_related.clone();
 
         // Ground truth file names only for failure reporting
-        let ground_truth_files: Vec<_> = case.expected_related
+        let ground_truth_files: Vec<_> = case
+            .expected_related
             .iter()
             .map(|(f, _)| f.clone())
             .collect();
@@ -1437,25 +1631,32 @@ fn collect_failures(
 /// Run distillation to crystallize scratchpad into wisdom.
 fn run_distillation(args: &Args) -> anyhow::Result<()> {
     // Parse agent type
-    let agent: Agent = args.agent.parse()
-        .map_err(|e: String| anyhow::anyhow!(e))?;
+    let agent: Agent = args.agent.parse().map_err(|e: String| anyhow::anyhow!(e))?;
     let model = args.model.as_deref();
 
     println!("\n=== DISTILLING SCRATCHPAD ===\n");
 
     if !args.scratchpad.exists() {
-        eprintln!("Error: Scratchpad not found at {}", args.scratchpad.display());
+        eprintln!(
+            "Error: Scratchpad not found at {}",
+            args.scratchpad.display()
+        );
         std::process::exit(1);
     }
 
     let scratchpad_file = File::open(&args.scratchpad)?;
     let scratchpad: Scratchpad = serde_json::from_reader(scratchpad_file)?;
 
-    println!("Loaded {} episodes from scratchpad", scratchpad.episodes.len());
+    println!(
+        "Loaded {} episodes from scratchpad",
+        scratchpad.episodes.len()
+    );
     print_scratchpad_summary(&scratchpad);
 
     // Phase 1 agentic mode: pass run directory for file access
-    let run_dir = args.scratchpad.parent()
+    let run_dir = args
+        .scratchpad
+        .parent()
         .and_then(|p| p.to_str())
         .map(|s| s.to_string());
 

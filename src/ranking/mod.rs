@@ -7,20 +7,20 @@
 //! - Focus expansion via graph traversal
 //! - Intent-driven recipe selection
 
-mod pagerank;
-mod symbols;
 mod boosts;
+mod bridges;
+mod coupling;
 mod focus;
 mod git;
-mod bridges;
 mod intent;
-mod coupling;
+mod pagerank;
+mod symbols;
 
+pub use boosts::BoostCalculator;
+pub use bridges::BridgeDetector;
+pub use coupling::TestCouplingDetector;
+pub use focus::FocusResolver;
+pub use git::{FileStats, GitWeightCalculator};
+pub use intent::IntentClassifier;
 pub use pagerank::PageRanker;
 pub use symbols::SymbolRanker;
-pub use boosts::BoostCalculator;
-pub use focus::FocusResolver;
-pub use git::{GitWeightCalculator, FileStats};
-pub use bridges::BridgeDetector;
-pub use intent::IntentClassifier;
-pub use coupling::TestCouplingDetector;

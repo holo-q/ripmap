@@ -46,22 +46,25 @@
 //! ```
 
 pub mod git_oracle;
-pub mod metrics;
 pub mod gridsearch;
-pub mod sensitivity;
-pub mod repos;
-pub mod reasoning;
+pub mod metrics;
 pub mod plots;
+pub mod reasoning;
+pub mod repos;
+pub mod sensitivity;
 
-pub use git_oracle::{GitCase, WeightedCase, extract_cases, compute_coupling_weights, weight_cases};
-pub use metrics::{EvalMetrics, CaseMetrics, weighted_ndcg, precision_at_k, mean_reciprocal_rank};
-pub use gridsearch::{ParameterPoint, ParameterGrid, SearchStrategy, sample_points, bayesian_next_sample};
-pub use sensitivity::{SensitivityAnalysis, ablation_study, full_analysis, print_summary};
-pub use repos::{CURATED_REPOS, RepoSpec, quick_repos};
-pub use reasoning::{
-    Agent, RankingFailure, ReasoningEpisode, Scratchpad,
-    call_claude, call_gemini, call_agent,
-    reason_about_failures, update_scratchpad,
-    apply_changes, distill_scratchpad, print_scratchpad_summary,
+pub use git_oracle::{
+    GitCase, WeightedCase, compute_coupling_weights, extract_cases, weight_cases,
 };
+pub use gridsearch::{
+    ParameterGrid, ParameterPoint, SearchStrategy, bayesian_next_sample, sample_points,
+};
+pub use metrics::{CaseMetrics, EvalMetrics, mean_reciprocal_rank, precision_at_k, weighted_ndcg};
 pub use plots::LiveProgress;
+pub use reasoning::{
+    Agent, RankingFailure, ReasoningEpisode, Scratchpad, apply_changes, call_agent, call_claude,
+    call_gemini, distill_scratchpad, print_scratchpad_summary, reason_about_failures,
+    update_scratchpad,
+};
+pub use repos::{CURATED_REPOS, RepoSpec, quick_repos};
+pub use sensitivity::{SensitivityAnalysis, ablation_study, full_analysis, print_summary};

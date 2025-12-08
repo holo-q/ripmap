@@ -382,15 +382,44 @@ fn get_stem(word: &str) -> Option<&'static str> {
 /// First element is the canonical stem.
 const STEM_GROUPS: &[&[&str]] = &[
     // Authentication/Authorization
-    &["auth", "authenticate", "authentication", "authenticated", "authorize", "authorization", "authorized"],
+    &[
+        "auth",
+        "authenticate",
+        "authentication",
+        "authenticated",
+        "authorize",
+        "authorization",
+        "authorized",
+    ],
     // Parsing
     &["parse", "parser", "parsing", "parsed"],
     // Validation
-    &["valid", "validate", "validation", "validator", "validated", "invalid", "invalidate", "invalidated"],
+    &[
+        "valid",
+        "validate",
+        "validation",
+        "validator",
+        "validated",
+        "invalid",
+        "invalidate",
+        "invalidated",
+    ],
     // Configuration
-    &["config", "configure", "configuration", "configured", "configurator"],
+    &[
+        "config",
+        "configure",
+        "configuration",
+        "configured",
+        "configurator",
+    ],
     // Initialization
-    &["init", "initialize", "initialization", "initialized", "initializer"],
+    &[
+        "init",
+        "initialize",
+        "initialization",
+        "initialized",
+        "initializer",
+    ],
     // Rendering
     &["render", "renderer", "rendering", "rendered"],
     // Caching
@@ -402,9 +431,24 @@ const STEM_GROUPS: &[&[&str]] = &[
     // Processing
     &["process", "processor", "processing", "processed"],
     // Serialization
-    &["serial", "serialize", "serialization", "serialized", "serializer", "deserialize", "deserialized"],
+    &[
+        "serial",
+        "serialize",
+        "serialization",
+        "serialized",
+        "serializer",
+        "deserialize",
+        "deserialized",
+    ],
     // Connection
-    &["connect", "connection", "connected", "connector", "disconnect", "disconnected"],
+    &[
+        "connect",
+        "connection",
+        "connected",
+        "connector",
+        "disconnect",
+        "disconnected",
+    ],
     // Transformation
     &["transform", "transformer", "transformation", "transformed"],
     // Compilation
@@ -465,19 +509,28 @@ mod tests {
         // snake_case
         assert_eq!(
             split_identifier("get_user_name"),
-            ["get", "user", "name"].iter().map(|s| s.to_string()).collect()
+            ["get", "user", "name"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect()
         );
 
         // camelCase
         assert_eq!(
             split_identifier("getUserName"),
-            ["get", "user", "name"].iter().map(|s| s.to_string()).collect()
+            ["get", "user", "name"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect()
         );
 
         // PascalCase
         assert_eq!(
             split_identifier("GetUserName"),
-            ["get", "user", "name"].iter().map(|s| s.to_string()).collect()
+            ["get", "user", "name"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect()
         );
 
         // Acronyms
@@ -488,7 +541,10 @@ mod tests {
         // Mixed
         assert_eq!(
             split_identifier("parse_JSONObject"),
-            ["parse", "json", "object"].iter().map(|s| s.to_string()).collect()
+            ["parse", "json", "object"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect()
         );
     }
 
@@ -604,7 +660,7 @@ mod tests {
                     parent_line: None,
                     signature: None,
                     fields: None,
-                metadata: None,
+                    metadata: None,
                 },
                 Tag {
                     rel_fname: "src/auth.rs".into(),
@@ -617,7 +673,7 @@ mod tests {
                     parent_line: None,
                     signature: None,
                     fields: None,
-                metadata: None,
+                    metadata: None,
                 },
             ],
         );
@@ -648,7 +704,7 @@ mod tests {
                 parent_line: None,
                 signature: None,
                 fields: None,
-            metadata: None,
+                metadata: None,
             }],
         );
         tags_by_file.insert(
@@ -664,7 +720,7 @@ mod tests {
                 parent_line: None,
                 signature: None,
                 fields: None,
-            metadata: None,
+                metadata: None,
             }],
         );
 
@@ -720,8 +776,14 @@ mod tests {
 
         // Should have foo (weight 1.0) and bar (weight 0.5)
         assert_eq!(expanded.len(), 2);
-        assert_eq!(expanded.get(&(Arc::from("a.rs"), Arc::from("foo"))), Some(&1.0));
-        assert_eq!(expanded.get(&(Arc::from("b.rs"), Arc::from("bar"))), Some(&0.5));
+        assert_eq!(
+            expanded.get(&(Arc::from("a.rs"), Arc::from("foo"))),
+            Some(&1.0)
+        );
+        assert_eq!(
+            expanded.get(&(Arc::from("b.rs"), Arc::from("bar"))),
+            Some(&0.5)
+        );
     }
 
     #[test]
@@ -751,9 +813,18 @@ mod tests {
 
         // Should have foo (1.0), bar (0.5), baz (0.25)
         assert_eq!(expanded.len(), 3);
-        assert_eq!(expanded.get(&(Arc::from("a.rs"), Arc::from("foo"))), Some(&1.0));
-        assert_eq!(expanded.get(&(Arc::from("b.rs"), Arc::from("bar"))), Some(&0.5));
-        assert_eq!(expanded.get(&(Arc::from("c.rs"), Arc::from("baz"))), Some(&0.25));
+        assert_eq!(
+            expanded.get(&(Arc::from("a.rs"), Arc::from("foo"))),
+            Some(&1.0)
+        );
+        assert_eq!(
+            expanded.get(&(Arc::from("b.rs"), Arc::from("bar"))),
+            Some(&0.5)
+        );
+        assert_eq!(
+            expanded.get(&(Arc::from("c.rs"), Arc::from("baz"))),
+            Some(&0.25)
+        );
     }
 
     #[test]
@@ -823,9 +894,18 @@ mod tests {
 
         // Should expand to both callers
         assert_eq!(expanded.len(), 3); // bar, foo, baz
-        assert_eq!(expanded.get(&(Arc::from("b.rs"), Arc::from("bar"))), Some(&1.0));
-        assert_eq!(expanded.get(&(Arc::from("a.rs"), Arc::from("foo"))), Some(&0.5));
-        assert_eq!(expanded.get(&(Arc::from("c.rs"), Arc::from("baz"))), Some(&0.5));
+        assert_eq!(
+            expanded.get(&(Arc::from("b.rs"), Arc::from("bar"))),
+            Some(&1.0)
+        );
+        assert_eq!(
+            expanded.get(&(Arc::from("a.rs"), Arc::from("foo"))),
+            Some(&0.5)
+        );
+        assert_eq!(
+            expanded.get(&(Arc::from("c.rs"), Arc::from("baz"))),
+            Some(&0.5)
+        );
     }
 
     #[test]
@@ -844,10 +924,16 @@ mod tests {
 
         // Test with different decay values
         let expanded = resolver.expand_via_graph(&matched_idents, &symbol_graph, 1, 0.75);
-        assert_eq!(expanded.get(&(Arc::from("b.rs"), Arc::from("bar"))), Some(&0.75));
+        assert_eq!(
+            expanded.get(&(Arc::from("b.rs"), Arc::from("bar"))),
+            Some(&0.75)
+        );
 
         let expanded = resolver.expand_via_graph(&matched_idents, &symbol_graph, 1, 0.25);
-        assert_eq!(expanded.get(&(Arc::from("b.rs"), Arc::from("bar"))), Some(&0.25));
+        assert_eq!(
+            expanded.get(&(Arc::from("b.rs"), Arc::from("bar"))),
+            Some(&0.25)
+        );
     }
 
     #[test]
@@ -868,7 +954,7 @@ mod tests {
                 parent_line: None,
                 signature: None,
                 fields: None,
-            metadata: None,
+                metadata: None,
             }],
         );
 
@@ -906,14 +992,23 @@ mod tests {
 
         // Should handle cycle gracefully - foo not re-added at lower weight
         assert_eq!(expanded.len(), 2); // foo, bar
-        assert_eq!(expanded.get(&(Arc::from("a.rs"), Arc::from("foo"))), Some(&1.0));
-        assert_eq!(expanded.get(&(Arc::from("b.rs"), Arc::from("bar"))), Some(&0.5));
+        assert_eq!(
+            expanded.get(&(Arc::from("a.rs"), Arc::from("foo"))),
+            Some(&1.0)
+        );
+        assert_eq!(
+            expanded.get(&(Arc::from("b.rs"), Arc::from("bar"))),
+            Some(&0.5)
+        );
     }
 
     #[test]
     fn test_split_identifier_edge_cases() {
         // Single word
-        assert_eq!(split_identifier("foo"), ["foo"].iter().map(|s| s.to_string()).collect());
+        assert_eq!(
+            split_identifier("foo"),
+            ["foo"].iter().map(|s| s.to_string()).collect()
+        );
 
         // Empty
         assert_eq!(split_identifier(""), HashSet::new());
@@ -925,7 +1020,10 @@ mod tests {
         // Multiple delimiters
         assert_eq!(
             split_identifier("foo__bar--baz"),
-            ["foo", "bar", "baz"].iter().map(|s| s.to_string()).collect()
+            ["foo", "bar", "baz"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect()
         );
     }
 
@@ -964,9 +1062,21 @@ mod tests {
 
         // Should expand from both seeds
         assert_eq!(expanded.len(), 4); // foo, bar, baz, qux
-        assert_eq!(expanded.get(&(Arc::from("a.rs"), Arc::from("foo"))), Some(&1.0));
-        assert_eq!(expanded.get(&(Arc::from("b.rs"), Arc::from("bar"))), Some(&0.5));
-        assert_eq!(expanded.get(&(Arc::from("c.rs"), Arc::from("baz"))), Some(&1.0));
-        assert_eq!(expanded.get(&(Arc::from("d.rs"), Arc::from("qux"))), Some(&0.5));
+        assert_eq!(
+            expanded.get(&(Arc::from("a.rs"), Arc::from("foo"))),
+            Some(&1.0)
+        );
+        assert_eq!(
+            expanded.get(&(Arc::from("b.rs"), Arc::from("bar"))),
+            Some(&0.5)
+        );
+        assert_eq!(
+            expanded.get(&(Arc::from("c.rs"), Arc::from("baz"))),
+            Some(&1.0)
+        );
+        assert_eq!(
+            expanded.get(&(Arc::from("d.rs"), Arc::from("qux"))),
+            Some(&0.5)
+        );
     }
 }

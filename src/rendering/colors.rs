@@ -167,21 +167,13 @@ impl Colorizer {
 /// Maps AST node types to appropriate color schemes.
 pub fn colorize(node_type: &str, name: &str) -> String {
     match node_type {
-        "class" | "class_definition" | "struct" | "struct_item" => {
-            Colorizer::class_name(name)
-        }
+        "class" | "class_definition" | "struct" | "struct_item" => Colorizer::class_name(name),
         "function" | "function_definition" | "method" | "method_definition" => {
             Colorizer::function_name(name)
         }
-        "constant" | "const_item" => {
-            Colorizer::constant_name(name)
-        }
-        "type" | "type_alias" | "type_definition" => {
-            Colorizer::type_name(name)
-        }
-        "decorator" | "attribute" => {
-            Colorizer::decorator(name)
-        }
+        "constant" | "const_item" => Colorizer::constant_name(name),
+        "type" | "type_alias" | "type_definition" => Colorizer::type_name(name),
+        "decorator" | "attribute" => Colorizer::decorator(name),
         _ => name.to_string(),
     }
 }

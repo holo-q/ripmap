@@ -1,8 +1,10 @@
 //! Configuration loading from pyproject.toml and ripmap.toml.
 //!
 //! Follows conventions from ruff, black, mypy for familiarity:
-//! - `[tool.ripmap]` section in pyproject.toml
-//! - Standalone ripmap.toml as fallback
+//! - `[tool.ripmap]` section in pyproject.toml (preferred)
+//! - Falls back to `[tool.ruff]` exclude patterns if no ripmap config
+//! - Falls back to `[tool.pyright]` exclude patterns as last resort
+//! - Standalone ripmap.toml as override
 //!
 //! ## Example
 //!
@@ -13,9 +15,16 @@
 //! extend-exclude = ["**/vendor/**"]
 //! src = ["src", "lib"]
 //! ```
+//!
+//! Or ripmap will inherit from existing tool configs:
+//! ```toml
+//! [tool.ruff]
+//! exclude = ["migrations", "generated"]
+//! ```
 
-use std::path::{Path, PathBuf};
+use owo_colors::OwoColorize;
 use serde::Deserialize;
+use std::path::{Path, PathBuf};
 
 /// Default exclude patterns (common non-source directories).
 pub const DEFAULT_EXCLUDES: &[&str] = &[
@@ -40,8 +49,8 @@ pub const DEFAULT_EXCLUDES: &[&str] = &[
 /// Ripmap configuration.
 #[derive(Debug, Clone, Default)]
 pub struct Config {
-    /// Source file for this config (for display).
-    pub source: Option<PathBuf>,
+    /// Source file for this config (for display), with tool name if inherited.
+    pub source: Option<String>,
 
     /// Glob patterns for files to include. If empty, include all source files.
     pub include: Vec<String>,
@@ -56,7 +65,7 @@ pub struct Config {
     pub src: Vec<PathBuf>,
 }
 
-/// Raw config as deserialized from TOML.
+/// Raw config as deserialized from TOML (ripmap-native format).
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "kebab-case")]
 struct RawConfig {
@@ -66,15 +75,48 @@ struct RawConfig {
     src: Option<Vec<String>>,
 }
 
+/// Ruff config structure (for fallback).
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "kebab-case")]
+struct RuffConfig {
+    include: Option<Vec<String>>,
+    exclude: Option<Vec<String>>,
+    extend_exclude: Option<Vec<String>>,
+    src: Option<Vec<String>>,
+}
+
+/// Ty (astral type checker) config structure.
+/// Has nested `src` section with include/exclude.
+#[derive(Debug, Deserialize, Default)]
+struct TyConfig {
+    src: Option<TySrcConfig>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct TySrcConfig {
+    include: Option<Vec<String>>,
+    exclude: Option<Vec<String>>,
+}
+
+/// Pyright config structure (for fallback).
+#[derive(Debug, Deserialize, Default)]
+struct PyrightConfig {
+    include: Option<Vec<String>>,
+    exclude: Option<Vec<String>>,
+}
+
 /// Wrapper for pyproject.toml structure.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 struct PyProject {
     tool: Option<PyProjectTool>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 struct PyProjectTool {
     ripmap: Option<RawConfig>,
+    ty: Option<TyConfig>,
+    ruff: Option<RuffConfig>,
+    pyright: Option<PyrightConfig>,
 }
 
 impl Config {
@@ -127,17 +169,85 @@ impl Config {
     fn load_pyproject(path: &Path) -> Option<Self> {
         let content = std::fs::read_to_string(path).ok()?;
         let pyproject: PyProject = toml::from_str(&content).ok()?;
-        let raw = pyproject.tool?.ripmap?;
-        Some(Self::from_raw(raw, path.to_path_buf()))
+        let tool = pyproject.tool?;
+
+        // Cascade: ripmap → ty → ruff → pyright
+        // Each fallback indicates its source for transparency
+
+        // 1. Native ripmap config (preferred)
+        if let Some(raw) = tool.ripmap {
+            return Some(Self::from_raw(raw, path.to_path_buf()));
+        }
+
+        // 2. Ty (astral type checker) - has nested src.include/exclude
+        if let Some(ty) = tool.ty {
+            if let Some(src) = ty.src {
+                if src.include.is_some() || src.exclude.is_some() {
+                    return Some(Self {
+                        source: Some(format!("{} [tool.ty]", path.display())),
+                        include: src.include.unwrap_or_default(),
+                        exclude: src.exclude.unwrap_or_default(),
+                        extend_exclude: Vec::new(),
+                        src: Vec::new(),
+                    });
+                }
+            }
+        }
+
+        // 3. Ruff - same structure as ripmap
+        if let Some(ruff) = tool.ruff {
+            if ruff.include.is_some() || ruff.exclude.is_some() || ruff.extend_exclude.is_some() {
+                return Some(Self {
+                    source: Some(format!("{} [tool.ruff]", path.display())),
+                    include: ruff.include.unwrap_or_default(),
+                    exclude: ruff.exclude.unwrap_or_default(),
+                    extend_exclude: ruff.extend_exclude.unwrap_or_default(),
+                    src: ruff
+                        .src
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(PathBuf::from)
+                        .collect(),
+                });
+            }
+        }
+
+        // 4. Pyright - simpler include/exclude
+        // (but really, you should be using ty by now)
+        if let Some(pyright) = tool.pyright {
+            if pyright.include.is_some() || pyright.exclude.is_some() {
+                eprintln!(
+                    "   {} pyright is now banned under international law. use {} instead {}",
+                    "~*~".magenta(),
+                    "ty".cyan().bold(),
+                    "~*~".magenta()
+                );
+
+                return Some(Self {
+                    source: Some(format!("{} [tool.pyright]", path.display())),
+                    include: pyright.include.unwrap_or_default(),
+                    exclude: pyright.exclude.unwrap_or_default(),
+                    extend_exclude: Vec::new(),
+                    src: Vec::new(),
+                });
+            }
+        }
+
+        None
     }
 
     fn from_raw(raw: RawConfig, source: PathBuf) -> Self {
         Self {
-            source: Some(source),
+            source: Some(source.display().to_string()),
             include: raw.include.unwrap_or_default(),
             exclude: raw.exclude.unwrap_or_default(),
             extend_exclude: raw.extend_exclude.unwrap_or_default(),
-            src: raw.src.unwrap_or_default().into_iter().map(PathBuf::from).collect(),
+            src: raw
+                .src
+                .unwrap_or_default()
+                .into_iter()
+                .map(PathBuf::from)
+                .collect(),
         }
     }
 
@@ -148,7 +258,8 @@ impl Config {
             self.exclude.clone()
         } else {
             // Use defaults + extend-exclude
-            let mut patterns: Vec<String> = DEFAULT_EXCLUDES.iter().map(|s| s.to_string()).collect();
+            let mut patterns: Vec<String> =
+                DEFAULT_EXCLUDES.iter().map(|s| s.to_string()).collect();
             patterns.extend(self.extend_exclude.clone());
             patterns
         }
@@ -161,17 +272,17 @@ impl Config {
             return true;
         }
         let path_str = path.to_string_lossy();
-        self.include.iter().any(|pattern| {
-            glob_match::glob_match(pattern, &path_str)
-        })
+        self.include
+            .iter()
+            .any(|pattern| glob_match::glob_match(pattern, &path_str))
     }
 
     /// Check if a path matches any exclude pattern.
     pub fn matches_exclude(&self, path: &Path) -> bool {
         let path_str = path.to_string_lossy();
-        self.effective_excludes().iter().any(|pattern| {
-            glob_match::glob_match(pattern, &path_str)
-        })
+        self.effective_excludes()
+            .iter()
+            .any(|pattern| glob_match::glob_match(pattern, &path_str))
     }
 
     /// Check if a path should be included (matches include AND not exclude).
@@ -184,7 +295,7 @@ impl Config {
         let mut lines = Vec::new();
 
         if let Some(ref source) = self.source {
-            lines.push(format!("   Config: {}", source.display()));
+            lines.push(format!("   Config: {}", source));
         } else {
             lines.push("   Config: (defaults)".to_string());
         }
@@ -199,8 +310,11 @@ impl Config {
             if excludes.len() <= 3 {
                 lines.push(format!("   Exclude: {}", excludes.join(", ")));
             } else {
-                lines.push(format!("   Exclude: {}, ... (+{} more)",
-                    excludes[..2].join(", "), excludes.len() - 2));
+                lines.push(format!(
+                    "   Exclude: {}, ... (+{} more)",
+                    excludes[..2].join(", "),
+                    excludes.len() - 2
+                ));
             }
         }
 

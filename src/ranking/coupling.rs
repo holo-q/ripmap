@@ -65,16 +65,14 @@ impl TestCouplingDetector {
     /// - 0.9: Exact match (test_foo.py → foo.py exists)
     /// - 0.7: Directory match (tests/test_foo.py → src/foo.py exists)
     /// - 0.5: Pattern match but source not found
-    pub fn detect_couplings(
-        &self,
-        files: &[impl AsRef<Path>],
-    ) -> Vec<(Arc<str>, Arc<str>, f64)> {
+    pub fn detect_couplings(&self, files: &[impl AsRef<Path>]) -> Vec<(Arc<str>, Arc<str>, f64)> {
         // Build a set of all files for existence checking
         let file_set: HashMap<String, &Path> = files
             .iter()
             .map(|f| {
                 let p = f.as_ref();
-                let name = p.file_name()
+                let name = p
+                    .file_name()
                     .map(|n| n.to_string_lossy().to_string())
                     .unwrap_or_default();
                 (name, p)
@@ -111,11 +109,8 @@ impl TestCouplingDetector {
                         }
 
                         // Calculate final confidence based on path proximity
-                        let confidence = self.calculate_confidence(
-                            path,
-                            source_path,
-                            confidence_base,
-                        );
+                        let confidence =
+                            self.calculate_confidence(path, source_path, confidence_base);
 
                         if confidence >= self.min_confidence {
                             couplings.push((
@@ -146,7 +141,7 @@ impl TestCouplingDetector {
                 return Some((stem[5..].to_string(), 0.9));
             }
             if stem.ends_with("_test") {
-                return Some((stem[..stem.len()-5].to_string(), 0.9));
+                return Some((stem[..stem.len() - 5].to_string(), 0.9));
             }
             // In tests/ directory
             if path_str.contains("/tests/") || path_str.contains("\\tests\\") {
@@ -160,19 +155,21 @@ impl TestCouplingDetector {
                 return Some((stem[5..].to_string(), 0.9));
             }
             if stem.ends_with("_test") {
-                return Some((stem[..stem.len()-5].to_string(), 0.9));
+                return Some((stem[..stem.len() - 5].to_string(), 0.9));
             }
         }
 
         // JavaScript/TypeScript: foo.spec.ts, foo.test.js
-        if file_name.ends_with(".ts") || file_name.ends_with(".tsx")
-            || file_name.ends_with(".js") || file_name.ends_with(".jsx")
+        if file_name.ends_with(".ts")
+            || file_name.ends_with(".tsx")
+            || file_name.ends_with(".js")
+            || file_name.ends_with(".jsx")
         {
             if stem.ends_with(".spec") {
-                return Some((stem[..stem.len()-5].to_string(), 0.9));
+                return Some((stem[..stem.len() - 5].to_string(), 0.9));
             }
             if stem.ends_with(".test") {
-                return Some((stem[..stem.len()-5].to_string(), 0.9));
+                return Some((stem[..stem.len() - 5].to_string(), 0.9));
             }
             // __tests__ directory convention
             if path_str.contains("/__tests__/") || path_str.contains("\\__tests__\\") {
@@ -182,7 +179,7 @@ impl TestCouplingDetector {
 
         // Go: foo_test.go
         if file_name.ends_with(".go") && stem.ends_with("_test") {
-            return Some((stem[..stem.len()-5].to_string(), 0.9));
+            return Some((stem[..stem.len() - 5].to_string(), 0.9));
         }
 
         None
@@ -196,7 +193,9 @@ impl TestCouplingDetector {
     /// - Completely unrelated: no bonus
     fn calculate_confidence(&self, test_path: &Path, source_path: &Path, base: f64) -> f64 {
         let test_parent = test_path.parent().map(|p| p.to_string_lossy().to_string());
-        let source_parent = source_path.parent().map(|p| p.to_string_lossy().to_string());
+        let source_parent = source_path
+            .parent()
+            .map(|p| p.to_string_lossy().to_string());
 
         match (test_parent, source_parent) {
             (Some(tp), Some(sp)) => {
@@ -216,7 +215,7 @@ impl TestCouplingDetector {
                 let tp_parts: Vec<_> = tp.split(['/', '\\']).collect();
                 let sp_parts: Vec<_> = sp.split(['/', '\\']).collect();
                 if tp_parts.len() > 1 && sp_parts.len() > 1 {
-                    if tp_parts[..tp_parts.len()-1] == sp_parts[..sp_parts.len()-1] {
+                    if tp_parts[..tp_parts.len() - 1] == sp_parts[..sp_parts.len() - 1] {
                         return (base + 0.05).min(1.0);
                     }
                 }
@@ -244,8 +243,18 @@ impl TestCouplingDetector {
             .flat_map(|(test, source, _conf)| {
                 // Bidirectional: test↔source
                 vec![
-                    (test.clone(), file_symbol.clone(), source.clone(), file_symbol.clone()),
-                    (source.clone(), file_symbol.clone(), test.clone(), file_symbol.clone()),
+                    (
+                        test.clone(),
+                        file_symbol.clone(),
+                        source.clone(),
+                        file_symbol.clone(),
+                    ),
+                    (
+                        source.clone(),
+                        file_symbol.clone(),
+                        test.clone(),
+                        file_symbol.clone(),
+                    ),
                 ]
             })
             .collect()
@@ -319,10 +328,7 @@ mod tests {
         let detector = TestCouplingDetector::new();
 
         // Test files shouldn't couple to other test files
-        let files: Vec<PathBuf> = vec![
-            "test_foo.py".into(),
-            "test_bar.py".into(),
-        ];
+        let files: Vec<PathBuf> = vec!["test_foo.py".into(), "test_bar.py".into()];
 
         let couplings = detector.detect_couplings(&files);
         assert!(couplings.is_empty());
@@ -332,10 +338,7 @@ mod tests {
     fn test_confidence_same_directory() {
         let detector = TestCouplingDetector::new();
 
-        let files: Vec<PathBuf> = vec![
-            "src/foo.rs".into(),
-            "src/foo_test.rs".into(),
-        ];
+        let files: Vec<PathBuf> = vec!["src/foo.rs".into(), "src/foo_test.rs".into()];
 
         let couplings = detector.detect_couplings(&files);
         assert_eq!(couplings.len(), 1);
@@ -347,9 +350,7 @@ mod tests {
     fn test_as_symbol_edges() {
         let detector = TestCouplingDetector::new();
 
-        let couplings = vec![
-            (Arc::from("test_foo.py"), Arc::from("foo.py"), 0.9),
-        ];
+        let couplings = vec![(Arc::from("test_foo.py"), Arc::from("foo.py"), 0.9)];
 
         let edges = detector.as_symbol_edges(&couplings);
 

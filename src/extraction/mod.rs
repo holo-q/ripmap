@@ -13,10 +13,10 @@
 //! - `TreeSitterParser`: Full AST parsing with .scm queries (preferred)
 //! - `Parser`: Regex-based fallback for unsupported languages
 
-mod parser;
-mod tags;
-mod signatures;
 mod fields;
+mod parser;
+mod signatures;
+mod tags;
 mod treesitter;
 
 pub use parser::Parser;

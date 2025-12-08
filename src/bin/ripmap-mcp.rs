@@ -14,8 +14,8 @@
 //! `grep_map` tool for generating topology-aware structural maps.
 
 use anyhow::Result;
-use rmcp::{transport::stdio, ServiceExt};
 use ripmap::mcp::RipmapServer;
+use rmcp::{ServiceExt, transport::stdio};
 
 #[tokio::main]
 async fn main() -> Result<()> {

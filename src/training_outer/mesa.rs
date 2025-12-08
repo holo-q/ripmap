@@ -26,11 +26,11 @@
 //!       ...
 //! ```
 
+use serde::{Serialize, de::DeserializeOwned};
 use std::path::{Path, PathBuf};
-use serde::{de::DeserializeOwned, Serialize};
 
-use super::schemas::*;
 use super::promptgram::Promptgram;
+use super::schemas::*;
 
 /// A proposal from a mesa optimizer.
 ///
@@ -66,8 +66,7 @@ pub trait Scratchpad: Default + Serialize + DeserializeOwned {
     {
         let content = std::fs::read_to_string(path.as_ref())
             .map_err(|e| format!("Failed to read scratchpad: {}", e))?;
-        serde_json::from_str(&content)
-            .map_err(|e| format!("Failed to parse scratchpad: {}", e))
+        serde_json::from_str(&content).map_err(|e| format!("Failed to parse scratchpad: {}", e))
     }
 }
 
@@ -162,7 +161,8 @@ impl RunContext {
 
     /// Get path for inner run results.
     pub fn inner_run_path(&self, step: usize) -> PathBuf {
-        self.config.output_dir()
+        self.config
+            .output_dir()
             .join("inner_runs")
             .join(format!("step_{:03}", step))
     }
@@ -292,23 +292,30 @@ impl OuterLoop {
             // Exploration: pick from non-best candidates
             // Prefer less-tested promptgrams or recent mutations
             let best_id = &outer_scratchpad.best_prompt_id;
-            let candidates: Vec<&Promptgram> = self.population
+            let candidates: Vec<&Promptgram> = self
+                .population
                 .iter()
                 .filter(|p| &p.id != best_id)
                 .collect();
 
             if candidates.is_empty() {
                 // All are "best" (only one promptgram evaluated so far)
-                return (self.population.last().unwrap().clone(), SelectionMode::Recent);
+                return (
+                    self.population.last().unwrap().clone(),
+                    SelectionMode::Recent,
+                );
             }
 
             // Weight by recency and inverse run count
-            let weights: Vec<f64> = candidates.iter().map(|p| {
-                let stats = outer_scratchpad.promptgram_stats(&p.id);
-                let run_count = stats.map(|s| s.run_count).unwrap_or(0);
-                // Never-run prompts get high weight, heavily-run get low weight
-                1.0 / (run_count as f64 + 1.0)
-            }).collect();
+            let weights: Vec<f64> = candidates
+                .iter()
+                .map(|p| {
+                    let stats = outer_scratchpad.promptgram_stats(&p.id);
+                    let run_count = stats.map(|s| s.run_count).unwrap_or(0);
+                    // Never-run prompts get high weight, heavily-run get low weight
+                    1.0 / (run_count as f64 + 1.0)
+                })
+                .collect();
 
             let total: f64 = weights.iter().sum();
             let mut pick = rng.r#gen::<f64>() * total;
@@ -321,11 +328,15 @@ impl OuterLoop {
             }
 
             // Fallback to last candidate
-            (candidates.last().unwrap().clone().clone(), SelectionMode::Explore)
+            (
+                candidates.last().unwrap().clone().clone(),
+                SelectionMode::Explore,
+            )
         } else {
             // Exploitation: pick the best-performing promptgram
             let best_id = &outer_scratchpad.best_prompt_id;
-            let best = self.population
+            let best = self
+                .population
                 .iter()
                 .find(|p| &p.id == best_id)
                 .or_else(|| self.population.first())
@@ -404,11 +415,17 @@ impl OuterLoop {
 
         // 1. Select promptgram using selection strategy
         let (promptgram, selection_mode) = self.select_promptgram(outer_scratchpad);
-        println!("  📋 Selected promptgram: {} (mode: {})", promptgram.id, selection_mode.as_str());
+        println!(
+            "  📋 Selected promptgram: {} (mode: {})",
+            promptgram.id,
+            selection_mode.as_str()
+        );
 
         // 2. Create inner run config
         let inner_ctx = RunContext {
-            config: ctx.config.inner_run_config(outer_step, self.inner_config.inner_episodes),
+            config: ctx
+                .config
+                .inner_run_config(outer_step, self.inner_config.inner_episodes),
             episode: 0,
             is_outer: false,
             parent_step: Some(outer_step),
@@ -422,10 +439,18 @@ impl OuterLoop {
         let inner_result = self.run_inner_loop(&promptgram, &inner_ctx, best_params)?;
 
         // 4. Summarize the run (includes selection mode)
-        let mut summary = self.summarize_inner_run(outer_step, &promptgram, &inner_result, &inner_ctx, &episode_start)?;
+        let mut summary = self.summarize_inner_run(
+            outer_step,
+            &promptgram,
+            &inner_result,
+            &inner_ctx,
+            &episode_start,
+        )?;
         summary.selection_mode = selection_mode.as_str().to_string();
         // Track warm start for diagnostic: if always None, learning isn't accumulating
-        summary.warm_started_from_step = outer_scratchpad.best_params_step.checked_sub(0)
+        summary.warm_started_from_step = outer_scratchpad
+            .best_params_step
+            .checked_sub(0)
             .filter(|_| outer_scratchpad.best_params_path.is_some())
             .map(|_| outer_scratchpad.best_params_step);
 
@@ -437,14 +462,15 @@ impl OuterLoop {
 
             // Track path to trained params from this run for warm-starting subsequent runs
             // ripmap-train saves to <output>.trained.json
-            let trained_params_path = inner_ctx.config.output_dir()
-                .join("results.trained.json");
+            let trained_params_path = inner_ctx.config.output_dir().join("results.trained.json");
             if trained_params_path.exists() {
-                outer_scratchpad.best_params_path = Some(
-                    trained_params_path.to_str().unwrap().to_string()
-                );
+                outer_scratchpad.best_params_path =
+                    Some(trained_params_path.to_str().unwrap().to_string());
                 outer_scratchpad.best_params_step = outer_step;
-                println!("  🏆 New best! NDCG={:.4} - params saved for warm start", summary.final_metrics.ndcg);
+                println!(
+                    "  🏆 New best! NDCG={:.4} - params saved for warm start",
+                    summary.final_metrics.ndcg
+                );
             }
         }
 
@@ -454,24 +480,35 @@ impl OuterLoop {
             let recent: Vec<&OuterEpisodeSummary> = outer_scratchpad
                 .recent_episodes(3)
                 .into_iter()
-                .rev()  // Oldest first
+                .rev() // Oldest first
                 .collect();
 
             // Parse outer agent
-            let outer_agent: crate::training::reasoning::Agent = self.inner_config.outer_agent
+            let outer_agent: crate::training::reasoning::Agent = self
+                .inner_config
+                .outer_agent
                 .parse()
                 .map_err(|e: String| e)?;
 
             // Call L2 reasoning with full history context
-            match self.reason_about_prompt(&promptgram, &recent, outer_scratchpad, outer_agent, ctx) {
+            match self.reason_about_prompt(&promptgram, &recent, outer_scratchpad, outer_agent, ctx)
+            {
                 Ok(proposal) => {
-                    println!("  📝 L2 proposal: mode={}, confidence={:.2}", proposal.mode, proposal.confidence);
+                    println!(
+                        "  📝 L2 proposal: mode={}, confidence={:.2}",
+                        proposal.mode, proposal.confidence
+                    );
                     println!("     {} edits proposed", proposal.edits.len());
                     for edit in &proposal.edits {
-                        let target_display = edit.target.as_deref()
+                        let target_display = edit
+                            .target
+                            .as_deref()
                             .filter(|s| !s.is_empty())
                             .unwrap_or("(new)");
-                        println!("       • {}: {} in {}", edit.edit_type, edit.section, target_display);
+                        println!(
+                            "       • {}: {} in {}",
+                            edit.edit_type, edit.section, target_display
+                        );
                     }
 
                     // Track proposal in summary
@@ -535,8 +572,8 @@ impl OuterLoop {
         ctx: &RunContext,
         config_path: Option<&str>,
     ) -> Result<InnerRunResult, String> {
-        use std::process::{Command, Stdio};
         use std::io::{BufRead, BufReader};
+        use std::process::{Command, Stdio};
 
         let output_dir = ctx.config.output_dir();
 
@@ -554,14 +591,21 @@ impl OuterLoop {
         // Build command with piped stdout for streaming
         let mut cmd = Command::new("./target/release/ripmap-train");
         cmd.args([
-            "--corpus", &self.inner_config.corpus,
+            "--corpus",
+            &self.inner_config.corpus,
             "--reason",
-            "--prompt", &prompt_path,
-            "--episodes", &ctx.config.episodes.to_string(),
-            "--agent", &ctx.config.agent.to_string(),
-            "--output", output_dir.join("results.json").to_str().unwrap(),
-            "--scratchpad", output_dir.join("scratchpad.json").to_str().unwrap(),
-            "--plot", output_dir.join("progress.png").to_str().unwrap(),
+            "--prompt",
+            &prompt_path,
+            "--episodes",
+            &ctx.config.episodes.to_string(),
+            "--agent",
+            &ctx.config.agent.to_string(),
+            "--output",
+            output_dir.join("results.json").to_str().unwrap(),
+            "--scratchpad",
+            output_dir.join("scratchpad.json").to_str().unwrap(),
+            "--plot",
+            output_dir.join("progress.png").to_str().unwrap(),
         ]);
 
         // Load best params from previous runs if available (critical for accumulating learning)
@@ -576,7 +620,8 @@ impl OuterLoop {
         cmd.stderr(Stdio::piped());
 
         // Spawn and stream output
-        let mut child = cmd.spawn()
+        let mut child = cmd
+            .spawn()
             .map_err(|e| format!("Failed to spawn inner loop: {}", e))?;
 
         // Stream stdout, filtering for episode progress
@@ -585,37 +630,51 @@ impl OuterLoop {
             for line in reader.lines() {
                 if let Ok(line) = line {
                     // Forward episode progress lines
-                    if line.contains("Episode") || line.contains("NDCG") ||
-                       line.contains("TRAINING COMPLETE") || line.contains("Fail[") {
+                    if line.contains("Episode")
+                        || line.contains("NDCG")
+                        || line.contains("TRAINING COMPLETE")
+                        || line.contains("Fail[")
+                    {
                         println!("     {}", line.trim());
                     }
                 }
             }
         }
 
-        let status = child.wait()
+        let status = child
+            .wait()
             .map_err(|e| format!("Failed to wait for inner loop: {}", e))?;
 
         if !status.success() {
-            return Err(format!("Inner loop failed with exit code: {:?}", status.code()));
+            return Err(format!(
+                "Inner loop failed with exit code: {:?}",
+                status.code()
+            ));
         }
 
         // Load results
         let scratchpad_path = output_dir.join("scratchpad.json");
-        let scratchpad: crate::training::reasoning::Scratchpad =
-            serde_json::from_str(&std::fs::read_to_string(&scratchpad_path)
-                .map_err(|e| format!("Failed to read scratchpad: {}", e))?)
-            .map_err(|e| format!("Failed to parse scratchpad: {}", e))?;
+        let scratchpad: crate::training::reasoning::Scratchpad = serde_json::from_str(
+            &std::fs::read_to_string(&scratchpad_path)
+                .map_err(|e| format!("Failed to read scratchpad: {}", e))?,
+        )
+        .map_err(|e| format!("Failed to parse scratchpad: {}", e))?;
 
         // Extract metrics from scratchpad
-        let first_ndcg = scratchpad.episodes.first()
+        let first_ndcg = scratchpad
+            .episodes
+            .first()
             .map(|e| e.ndcg_before)
             .unwrap_or(0.0);
-        let final_ndcg = scratchpad.episodes.last()
+        let final_ndcg = scratchpad
+            .episodes
+            .last()
             .map(|e| e.ndcg_before)
             .unwrap_or(0.0);
 
-        let strategy_capsules: Vec<String> = scratchpad.episodes.iter()
+        let strategy_capsules: Vec<String> = scratchpad
+            .episodes
+            .iter()
             .filter(|e| !e.strategy_capsule.is_empty())
             .map(|e| e.strategy_capsule.clone())
             .collect();
@@ -623,7 +682,11 @@ impl OuterLoop {
         let mean_confidence = if scratchpad.episodes.is_empty() {
             0.0
         } else {
-            scratchpad.episodes.iter().map(|e| e.confidence).sum::<f64>()
+            scratchpad
+                .episodes
+                .iter()
+                .map(|e| e.confidence)
+                .sum::<f64>()
                 / scratchpad.episodes.len() as f64
         };
 
@@ -653,14 +716,20 @@ impl OuterLoop {
             .unwrap_or(0);
 
         // Estimate meta-levers from final params
-        let final_params = result.scratchpad.episodes.last()
+        let final_params = result
+            .scratchpad
+            .episodes
+            .last()
             .map(|e| &e.params)
             .cloned()
             .unwrap_or_default();
         let meta_levers = MetaLevers::from_params(&final_params);
 
         // Count failures from last episode
-        let final_failures = result.scratchpad.episodes.last()
+        let final_failures = result
+            .scratchpad
+            .episodes
+            .last()
             .map(|e| e.failures.len())
             .unwrap_or(0);
 
@@ -677,16 +746,21 @@ impl OuterLoop {
         };
 
         // Compute stability metrics
-        let ndcg_values: Vec<f64> = result.scratchpad.episodes.iter()
+        let ndcg_values: Vec<f64> = result
+            .scratchpad
+            .episodes
+            .iter()
             .map(|e| e.ndcg_before)
             .collect();
         let ndcg_variance = variance(&ndcg_values);
 
-        let collapse_events = ndcg_values.windows(2)
+        let collapse_events = ndcg_values
+            .windows(2)
             .filter(|w| w[1] < w[0] - 0.05)
             .count();
 
-        let oscillations = ndcg_values.windows(3)
+        let oscillations = ndcg_values
+            .windows(3)
             .filter(|w| (w[1] > w[0] && w[2] < w[1]) || (w[1] < w[0] && w[2] > w[1]))
             .count();
 
@@ -700,8 +774,7 @@ impl OuterLoop {
 
         // Extract final params from the inner scratchpad's last episode
         // This gives us inline access to the learned values without needing to load files
-        let final_params = result.scratchpad.episodes.last()
-            .map(|e| e.params.clone());
+        let final_params = result.scratchpad.episodes.last().map(|e| e.params.clone());
 
         Ok(OuterEpisodeSummary {
             outer_step,
@@ -722,9 +795,9 @@ impl OuterLoop {
             inner_episodes: result.episodes,
             duration_secs: start_time.elapsed().as_secs_f64(),
             timestamp: now,
-            proposal: None, // Will be set after L2 reasoning
+            proposal: None,                // Will be set after L2 reasoning
             selection_mode: String::new(), // Will be set by caller
-            warm_started_from_step: None, // Will be set by caller if warm-started
+            warm_started_from_step: None,  // Will be set by caller if warm-started
             final_params_path,
             final_params,
         })
@@ -750,9 +823,7 @@ impl OuterLoop {
         println!("  🧠 Invoking L2 reasoning ({})...", outer_agent);
 
         // Phase 1 agentic mode: pass run directory for file access to promptgrams and inner run results
-        let run_dir = ctx.config.output_dir()
-            .to_str()
-            .map(|s| s.to_string());
+        let run_dir = ctx.config.output_dir().to_str().map(|s| s.to_string());
 
         // Call the outer agent
         let response = call_agent(outer_agent, &prompt, None, run_dir.as_deref())?;
@@ -795,9 +866,14 @@ impl OuterLoop {
         // Promptgram stats
         if let Some(stats) = outer_scratchpad.promptgram_stats(&current_promptgram.id) {
             prompt.push_str(&format!("Promptgram '{}' stats:\n", stats.prompt_id));
-            prompt.push_str(&format!("  Runs: {} | Mean NDCG: {:.4} | Best: {:.4} | Worst: {:.4}\n",
-                stats.run_count, stats.mean_ndcg, stats.best_ndcg, stats.worst_ndcg));
-            prompt.push_str(&format!("  Active from step {} to {}\n\n", stats.first_step, stats.last_step));
+            prompt.push_str(&format!(
+                "  Runs: {} | Mean NDCG: {:.4} | Best: {:.4} | Worst: {:.4}\n",
+                stats.run_count, stats.mean_ndcg, stats.best_ndcg, stats.worst_ndcg
+            ));
+            prompt.push_str(&format!(
+                "  Active from step {} to {}\n\n",
+                stats.first_step, stats.last_step
+            ));
         }
 
         // Diff against parent if exists
@@ -833,7 +909,10 @@ impl OuterLoop {
 
         // Population diversity
         let unique_prompts = outer_scratchpad.unique_promptgrams();
-        prompt.push_str(&format!("Population: {} unique promptgrams tested\n", unique_prompts.len()));
+        prompt.push_str(&format!(
+            "Population: {} unique promptgrams tested\n",
+            unique_prompts.len()
+        ));
         if unique_prompts.len() > 1 {
             prompt.push_str("  IDs: ");
             prompt.push_str(&unique_prompts.join(", "));
@@ -858,19 +937,26 @@ impl OuterLoop {
         // Add recent episode summaries
         prompt.push_str("=== RECENT OUTER EPISODES ===\n");
         for (i, summary) in recent_summaries.iter().enumerate() {
-            prompt.push_str(&format!("\n--- Episode {} (step {}) [{}] ---\n",
-                i + 1, summary.outer_step, summary.selection_mode));
-            prompt.push_str(&format!("NDCG: {:.4} → {:.4} (Δ{:+.4})\n",
-                summary.baseline_metrics.ndcg,
-                summary.final_metrics.ndcg,
-                summary.delta.ndcg));
-            prompt.push_str(&format!("Failures: {} → {}\n",
-                summary.baseline_metrics.failures,
-                summary.final_metrics.failures));
-            prompt.push_str(&format!("Stability: {} collapses, {:.4} variance, {} oscillations\n",
+            prompt.push_str(&format!(
+                "\n--- Episode {} (step {}) [{}] ---\n",
+                i + 1,
+                summary.outer_step,
+                summary.selection_mode
+            ));
+            prompt.push_str(&format!(
+                "NDCG: {:.4} → {:.4} (Δ{:+.4})\n",
+                summary.baseline_metrics.ndcg, summary.final_metrics.ndcg, summary.delta.ndcg
+            ));
+            prompt.push_str(&format!(
+                "Failures: {} → {}\n",
+                summary.baseline_metrics.failures, summary.final_metrics.failures
+            ));
+            prompt.push_str(&format!(
+                "Stability: {} collapses, {:.4} variance, {} oscillations\n",
                 summary.stability.collapse_events,
                 summary.stability.ndcg_variance,
-                summary.stability.oscillations));
+                summary.stability.oscillations
+            ));
             prompt.push_str(&format!("Converged: {}\n", summary.stability.converged));
 
             // Meta-levers
@@ -897,8 +983,12 @@ impl OuterLoop {
 
             // Previous proposal (if any)
             if let Some(ref proposal) = summary.proposal {
-                prompt.push_str(&format!("Previous L2 proposal: mode={}, confidence={:.2}, {} edits\n",
-                    proposal.mode, proposal.confidence, proposal.edits.len()));
+                prompt.push_str(&format!(
+                    "Previous L2 proposal: mode={}, confidence={:.2}, {} edits\n",
+                    proposal.mode,
+                    proposal.confidence,
+                    proposal.edits.len()
+                ));
             }
         }
 
@@ -908,7 +998,11 @@ impl OuterLoop {
             let last = recent_summaries.last().unwrap();
             let trend = last.final_metrics.ndcg - first.final_metrics.ndcg;
             prompt.push_str(&format!("\n=== TRAJECTORY ===\n"));
-            prompt.push_str(&format!("Overall trend: {:+.4} NDCG over {} episodes\n", trend, recent_summaries.len()));
+            prompt.push_str(&format!(
+                "Overall trend: {:+.4} NDCG over {} episodes\n",
+                trend,
+                recent_summaries.len()
+            ));
 
             // Check for plateau/collapse using scratchpad methods
             if outer_scratchpad.is_collapse(3, 0.02) {
@@ -920,13 +1014,16 @@ impl OuterLoop {
             }
 
             // Best vs current
-            prompt.push_str(&format!("Best NDCG ever: {:.4} (prompt: {})\n",
-                outer_scratchpad.best_ndcg, outer_scratchpad.best_prompt_id));
+            prompt.push_str(&format!(
+                "Best NDCG ever: {:.4} (prompt: {})\n",
+                outer_scratchpad.best_ndcg, outer_scratchpad.best_prompt_id
+            ));
         }
 
         prompt.push_str("\n=== YOUR TASK ===\n");
         prompt.push_str("Analyze the trajectory and history context, then propose edits to the inner promptgram.\n");
-        prompt.push_str("Consider: What patterns recur? What hasn't been tried? What's the risk?\n");
+        prompt
+            .push_str("Consider: What patterns recur? What hasn't been tried? What's the risk?\n");
         prompt.push_str("Output your reasoning, then a JSON block with your proposal.\n");
 
         prompt
@@ -935,8 +1032,7 @@ impl OuterLoop {
     /// Parse the L2 response into an OuterProposal.
     fn parse_l2_response(&self, response: &str) -> Result<OuterProposal, String> {
         // Find JSON block in response
-        let json_start = response.find('{')
-            .ok_or("No JSON found in L2 response")?;
+        let json_start = response.find('{').ok_or("No JSON found in L2 response")?;
 
         // Find matching closing brace
         let mut depth = 0;

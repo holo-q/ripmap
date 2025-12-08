@@ -154,7 +154,8 @@ pub fn extract_cases(
                 continue;
             }
 
-            let expected: Vec<_> = commit.files
+            let expected: Vec<_> = commit
+                .files
                 .iter()
                 .enumerate()
                 .filter(|(j, f)| *j != i && is_source_file(f))
@@ -198,10 +199,7 @@ pub fn extract_cases(
 ///
 /// HashMap from (file_a, file_b) -> coupling strength (0.0-1.0)
 /// Keys are normalized so file_a < file_b lexicographically.
-pub fn compute_coupling_weights(
-    repo: &Path,
-    max_commits: usize,
-) -> HashMap<(String, String), f64> {
+pub fn compute_coupling_weights(repo: &Path, max_commits: usize) -> HashMap<(String, String), f64> {
     let commits = parse_git_log(repo, max_commits);
 
     let mut cochange_counts: HashMap<(String, String), usize> = HashMap::new();
@@ -213,7 +211,8 @@ pub fn compute_coupling_weights(
             continue;
         }
 
-        let source_files: Vec<_> = commit.files
+        let source_files: Vec<_> = commit
+            .files
             .iter()
             .filter(|f| is_source_file(f))
             .cloned()
@@ -260,7 +259,8 @@ pub fn weight_cases(
     cases
         .into_iter()
         .map(|case| {
-            let weighted_expected: Vec<_> = case.expected_related
+            let weighted_expected: Vec<_> = case
+                .expected_related
                 .iter()
                 .map(|f| {
                     let pair = normalize_pair(&case.seed_file, f);
@@ -292,10 +292,7 @@ pub fn weight_cases(
 ///
 /// Commits within `session_gap` seconds of each other are grouped.
 /// This captures multi-commit tasks where files across commits are related.
-pub fn cluster_into_sessions(
-    cases: &[GitCase],
-    session_gap_secs: i64,
-) -> Vec<Vec<&GitCase>> {
+pub fn cluster_into_sessions(cases: &[GitCase], session_gap_secs: i64) -> Vec<Vec<&GitCase>> {
     if cases.is_empty() {
         return vec![];
     }
@@ -351,7 +348,10 @@ fn parse_git_log(repo: &Path, max_commits: usize) -> Vec<RawCommit> {
     };
 
     if !output.status.success() {
-        eprintln!("git log failed: {}", String::from_utf8_lossy(&output.stderr));
+        eprintln!(
+            "git log failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
         return vec![];
     }
 
@@ -442,10 +442,7 @@ fn compute_commit_quality(commit: &RawCommit) -> f64 {
         weight *= 1.2;
     }
     // Refactors are weaker (often mechanical)
-    else if msg.starts_with("refactor")
-        || msg.contains("rename")
-        || msg.contains("move ")
-    {
+    else if msg.starts_with("refactor") || msg.contains("rename") || msg.contains("move ") {
         weight *= 0.6;
     }
 
@@ -491,7 +488,8 @@ fn compute_commit_quality(commit: &RawCommit) -> f64 {
 
     // === Directory diversity ===
     // Files in different directories = meaningful cross-cutting change
-    let unique_dirs: HashSet<_> = commit.files
+    let unique_dirs: HashSet<_> = commit
+        .files
         .iter()
         .filter_map(|f| Path::new(f).parent())
         .filter_map(|p| p.to_str())
@@ -549,34 +547,20 @@ fn parse_intent(message: &str) -> Intent {
 fn is_source_file(path: &str) -> bool {
     let source_extensions = [
         // Rust
-        ".rs",
-        // Python
-        ".py",
-        // JavaScript/TypeScript
-        ".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs",
-        // Go
-        ".go",
-        // C/C++
-        ".c", ".h", ".cpp", ".hpp", ".cc", ".hh",
-        // Java/Kotlin
-        ".java", ".kt", ".kts",
-        // Ruby
-        ".rb",
-        // PHP
-        ".php",
-        // Swift
-        ".swift",
-        // C#
-        ".cs",
-        // Scala
-        ".scala",
-        // Elixir
-        ".ex", ".exs",
-        // Haskell
-        ".hs",
-        // OCaml
-        ".ml", ".mli",
-        // Zig
+        ".rs", // Python
+        ".py", // JavaScript/TypeScript
+        ".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs", // Go
+        ".go", // C/C++
+        ".c", ".h", ".cpp", ".hpp", ".cc", ".hh", // Java/Kotlin
+        ".java", ".kt", ".kts", // Ruby
+        ".rb", // PHP
+        ".php", // Swift
+        ".swift", // C#
+        ".cs", // Scala
+        ".scala", // Elixir
+        ".ex", ".exs", // Haskell
+        ".hs", // OCaml
+        ".ml", ".mli", // Zig
         ".zig",
     ];
 
@@ -643,7 +627,10 @@ mod tests {
     #[test]
     fn test_parse_intent() {
         assert_eq!(parse_intent("fix: null pointer in parser"), Intent::Debug);
-        assert_eq!(parse_intent("refactor: clean up auth module"), Intent::Refactor);
+        assert_eq!(
+            parse_intent("refactor: clean up auth module"),
+            Intent::Refactor
+        );
         assert_eq!(parse_intent("add: new user registration"), Intent::Extend);
         assert_eq!(parse_intent("update docs"), Intent::Explore);
     }
@@ -657,7 +644,11 @@ mod tests {
             files: vec!["src/parser.rs".to_string(), "src/input.rs".to_string()],
         };
         let quality = compute_commit_quality(&commit);
-        assert!(quality > 1.0, "Bugfix should have high quality: {}", quality);
+        assert!(
+            quality > 1.0,
+            "Bugfix should have high quality: {}",
+            quality
+        );
     }
 
     #[test]
@@ -693,6 +684,10 @@ mod tests {
             files: (0..20).map(|i| format!("src/file{}.rs", i)).collect(),
         };
         let quality = compute_commit_quality(&commit);
-        assert!(quality < 0.5, "Large refactor should have low quality: {}", quality);
+        assert!(
+            quality < 0.5,
+            "Large refactor should have low quality: {}",
+            quality
+        );
     }
 }

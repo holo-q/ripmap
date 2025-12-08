@@ -5,4 +5,4 @@
 
 mod store;
 
-pub use store::{TagCache, CacheStats};
+pub use store::{CacheStats, TagCache};

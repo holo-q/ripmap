@@ -106,8 +106,21 @@ pub fn extension_to_language(ext: &str) -> Option<&'static str> {
 static LANG_CONFIGS: Lazy<HashMap<&'static str, LangConfig>> = Lazy::new(|| {
     let mut configs = HashMap::new();
 
-    for lang_name in &["python", "rust", "javascript", "typescript", "go", "java", "c", "cpp", "ruby", "php"] {
-        if let (Some(language), Some(query_src)) = (get_language(lang_name), get_query_source(lang_name)) {
+    for lang_name in &[
+        "python",
+        "rust",
+        "javascript",
+        "typescript",
+        "go",
+        "java",
+        "c",
+        "cpp",
+        "ruby",
+        "php",
+    ] {
+        if let (Some(language), Some(query_src)) =
+            (get_language(lang_name), get_query_source(lang_name))
+        {
             // Try to compile the query, skip if it fails (query syntax might not match grammar version)
             match Query::new(&language, query_src) {
                 Ok(query) => {
@@ -169,7 +182,12 @@ impl TreeSitterParser {
         let mut cursor = QueryCursor::new();
 
         // Track capture names for processing
-        let capture_names: Vec<String> = config.query.capture_names().iter().map(|s| s.to_string()).collect();
+        let capture_names: Vec<String> = config
+            .query
+            .capture_names()
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
 
         // Use streaming iterator pattern for tree-sitter 0.24+
         let mut matches = cursor.matches(&config.query, tree.root_node(), content.as_bytes());
@@ -180,7 +198,10 @@ impl TreeSitterParser {
             let mut line: Option<u32> = None;
 
             for capture in m.captures {
-                let capture_name = capture_names.get(capture.index as usize).map(|s| s.as_str()).unwrap_or("");
+                let capture_name = capture_names
+                    .get(capture.index as usize)
+                    .map(|s| s.as_str())
+                    .unwrap_or("");
                 let node = capture.node;
                 let text = node.utf8_text(content.as_bytes()).unwrap_or("").to_string();
 
@@ -218,9 +239,13 @@ impl TreeSitterParser {
             }
 
             // Create tag if we have the required fields
-            if let (Some(name), Some(node_type), Some(kind), Some(line)) = (name, node_type, kind, line) {
+            if let (Some(name), Some(node_type), Some(kind), Some(line)) =
+                (name, node_type, kind, line)
+            {
                 // Skip empty names or very short names (likely noise)
-                if name.is_empty() || (name.len() == 1 && !name.chars().next().unwrap().is_alphabetic()) {
+                if name.is_empty()
+                    || (name.len() == 1 && !name.chars().next().unwrap().is_alphabetic())
+                {
                     continue;
                 }
 
@@ -231,11 +256,11 @@ impl TreeSitterParser {
                     name: Arc::from(name.as_str()),
                     kind,
                     node_type: Arc::from(node_type),
-                    parent_name: None,  // TODO: extract from AST parent traversal
+                    parent_name: None, // TODO: extract from AST parent traversal
                     parent_line: None,
-                    signature: None,    // TODO: extract from AST
+                    signature: None, // TODO: extract from AST
                     fields: None,
-                metadata: None,
+                    metadata: None,
                 });
             }
         }
@@ -282,7 +307,10 @@ standalone_function()
         let names: Vec<&str> = tags.iter().map(|t| t.name.as_ref()).collect();
         assert!(names.contains(&"MyClass"), "Should find MyClass");
         assert!(names.contains(&"method"), "Should find method");
-        assert!(names.contains(&"standalone_function"), "Should find standalone_function");
+        assert!(
+            names.contains(&"standalone_function"),
+            "Should find standalone_function"
+        );
     }
 
     #[test]
@@ -308,7 +336,10 @@ fn standalone() {
         let names: Vec<&str> = tags.iter().map(|t| t.name.as_ref()).collect();
         assert!(names.contains(&"MyStruct"), "Should find MyStruct");
         assert!(names.contains(&"new"), "Should find new method");
-        assert!(names.contains(&"standalone"), "Should find standalone function");
+        assert!(
+            names.contains(&"standalone"),
+            "Should find standalone function"
+        );
     }
 
     #[test]
@@ -331,7 +362,10 @@ const arrow = () => 42;
         let names: Vec<&str> = tags.iter().map(|t| t.name.as_ref()).collect();
         assert!(names.contains(&"MyClass"), "Should find MyClass");
         assert!(names.contains(&"method"), "Should find method");
-        assert!(names.contains(&"standalone"), "Should find standalone function");
+        assert!(
+            names.contains(&"standalone"),
+            "Should find standalone function"
+        );
     }
 
     #[test]

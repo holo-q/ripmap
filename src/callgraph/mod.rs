@@ -36,14 +36,9 @@ mod graph;
 mod resolver;
 mod strategies;
 
-pub use graph::{CallGraph, CallEdge, FunctionId};
-pub use resolver::{CallResolver, ResolverBuilder, ResolverConfig, ResolutionStats};
+pub use graph::{CallEdge, CallGraph, FunctionId};
+pub use resolver::{CallResolver, ResolutionStats, ResolverBuilder, ResolverConfig};
 pub use strategies::{
-    ResolutionStrategy,
-    ResolutionContext,
-    Candidate,
-    SameFileStrategy,
-    NameMatchStrategy,
-    TypeHintStrategy,
-    ImportStrategy,
+    Candidate, ImportStrategy, NameMatchStrategy, ResolutionContext, ResolutionStrategy,
+    SameFileStrategy, TypeHintStrategy,
 };

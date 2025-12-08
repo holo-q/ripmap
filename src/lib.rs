@@ -22,28 +22,27 @@
 //! - String interning for symbol names
 //! - Persistent cache with redb
 
+pub mod cache;
+pub mod callgraph;
 pub mod config;
-pub mod types;
-pub mod extraction;
 pub mod discovery;
+pub mod extraction;
+pub mod mcp;
 pub mod ranking;
 pub mod rendering;
-pub mod cache;
-pub mod mcp;
 pub mod training;
 pub mod training_outer;
-pub mod callgraph;
+pub mod types;
 
 // Re-export core types
 pub use types::{
-    Tag, TagKind, RankedTag, SignatureInfo, FieldInfo,
-    DetailLevel, RankingConfig, FilePhase, Intent, SymbolId,
+    DetailLevel, FieldInfo, FilePhase, Intent, RankedTag, RankingConfig, SignatureInfo, SymbolId,
+    Tag, TagKind,
 };
 
 // Re-export call graph types
 pub use callgraph::{
-    CallGraph, CallEdge, FunctionId,
-    CallResolver, ResolverBuilder, ResolverConfig, ResolutionStats,
-    ResolutionStrategy, ResolutionContext, Candidate,
-    SameFileStrategy, NameMatchStrategy, TypeHintStrategy, ImportStrategy,
+    CallEdge, CallGraph, CallResolver, Candidate, FunctionId, ImportStrategy, NameMatchStrategy,
+    ResolutionContext, ResolutionStats, ResolutionStrategy, ResolverBuilder, ResolverConfig,
+    SameFileStrategy, TypeHintStrategy,
 };

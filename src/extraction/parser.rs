@@ -11,12 +11,12 @@
 //! - Line number tracking via byte offset -> newline counting
 //! - Each language gets its own parser function to keep patterns clean
 
-use std::path::Path;
-use std::sync::Arc;
 use crate::types::{Tag, TagKind};
 use anyhow::Result;
-use regex::Regex;
 use once_cell::sync::Lazy;
+use regex::Regex;
+use std::path::Path;
+use std::sync::Arc;
 
 /// Main parser struct - currently stateless, but allows future tree-sitter state.
 pub struct Parser;
@@ -89,14 +89,12 @@ mod python_patterns {
     use super::*;
 
     /// Match class definitions: `class Foo:` or `class Foo(Bar):`
-    pub static CLASS: Lazy<Regex> = Lazy::new(|| {
-        Regex::new(r"(?m)^class\s+(\w+)").expect("Invalid Python class regex")
-    });
+    pub static CLASS: Lazy<Regex> =
+        Lazy::new(|| Regex::new(r"(?m)^class\s+(\w+)").expect("Invalid Python class regex"));
 
     /// Match top-level function definitions: `def foo(`
-    pub static FUNCTION: Lazy<Regex> = Lazy::new(|| {
-        Regex::new(r"(?m)^def\s+(\w+)\s*\(").expect("Invalid Python function regex")
-    });
+    pub static FUNCTION: Lazy<Regex> =
+        Lazy::new(|| Regex::new(r"(?m)^def\s+(\w+)\s*\(").expect("Invalid Python function regex"));
 
     /// Match method definitions (indented): `    def bar(`
     pub static METHOD: Lazy<Regex> = Lazy::new(|| {
@@ -140,7 +138,7 @@ fn parse_python(content: &str, path: &Path, rel_fname: &str) -> Result<Vec<Tag>>
             parent_line: None,
             signature: None,
             fields: None, // TODO: Extract class fields when tree-sitter lands
-        metadata: None,
+            metadata: None,
         });
     }
 
@@ -297,7 +295,7 @@ fn parse_rust(content: &str, path: &Path, rel_fname: &str) -> Result<Vec<Tag>> {
             parent_line: None,
             signature: None,
             fields: None, // TODO: Extract struct fields when tree-sitter lands
-        metadata: None,
+            metadata: None,
         });
     }
 
@@ -404,7 +402,8 @@ mod js_patterns {
 
     /// Match function declarations: `function foo(` or `async function foo(`
     pub static FUNCTION: Lazy<Regex> = Lazy::new(|| {
-        Regex::new(r"(?m)^\s*(?:async\s+)?function\s+(\w+)\s*\(").expect("Invalid JS function regex")
+        Regex::new(r"(?m)^\s*(?:async\s+)?function\s+(\w+)\s*\(")
+            .expect("Invalid JS function regex")
     });
 
     /// Match class definitions: `class Foo` or `export class Foo`
@@ -414,12 +413,14 @@ mod js_patterns {
 
     /// Match const arrow functions: `const foo = (`
     pub static CONST_ARROW: Lazy<Regex> = Lazy::new(|| {
-        Regex::new(r"(?m)^\s*(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s*)?\(").expect("Invalid JS const arrow regex")
+        Regex::new(r"(?m)^\s*(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s*)?\(")
+            .expect("Invalid JS const arrow regex")
     });
 
     /// Match const regular assignments: `const FOO = ...`
     pub static CONST_ASSIGN: Lazy<Regex> = Lazy::new(|| {
-        Regex::new(r"(?m)^\s*(?:export\s+)?const\s+([A-Z_][A-Z0-9_]*)\s*=").expect("Invalid JS const regex")
+        Regex::new(r"(?m)^\s*(?:export\s+)?const\s+([A-Z_][A-Z0-9_]*)\s*=")
+            .expect("Invalid JS const regex")
     });
 
     /// Match method definitions in classes: `  methodName(` or `  async methodName(`
@@ -693,6 +694,9 @@ mod tests {
         let content = "export interface IFoo {\n  bar: string;\n}\n";
         let path = Path::new("test.ts");
         let tags = parse_typescript(content, path, "test.ts").unwrap();
-        assert!(tags.iter().any(|t| t.name.as_ref() == "IFoo" && t.node_type.as_ref() == "interface"));
+        assert!(
+            tags.iter()
+                .any(|t| t.name.as_ref() == "IFoo" && t.node_type.as_ref() == "interface")
+        );
     }
 }

@@ -3,11 +3,11 @@
 //! The graph is strategy-agnostic - it just stores resolved edges.
 //! Resolution strategies populate it; PageRank consumes it.
 
-use std::collections::HashMap;
-use std::sync::Arc;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::visit::EdgeRef;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Unique identifier for a function/method in the codebase.
 ///
@@ -305,8 +305,7 @@ mod tests {
 
     #[test]
     fn test_qualified_name() {
-        let method = FunctionId::new("test.py", "process", 10)
-            .with_parent("MyClass");
+        let method = FunctionId::new("test.py", "process", 10).with_parent("MyClass");
         assert_eq!(method.qualified_name(), "MyClass.process");
 
         let func = FunctionId::new("test.py", "helper", 20);

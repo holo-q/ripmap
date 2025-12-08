@@ -13,9 +13,9 @@
 //! - Extension filtering prevents wasting cycles on non-source files
 //! - Sorting ensures cache hits and reproducible output
 
-use std::path::{Path, PathBuf};
 use anyhow::Result;
 use ignore::WalkBuilder;
+use std::path::{Path, PathBuf};
 
 use crate::config::Config;
 
@@ -33,23 +33,15 @@ use crate::config::Config;
 /// Cargo.toml/package.json which ARE included.
 const EXCLUDED_EXTENSIONS: &[&str] = &[
     // Images
-    "png", "jpg", "jpeg", "gif", "ico", "svg", "webp", "bmp", "tiff",
-    // Fonts
-    "woff", "woff2", "ttf", "eot", "otf",
-    // Media
-    "mp3", "mp4", "wav", "ogg", "webm", "avi", "mov", "flac",
-    // Archives
-    "zip", "tar", "gz", "rar", "7z", "bz2", "xz", "tgz",
-    // Documents
-    "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
-    // Compiled/Binary
-    "pyc", "pyo", "so", "dylib", "dll", "exe", "o", "a", "lib",
-    "class", "jar", "war", "ear",
+    "png", "jpg", "jpeg", "gif", "ico", "svg", "webp", "bmp", "tiff", // Fonts
+    "woff", "woff2", "ttf", "eot", "otf", // Media
+    "mp3", "mp4", "wav", "ogg", "webm", "avi", "mov", "flac", // Archives
+    "zip", "tar", "gz", "rar", "7z", "bz2", "xz", "tgz", // Documents
+    "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", // Compiled/Binary
+    "pyc", "pyo", "so", "dylib", "dll", "exe", "o", "a", "lib", "class", "jar", "war", "ear",
     // Lock files (generated, high entropy, low signal)
-    "lock", "sum",
-    // Database files
-    "db", "sqlite", "sqlite3",
-    // Misc binary
+    "lock", "sum", // Database files
+    "db", "sqlite", "sqlite3", // Misc binary
     "wasm", "bin", "dat",
 ];
 
@@ -84,13 +76,13 @@ pub fn find_source_files(directory: &Path, include_all: bool) -> Result<Vec<Path
     // Build parallel walker with sensible defaults
     // threads(0) = auto-detect based on CPU count
     let walker = WalkBuilder::new(directory)
-        .hidden(false)          // Don't automatically skip hidden files (let .gitignore decide)
-        .git_ignore(true)       // Respect .gitignore
-        .git_global(true)       // Respect global gitignore
-        .git_exclude(true)      // Respect .git/info/exclude
-        .require_git(false)     // Work even in non-git directories
-        .follow_links(false)    // Don't follow symlinks (avoid cycles)
-        .threads(0)             // Auto-detect thread count for parallelism
+        .hidden(false) // Don't automatically skip hidden files (let .gitignore decide)
+        .git_ignore(true) // Respect .gitignore
+        .git_global(true) // Respect global gitignore
+        .git_exclude(true) // Respect .git/info/exclude
+        .require_git(false) // Work even in non-git directories
+        .follow_links(false) // Don't follow symlinks (avoid cycles)
+        .threads(0) // Auto-detect thread count for parallelism
         .build_parallel();
 
     // Collect files in parallel
@@ -131,7 +123,8 @@ pub fn find_source_files(directory: &Path, include_all: bool) -> Result<Vec<Path
     });
 
     // Extract results and sort for determinism
-    let mut files = files.into_inner()
+    let mut files = files
+        .into_inner()
         .map_err(|_| anyhow::anyhow!("Failed to unwrap mutex"))?;
 
     // Sort for reproducibility - critical for caching!
@@ -216,7 +209,8 @@ pub fn find_source_files_with_config(
         })
     });
 
-    let mut files = files.into_inner()
+    let mut files = files
+        .into_inner()
         .map_err(|_| anyhow::anyhow!("Failed to unwrap mutex"))?;
     files.sort();
     Ok(files)
@@ -294,18 +288,21 @@ mod tests {
         let files = find_source_files(repo_root, false)?;
 
         // Should find at least some Rust files
-        assert!(!files.is_empty(), "Should discover source files in ripmap repo");
+        assert!(
+            !files.is_empty(),
+            "Should discover source files in ripmap repo"
+        );
 
         // Should include our discovery module
-        let has_discovery = files.iter().any(|f| {
-            f.to_string_lossy().contains("discovery/files.rs")
-        });
+        let has_discovery = files
+            .iter()
+            .any(|f| f.to_string_lossy().contains("discovery/files.rs"));
         assert!(has_discovery, "Should find discovery/files.rs");
 
         // Should NOT include lock files
-        let has_lock = files.iter().any(|f| {
-            f.to_string_lossy().ends_with("Cargo.lock")
-        });
+        let has_lock = files
+            .iter()
+            .any(|f| f.to_string_lossy().ends_with("Cargo.lock"));
         assert!(!has_lock, "Should exclude Cargo.lock");
 
         // Should be sorted for determinism
@@ -329,9 +326,11 @@ mod tests {
 
         // Test with include_all = false
         let files_filtered = find_source_files(&temp_dir, false)?;
-        let has_png_filtered = files_filtered.iter()
+        let has_png_filtered = files_filtered
+            .iter()
             .any(|f| f.to_string_lossy().ends_with(".png"));
-        let has_lock_filtered = files_filtered.iter()
+        let has_lock_filtered = files_filtered
+            .iter()
             .any(|f| f.to_string_lossy().ends_with(".lock"));
 
         assert!(!has_png_filtered, "PNG should be filtered out");
@@ -339,9 +338,11 @@ mod tests {
 
         // Test with include_all = true
         let files_all = find_source_files(&temp_dir, true)?;
-        let has_png_all = files_all.iter()
+        let has_png_all = files_all
+            .iter()
             .any(|f| f.to_string_lossy().ends_with(".png"));
-        let has_lock_all = files_all.iter()
+        let has_lock_all = files_all
+            .iter()
             .any(|f| f.to_string_lossy().ends_with(".lock"));
 
         assert!(has_png_all, "PNG should be included with include_all");

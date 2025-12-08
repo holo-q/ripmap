@@ -3,9 +3,9 @@
 //! A promptgram is not a blob of text but a structured program with sections
 //! that can be independently evolved by the outer loop.
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
-use serde::{Deserialize, Serialize};
 
 /// A promptgram: a structured prompt treated as a program.
 ///
@@ -105,12 +105,15 @@ impl Promptgram {
 
     /// Add or update a section.
     pub fn with_section(mut self, name: &str, content: &str, immutable: bool) -> Self {
-        self.sections.insert(name.to_string(), PromptSection {
-            name: name.to_string(),
-            content: content.to_string(),
-            immutable,
-            tags: vec![],
-        });
+        self.sections.insert(
+            name.to_string(),
+            PromptSection {
+                name: name.to_string(),
+                content: content.to_string(),
+                immutable,
+                tags: vec![],
+            },
+        );
         self
     }
 
@@ -187,7 +190,9 @@ impl Promptgram {
     ///
     /// Returns Err if the section is immutable or doesn't exist (for replace/delete).
     pub fn apply_edit(&mut self, edit: &super::PromptEdit) -> Result<(), String> {
-        let section = self.sections.get_mut(&edit.section)
+        let section = self
+            .sections
+            .get_mut(&edit.section)
             .ok_or_else(|| format!("Section '{}' not found", edit.section))?;
 
         if section.immutable {
@@ -229,8 +234,7 @@ impl Promptgram {
     pub fn load(path: impl AsRef<Path>) -> Result<Self, String> {
         let content = std::fs::read_to_string(path.as_ref())
             .map_err(|e| format!("Failed to read promptgram: {}", e))?;
-        toml::from_str(&content)
-            .map_err(|e| format!("Failed to parse promptgram: {}", e))
+        toml::from_str(&content).map_err(|e| format!("Failed to parse promptgram: {}", e))
     }
 
     /// Save the promptgram to a TOML file.
@@ -271,11 +275,8 @@ impl Promptgram {
                         section_name.as_str(),
                         "Role" | "API_contract" | "Output_schema"
                     );
-                    promptgram = promptgram.with_section(
-                        &section_name,
-                        current_content.trim(),
-                        immutable,
-                    );
+                    promptgram =
+                        promptgram.with_section(&section_name, current_content.trim(), immutable);
                     current_content.clear();
                 }
 
@@ -293,11 +294,7 @@ impl Promptgram {
                 section_name.as_str(),
                 "Role" | "API_contract" | "Output_schema"
             );
-            promptgram = promptgram.with_section(
-                &section_name,
-                current_content.trim(),
-                immutable,
-            );
+            promptgram = promptgram.with_section(&section_name, current_content.trim(), immutable);
         }
 
         promptgram
@@ -321,8 +318,10 @@ pub fn diff_prompts(a: &Promptgram, b: &Promptgram) -> Vec<PromptDiff> {
                         diff_type: DiffType::Modified,
                         before: Some(section_a.content.clone()),
                         after: Some(section_b.content.clone()),
-                        lines_added: count_lines(&section_b.content).saturating_sub(count_lines(&section_a.content)),
-                        lines_removed: count_lines(&section_a.content).saturating_sub(count_lines(&section_b.content)),
+                        lines_added: count_lines(&section_b.content)
+                            .saturating_sub(count_lines(&section_a.content)),
+                        lines_removed: count_lines(&section_a.content)
+                            .saturating_sub(count_lines(&section_b.content)),
                     });
                 }
             }
@@ -371,9 +370,18 @@ impl PromptDiff {
     /// Format as a compact summary string.
     pub fn summary(&self) -> String {
         match self.diff_type {
-            DiffType::Added => format!("[+{}] {} (+{} lines)", self.section, "added", self.lines_added),
-            DiffType::Removed => format!("[-{}] {} (-{} lines)", self.section, "removed", self.lines_removed),
-            DiffType::Modified => format!("[~{}] modified (+{}/-{})", self.section, self.lines_added, self.lines_removed),
+            DiffType::Added => format!(
+                "[+{}] {} (+{} lines)",
+                self.section, "added", self.lines_added
+            ),
+            DiffType::Removed => format!(
+                "[-{}] {} (-{} lines)",
+                self.section, "removed", self.lines_removed
+            ),
+            DiffType::Modified => format!(
+                "[~{}] modified (+{}/-{})",
+                self.section, self.lines_added, self.lines_removed
+            ),
         }
     }
 }
@@ -402,28 +410,41 @@ fn count_lines(s: &str) -> usize {
 pub fn baseline_promptgram() -> Promptgram {
     Promptgram::new("inner_v001")
         // Role: immutable - defines the agent's fundamental identity
-        .with_section(sections::ROLE, r#"You approximate the gradient in concept space.
-Given failures and trajectory, propose parameter changes."#, true)
-
+        .with_section(
+            sections::ROLE,
+            r#"You approximate the gradient in concept space.
+Given failures and trajectory, propose parameter changes."#,
+            true,
+        )
         // Policy: mutable - high-level approach to the problem
-        .with_section(sections::POLICY, r#"Analyze trajectory state:
+        .with_section(
+            sections::POLICY,
+            r#"Analyze trajectory state:
 - Improving: continue direction
 - Degrading: revert or reverse
 - Plateaued: orthogonal move
 
 Analyze failures:
 - Missing signal vs overwhelming signal
-- Parameter interactions"#, false)
-
+- Parameter interactions"#,
+            false,
+        )
         // Heuristics: mutable - specific rules and patterns discovered
-        .with_section(sections::HEURISTICS, r#"- NDCG drop >5% = collapse signal
+        .with_section(
+            sections::HEURISTICS,
+            r#"- NDCG drop >5% = collapse signal
 - Temporal and structural signals compete
 - High boosts cause tunnel vision
 - Low alpha localizes, high alpha globalizes
-- Depth penalties break monorepos"#, false)
-
+- Depth penalties break monorepos"#,
+            false,
+        )
         // Style: mutable - tone and presentation guidance
-        .with_section(sections::STYLE, r#"Analytical. Specific. Reference concrete failures."#, false)
+        .with_section(
+            sections::STYLE,
+            r#"Analytical. Specific. Reference concrete failures."#,
+            false,
+        )
 }
 
 #[cfg(test)]
@@ -444,8 +465,7 @@ mod tests {
 
     #[test]
     fn test_promptgram_fork() {
-        let parent = Promptgram::new("parent")
-            .with_section(sections::POLICY, "Original", false);
+        let parent = Promptgram::new("parent").with_section(sections::POLICY, "Original", false);
 
         let child = parent.fork("child");
 
@@ -456,8 +476,7 @@ mod tests {
 
     #[test]
     fn test_promptgram_edit_immutable() {
-        let mut pg = Promptgram::new("test")
-            .with_section(sections::ROLE, "Original", true);
+        let mut pg = Promptgram::new("test").with_section(sections::ROLE, "Original", true);
 
         let edit = super::super::PromptEdit {
             section: sections::ROLE.to_string(),

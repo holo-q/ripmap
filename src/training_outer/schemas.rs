@@ -64,7 +64,8 @@ impl MetaLevers {
         let structural_trust = params.pagerank_alpha.clamp(0.0, 1.0);
 
         // temporal_horizon: inverse of recency decay (fast decay = short horizon)
-        let temporal_horizon = 1.0 - (30.0 / params.git_recency_decay_days.max(1.0)).clamp(0.0, 1.0);
+        let temporal_horizon =
+            1.0 - (30.0 / params.git_recency_decay_days.max(1.0)).clamp(0.0, 1.0);
 
         // exploration_bias: estimated from confidence if available, otherwise from param variance
         // For now, assume moderate exploration
@@ -386,10 +387,7 @@ impl OuterScratchpad {
 
     /// Get all unique promptgram IDs used so far.
     pub fn unique_promptgrams(&self) -> Vec<String> {
-        let mut ids: Vec<String> = self.episodes
-            .iter()
-            .map(|e| e.prompt_id.clone())
-            .collect();
+        let mut ids: Vec<String> = self.episodes.iter().map(|e| e.prompt_id.clone()).collect();
         ids.sort();
         ids.dedup();
         ids
@@ -409,20 +407,72 @@ impl OuterScratchpad {
             if let (Some(p1), Some(p2)) = (&prev.final_params, &curr.final_params) {
                 let fields = [
                     ("pagerank_alpha", p1.pagerank_alpha, p2.pagerank_alpha),
-                    ("pagerank_chat_multiplier", p1.pagerank_chat_multiplier, p2.pagerank_chat_multiplier),
-                    ("depth_weight_root", p1.depth_weight_root, p2.depth_weight_root),
-                    ("depth_weight_moderate", p1.depth_weight_moderate, p2.depth_weight_moderate),
-                    ("depth_weight_deep", p1.depth_weight_deep, p2.depth_weight_deep),
-                    ("depth_weight_vendor", p1.depth_weight_vendor, p2.depth_weight_vendor),
-                    ("boost_mentioned_ident", p1.boost_mentioned_ident, p2.boost_mentioned_ident),
-                    ("boost_mentioned_file", p1.boost_mentioned_file, p2.boost_mentioned_file),
+                    (
+                        "pagerank_chat_multiplier",
+                        p1.pagerank_chat_multiplier,
+                        p2.pagerank_chat_multiplier,
+                    ),
+                    (
+                        "depth_weight_root",
+                        p1.depth_weight_root,
+                        p2.depth_weight_root,
+                    ),
+                    (
+                        "depth_weight_moderate",
+                        p1.depth_weight_moderate,
+                        p2.depth_weight_moderate,
+                    ),
+                    (
+                        "depth_weight_deep",
+                        p1.depth_weight_deep,
+                        p2.depth_weight_deep,
+                    ),
+                    (
+                        "depth_weight_vendor",
+                        p1.depth_weight_vendor,
+                        p2.depth_weight_vendor,
+                    ),
+                    (
+                        "boost_mentioned_ident",
+                        p1.boost_mentioned_ident,
+                        p2.boost_mentioned_ident,
+                    ),
+                    (
+                        "boost_mentioned_file",
+                        p1.boost_mentioned_file,
+                        p2.boost_mentioned_file,
+                    ),
                     ("boost_chat_file", p1.boost_chat_file, p2.boost_chat_file),
-                    ("boost_temporal_coupling", p1.boost_temporal_coupling, p2.boost_temporal_coupling),
-                    ("boost_focus_expansion", p1.boost_focus_expansion, p2.boost_focus_expansion),
-                    ("git_recency_decay_days", p1.git_recency_decay_days, p2.git_recency_decay_days),
-                    ("git_recency_max_boost", p1.git_recency_max_boost, p2.git_recency_max_boost),
-                    ("git_churn_threshold", p1.git_churn_threshold, p2.git_churn_threshold),
-                    ("git_churn_max_boost", p1.git_churn_max_boost, p2.git_churn_max_boost),
+                    (
+                        "boost_temporal_coupling",
+                        p1.boost_temporal_coupling,
+                        p2.boost_temporal_coupling,
+                    ),
+                    (
+                        "boost_focus_expansion",
+                        p1.boost_focus_expansion,
+                        p2.boost_focus_expansion,
+                    ),
+                    (
+                        "git_recency_decay_days",
+                        p1.git_recency_decay_days,
+                        p2.git_recency_decay_days,
+                    ),
+                    (
+                        "git_recency_max_boost",
+                        p1.git_recency_max_boost,
+                        p2.git_recency_max_boost,
+                    ),
+                    (
+                        "git_churn_threshold",
+                        p1.git_churn_threshold,
+                        p2.git_churn_threshold,
+                    ),
+                    (
+                        "git_churn_max_boost",
+                        p1.git_churn_max_boost,
+                        p2.git_churn_max_boost,
+                    ),
                     ("focus_decay", p1.focus_decay, p2.focus_decay),
                     ("focus_max_hops", p1.focus_max_hops, p2.focus_max_hops),
                 ];
@@ -464,30 +514,41 @@ impl OuterScratchpad {
         let best_ndcg = ndcgs.iter().cloned().fold(0.0_f64, f64::max);
         let worst_ndcg = ndcgs.iter().cloned().fold(1.0_f64, f64::min);
         let mean_ndcg = ndcgs.iter().sum::<f64>() / ndcgs.len() as f64;
-        let variance = ndcgs.iter().map(|v| (v - mean_ndcg).powi(2)).sum::<f64>() / ndcgs.len() as f64;
+        let variance =
+            ndcgs.iter().map(|v| (v - mean_ndcg).powi(2)).sum::<f64>() / ndcgs.len() as f64;
         let std_dev = variance.sqrt();
 
         summary.push_str("═══ NDCG TRAJECTORY ═══\n");
         summary.push_str(&format!("  Episodes:     {}\n", self.episodes.len()));
         summary.push_str(&format!("  First:        {:.4}\n", first_ndcg));
         summary.push_str(&format!("  Last:         {:.4}\n", last_ndcg));
-        summary.push_str(&format!("  Best:         {:.4} (step {})\n", best_ndcg, self.best_params_step));
+        summary.push_str(&format!(
+            "  Best:         {:.4} (step {})\n",
+            best_ndcg, self.best_params_step
+        ));
         summary.push_str(&format!("  Worst:        {:.4}\n", worst_ndcg));
         summary.push_str(&format!("  Mean:         {:.4}\n", mean_ndcg));
         summary.push_str(&format!("  Std Dev:      {:.4}\n", std_dev));
-        summary.push_str(&format!("  Total Δ:      {:+.4} ({:+.1}%)\n",
+        summary.push_str(&format!(
+            "  Total Δ:      {:+.4} ({:+.1}%)\n",
             last_ndcg - first_ndcg,
-            (last_ndcg - first_ndcg) / first_ndcg * 100.0));
+            (last_ndcg - first_ndcg) / first_ndcg * 100.0
+        ));
         summary.push_str("\n");
 
         // Learning diagnosis
         summary.push_str("═══ LEARNING DIAGNOSIS ═══\n");
-        let warm_started: usize = self.episodes.iter()
+        let warm_started: usize = self
+            .episodes
+            .iter()
             .filter(|e| e.warm_started_from_step.is_some())
             .count();
-        summary.push_str(&format!("  Warm-started:  {} / {} ({:.0}%)\n",
-            warm_started, self.episodes.len(),
-            warm_started as f64 / self.episodes.len() as f64 * 100.0));
+        summary.push_str(&format!(
+            "  Warm-started:  {} / {} ({:.0}%)\n",
+            warm_started,
+            self.episodes.len(),
+            warm_started as f64 / self.episodes.len() as f64 * 100.0
+        ));
 
         if warm_started == 0 && self.episodes.len() > 1 {
             summary.push_str("  ⚠️  NO WARM STARTS - each step started from defaults!\n");
@@ -498,11 +559,17 @@ impl OuterScratchpad {
         if (last_ndcg - first_ndcg).abs() < std_dev * 0.5 {
             summary.push_str("  ⚠️  PLATEAU - final NDCG within 0.5σ of initial\n");
         } else if last_ndcg > first_ndcg {
-            summary.push_str(&format!("  ✓  IMPROVED by {:.4} ({:.1}σ)\n",
-                last_ndcg - first_ndcg, (last_ndcg - first_ndcg) / std_dev));
+            summary.push_str(&format!(
+                "  ✓  IMPROVED by {:.4} ({:.1}σ)\n",
+                last_ndcg - first_ndcg,
+                (last_ndcg - first_ndcg) / std_dev
+            ));
         } else {
-            summary.push_str(&format!("  ✗  REGRESSED by {:.4} ({:.1}σ)\n",
-                first_ndcg - last_ndcg, (first_ndcg - last_ndcg) / std_dev));
+            summary.push_str(&format!(
+                "  ✗  REGRESSED by {:.4} ({:.1}σ)\n",
+                first_ndcg - last_ndcg,
+                (first_ndcg - last_ndcg) / std_dev
+            ));
         }
         summary.push_str("\n");
 
@@ -526,20 +593,35 @@ impl OuterScratchpad {
 
             summary.push_str("  Most changed params (cumulative absolute Δ):\n");
             for (name, (total, count)) in sorted.iter().take(5) {
-                summary.push_str(&format!("    {}: Δ{:.2} ({} changes)\n", name, total, count));
+                summary.push_str(&format!(
+                    "    {}: Δ{:.2} ({} changes)\n",
+                    name, total, count
+                ));
             }
             summary.push_str("\n");
         }
 
         // Stability
-        let collapse_total: usize = self.episodes.iter().map(|e| e.stability.collapse_events).sum();
+        let collapse_total: usize = self
+            .episodes
+            .iter()
+            .map(|e| e.stability.collapse_events)
+            .sum();
         let oscillation_total: usize = self.episodes.iter().map(|e| e.stability.oscillations).sum();
-        let converged_count = self.episodes.iter().filter(|e| e.stability.converged).count();
+        let converged_count = self
+            .episodes
+            .iter()
+            .filter(|e| e.stability.converged)
+            .count();
 
         summary.push_str("═══ STABILITY ═══\n");
         summary.push_str(&format!("  Collapses:    {} total\n", collapse_total));
         summary.push_str(&format!("  Oscillations: {} total\n", oscillation_total));
-        summary.push_str(&format!("  Converged:    {} / {} runs\n", converged_count, self.episodes.len()));
+        summary.push_str(&format!(
+            "  Converged:    {} / {} runs\n",
+            converged_count,
+            self.episodes.len()
+        ));
         summary.push_str("\n");
 
         // Best config location
@@ -668,8 +750,16 @@ mod tests {
 
     #[test]
     fn test_run_metrics_sub() {
-        let a = RunMetrics { ndcg: 0.85, failures: 10, mean_confidence: 0.7 };
-        let b = RunMetrics { ndcg: 0.80, failures: 15, mean_confidence: 0.6 };
+        let a = RunMetrics {
+            ndcg: 0.85,
+            failures: 10,
+            mean_confidence: 0.7,
+        };
+        let b = RunMetrics {
+            ndcg: 0.80,
+            failures: 15,
+            mean_confidence: 0.6,
+        };
         let delta = a - b;
         assert!((delta.ndcg - 0.05).abs() < 0.001);
     }
@@ -684,7 +774,11 @@ mod tests {
                 outer_step: i,
                 prompt_id: "test".to_string(),
                 baseline_metrics: RunMetrics::default(),
-                final_metrics: RunMetrics { ndcg: 0.85, failures: 5, mean_confidence: 0.7 },
+                final_metrics: RunMetrics {
+                    ndcg: 0.85,
+                    failures: 5,
+                    mean_confidence: 0.7,
+                },
                 delta: RunMetrics::default(),
                 stability: StabilityMetrics::default(),
                 meta_levers_estimate: MetaLevers::default(),

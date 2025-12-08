@@ -80,7 +80,11 @@ impl LiveProgress {
         // NDCG sparkline
         if !self.ndcg_history.is_empty() {
             let last_ndcg = self.ndcg_history.last().unwrap();
-            print!("NDCG[{}]{:.3} ", Self::sparkline(&self.ndcg_history, width), last_ndcg);
+            print!(
+                "NDCG[{}]{:.3} ",
+                Self::sparkline(&self.ndcg_history, width),
+                last_ndcg
+            );
         }
 
         // Failures sparkline (convert to f64)
@@ -93,9 +97,11 @@ impl LiveProgress {
         // Convergence indicator
         if self.ndcg_history.len() >= 3 {
             let recent: Vec<_> = self.ndcg_history.iter().rev().take(3).collect();
-            let variance: f64 = recent.iter()
+            let variance: f64 = recent
+                .iter()
                 .map(|&&x| (x - recent[0]).powi(2))
-                .sum::<f64>() / 3.0;
+                .sum::<f64>()
+                / 3.0;
 
             if variance < 0.0001 {
                 print!("⚡CONVERGED");
@@ -128,9 +134,18 @@ impl LiveProgress {
             } else {
                 ("→", format!("{:+.4}", delta).dimmed().to_string())
             };
-            println!("  {}: {:.4} {} {:.4}  ({})",
-                     "NDCG@10".bold(), first, arrow, last, delta_str);
-            println!("          [{}]", Self::sparkline(&self.ndcg_history, 40).cyan());
+            println!(
+                "  {}: {:.4} {} {:.4}  ({})",
+                "NDCG@10".bold(),
+                first,
+                arrow,
+                last,
+                delta_str
+            );
+            println!(
+                "          [{}]",
+                Self::sparkline(&self.ndcg_history, 40).cyan()
+            );
         }
 
         if !self.failure_history.is_empty() {
@@ -145,8 +160,13 @@ impl LiveProgress {
             } else {
                 format!("{:+}", delta).dimmed().to_string()
             };
-            println!("  {}: {:3} → {:3}  ({})",
-                     "Failures".bold(), first, last, delta_str);
+            println!(
+                "  {}: {:3} → {:3}  ({})",
+                "Failures".bold(),
+                first,
+                last,
+                delta_str
+            );
             println!("          [{}]", Self::sparkline(&fail_f64, 40).cyan());
         }
 
@@ -154,7 +174,10 @@ impl LiveProgress {
             let first = self.alpha_history.first().unwrap();
             let last = self.alpha_history.last().unwrap();
             println!("  {}: {:.3} → {:.3}", "α".bold(), first, last);
-            println!("          [{}]", Self::sparkline(&self.alpha_history, 40).cyan());
+            println!(
+                "          [{}]",
+                Self::sparkline(&self.alpha_history, 40).cyan()
+            );
         }
         println!();
     }
@@ -168,7 +191,10 @@ impl Default for LiveProgress {
 
 /// Generate training progress charts from scratchpad data.
 #[cfg(feature = "plotters")]
-pub fn plot_training_progress(scratchpad: &Scratchpad, output_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn plot_training_progress(
+    scratchpad: &Scratchpad,
+    output_path: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     let root = BitMapBackend::new(output_path, (1200, 900)).into_drawing_area();
     root.fill(&WHITE)?;
 
@@ -184,7 +210,8 @@ pub fn plot_training_progress(scratchpad: &Scratchpad, output_path: &str) -> Res
 
     // 1. Failures per episode
     {
-        let failures: Vec<_> = episodes.iter()
+        let failures: Vec<_> = episodes
+            .iter()
             .map(|(i, ep)| (*i as f64, ep.failures.len() as f64))
             .collect();
 
@@ -199,16 +226,15 @@ pub fn plot_training_progress(scratchpad: &Scratchpad, output_path: &str) -> Res
 
         chart.configure_mesh().draw()?;
 
-        chart.draw_series(
-            failures.iter().map(|(x, y)| {
-                Rectangle::new([(*x - 0.3, 0.0), (*x + 0.3, *y)], RED.mix(0.7).filled())
-            })
-        )?;
+        chart.draw_series(failures.iter().map(|(x, y)| {
+            Rectangle::new([(*x - 0.3, 0.0), (*x + 0.3, *y)], RED.mix(0.7).filled())
+        }))?;
     }
 
     // 2. Confidence over time
     {
-        let confidence: Vec<_> = episodes.iter()
+        let confidence: Vec<_> = episodes
+            .iter()
             .map(|(i, ep)| (*i as f64, ep.confidence))
             .collect();
 
@@ -222,18 +248,22 @@ pub fn plot_training_progress(scratchpad: &Scratchpad, output_path: &str) -> Res
         chart.configure_mesh().draw()?;
 
         chart.draw_series(LineSeries::new(confidence.clone(), &GREEN))?;
-        chart.draw_series(confidence.iter().map(|(x, y)| {
-            Circle::new((*x, *y), 4, GREEN.filled())
-        }))?;
+        chart.draw_series(
+            confidence
+                .iter()
+                .map(|(x, y)| Circle::new((*x, *y), 4, GREEN.filled())),
+        )?;
     }
 
     // 3. PageRank alpha
     {
-        let alpha: Vec<_> = episodes.iter()
+        let alpha: Vec<_> = episodes
+            .iter()
             .map(|(i, ep)| (*i as f64, ep.params.pagerank_alpha))
             .collect();
 
-        let (min_a, max_a): (f64, f64) = alpha.iter()
+        let (min_a, max_a): (f64, f64) = alpha
+            .iter()
             .map(|(_, a)| *a)
             .fold((1.0_f64, 0.0_f64), |(min, max), a| (min.min(a), max.max(a)));
 
@@ -247,29 +277,38 @@ pub fn plot_training_progress(scratchpad: &Scratchpad, output_path: &str) -> Res
         chart.configure_mesh().draw()?;
 
         // Default line
-        chart.draw_series(LineSeries::new(
-            vec![(0.0, 0.85), (n as f64, 0.85)],
-            &RGBColor(128, 128, 128).mix(0.5),
-        ))?.label("Default").legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RGBColor(128, 128, 128)));
+        chart
+            .draw_series(LineSeries::new(
+                vec![(0.0, 0.85), (n as f64, 0.85)],
+                &RGBColor(128, 128, 128).mix(0.5),
+            ))?
+            .label("Default")
+            .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &RGBColor(128, 128, 128)));
 
         chart.draw_series(LineSeries::new(alpha.clone(), &BLUE))?;
-        chart.draw_series(alpha.iter().map(|(x, y)| {
-            Circle::new((*x, *y), 4, BLUE.filled())
-        }))?;
+        chart.draw_series(
+            alpha
+                .iter()
+                .map(|(x, y)| Circle::new((*x, *y), 4, BLUE.filled())),
+        )?;
 
         chart.configure_series_labels().draw()?;
     }
 
     // 4. Boost parameters
     {
-        let temporal: Vec<_> = episodes.iter()
+        let temporal: Vec<_> = episodes
+            .iter()
             .map(|(i, ep)| (*i as f64, ep.params.boost_temporal_coupling))
             .collect();
-        let focus: Vec<_> = episodes.iter()
+        let focus: Vec<_> = episodes
+            .iter()
             .map(|(i, ep)| (*i as f64, ep.params.boost_focus_expansion))
             .collect();
 
-        let max_boost = temporal.iter().chain(focus.iter())
+        let max_boost = temporal
+            .iter()
+            .chain(focus.iter())
             .map(|(_, b)| *b)
             .fold(0.0_f64, f64::max);
 
@@ -282,22 +321,26 @@ pub fn plot_training_progress(scratchpad: &Scratchpad, output_path: &str) -> Res
 
         chart.configure_mesh().draw()?;
 
-        chart.draw_series(LineSeries::new(temporal.clone(), &BLUE))?
+        chart
+            .draw_series(LineSeries::new(temporal.clone(), &BLUE))?
             .label("Temporal Coupling")
             .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &BLUE));
 
-        chart.draw_series(LineSeries::new(focus.clone(), &MAGENTA))?
+        chart
+            .draw_series(LineSeries::new(focus.clone(), &MAGENTA))?
             .label("Focus Expansion")
             .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 20, y)], &MAGENTA));
 
-        chart.configure_series_labels()
+        chart
+            .configure_series_labels()
             .position(SeriesLabelPosition::UpperLeft)
             .draw()?;
     }
 
     // 5. Depth weight deep
     {
-        let deep: Vec<_> = episodes.iter()
+        let deep: Vec<_> = episodes
+            .iter()
             .map(|(i, ep)| (*i as f64, ep.params.depth_weight_deep))
             .collect();
 
@@ -318,14 +361,16 @@ pub fn plot_training_progress(scratchpad: &Scratchpad, output_path: &str) -> Res
         ))?;
 
         chart.draw_series(LineSeries::new(deep.clone(), &RGBColor(128, 0, 128)))?;
-        chart.draw_series(deep.iter().map(|(x, y)| {
-            Circle::new((*x, *y), 4, RGBColor(128, 0, 128).filled())
-        }))?;
+        chart.draw_series(
+            deep.iter()
+                .map(|(x, y)| Circle::new((*x, *y), 4, RGBColor(128, 0, 128).filled())),
+        )?;
     }
 
     // 6. NDCG progression (if available)
     {
-        let ndcg: Vec<_> = episodes.iter()
+        let ndcg: Vec<_> = episodes
+            .iter()
             .map(|(i, ep)| (*i as f64, ep.ndcg_before))
             .filter(|(_, n)| *n > 0.0)
             .collect();
@@ -341,15 +386,18 @@ pub fn plot_training_progress(scratchpad: &Scratchpad, output_path: &str) -> Res
 
         if !ndcg.is_empty() {
             chart.draw_series(LineSeries::new(ndcg.clone(), &GREEN))?;
-            chart.draw_series(ndcg.iter().map(|(x, y)| {
-                Circle::new((*x, *y), 4, GREEN.filled())
-            }))?;
+            chart.draw_series(
+                ndcg.iter()
+                    .map(|(x, y)| Circle::new((*x, *y), 4, GREEN.filled())),
+            )?;
         } else {
             // No NDCG data yet - show message
             chart.draw_series(std::iter::once(Text::new(
                 "Run with --reason to track NDCG",
                 (n as f64 / 2.0, 0.9),
-                ("sans-serif", 14).into_font().color(&RGBColor(128, 128, 128)),
+                ("sans-serif", 14)
+                    .into_font()
+                    .color(&RGBColor(128, 128, 128)),
             )))?;
         }
     }
@@ -362,7 +410,10 @@ pub fn plot_training_progress(scratchpad: &Scratchpad, output_path: &str) -> Res
 
 /// Stub when plotters feature is disabled.
 #[cfg(not(feature = "plotters"))]
-pub fn plot_training_progress(_scratchpad: &Scratchpad, _output_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn plot_training_progress(
+    _scratchpad: &Scratchpad,
+    _output_path: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
     eprintln!("Plotting requires --features plotters");
     Ok(())
 }

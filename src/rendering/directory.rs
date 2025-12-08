@@ -19,9 +19,9 @@
 //! - Temporal coupling shows implicit dependencies
 //! - Token counting enables binary search for budget fitting
 
-use crate::types::{DetailLevel, RankedTag, Tag};
-use crate::callgraph::{CallGraph, FunctionId};
 use super::colors::{Badge, Colorizer};
+use crate::callgraph::{CallGraph, FunctionId};
+use crate::types::{DetailLevel, RankedTag, Tag};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -169,13 +169,7 @@ impl DirectoryRenderer {
             // Render classes with their methods
             for (class_name, class_tag, methods, fields) in &organized.classes {
                 output.push_str(&self.render_class_with_calls(
-                    class_name,
-                    class_tag,
-                    methods,
-                    fields,
-                    detail,
-                    badges,
-                    call_graph,
+                    class_name, class_tag, methods, fields, detail, badges, call_graph,
                 ));
             }
 
@@ -235,11 +229,8 @@ impl DirectoryRenderer {
 
             // Add call relationships if call graph is available
             if let Some(graph) = call_graph {
-                let func_id = FunctionId::new(
-                    f.tag.rel_fname.clone(),
-                    f.tag.name.clone(),
-                    f.tag.line,
-                );
+                let func_id =
+                    FunctionId::new(f.tag.rel_fname.clone(), f.tag.name.clone(), f.tag.line);
 
                 // Show what this function calls
                 let calls = graph.calls_from(&func_id);
@@ -341,11 +332,9 @@ impl DirectoryRenderer {
 
                 // Add call relationships for methods
                 if let Some(graph) = call_graph {
-                    let func_id = FunctionId::new(
-                        m.tag.rel_fname.clone(),
-                        m.tag.name.clone(),
-                        m.tag.line,
-                    ).with_parent(class_name);
+                    let func_id =
+                        FunctionId::new(m.tag.rel_fname.clone(), m.tag.name.clone(), m.tag.line)
+                            .with_parent(class_name);
 
                     // Show what this method calls
                     let calls = graph.calls_from(&func_id);
@@ -386,7 +375,9 @@ impl DirectoryRenderer {
         files.sort_by(|a, b| {
             let max_a = a.1.iter().map(|t| t.rank).fold(0.0_f64, f64::max);
             let max_b = b.1.iter().map(|t| t.rank).fold(0.0_f64, f64::max);
-            max_b.partial_cmp(&max_a).unwrap_or(std::cmp::Ordering::Equal)
+            max_b
+                .partial_cmp(&max_a)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         files
@@ -425,7 +416,14 @@ impl DirectoryRenderer {
 
     /// Organize symbols into classes, functions, constants.
     fn organize_symbols<'a>(&self, tags: &[&'a RankedTag]) -> OrganizedSymbols<'a> {
-        let mut classes: HashMap<Arc<str>, (Option<&'a RankedTag>, Vec<&'a RankedTag>, Vec<&'a RankedTag>)> = HashMap::new();
+        let mut classes: HashMap<
+            Arc<str>,
+            (
+                Option<&'a RankedTag>,
+                Vec<&'a RankedTag>,
+                Vec<&'a RankedTag>,
+            ),
+        > = HashMap::new();
         let mut functions = Vec::new();
         let mut constants = Vec::new();
 
@@ -445,7 +443,11 @@ impl DirectoryRenderer {
                 "method" | "method_definition" => {
                     // Method inside a class
                     if let Some(parent) = &tag.parent_name {
-                        classes.entry(parent.clone()).or_default().1.push(*ranked_tag);
+                        classes
+                            .entry(parent.clone())
+                            .or_default()
+                            .1
+                            .push(*ranked_tag);
                     } else {
                         // Orphan method, treat as function
                         functions.push(*ranked_tag);
@@ -454,7 +456,11 @@ impl DirectoryRenderer {
                 "field" | "field_definition" => {
                     // Field inside a class
                     if let Some(parent) = &tag.parent_name {
-                        classes.entry(parent.clone()).or_default().2.push(*ranked_tag);
+                        classes
+                            .entry(parent.clone())
+                            .or_default()
+                            .2
+                            .push(*ranked_tag);
                     }
                 }
                 "function" | "function_definition" => {
@@ -463,7 +469,11 @@ impl DirectoryRenderer {
                 }
                 "constant" | "const_item" | "variable" => {
                     // Check if it looks like a constant (uppercase naming convention)
-                    if tag.name.chars().all(|c| c.is_uppercase() || c == '_' || c.is_numeric()) {
+                    if tag
+                        .name
+                        .chars()
+                        .all(|c| c.is_uppercase() || c == '_' || c.is_numeric())
+                    {
                         constants.push(*ranked_tag);
                     } else {
                         // Regular variable, might be a function-level thing
@@ -508,7 +518,8 @@ impl DirectoryRenderer {
         output.push_str(&Colorizer::class_name(class_name));
 
         // Class-level badges (e.g., [api])
-        let badge_key = format!("{}::{}",
+        let badge_key = format!(
+            "{}::{}",
             class_tag.map(|t| t.tag.rel_fname.as_ref()).unwrap_or(""),
             class_name
         );
@@ -604,7 +615,11 @@ impl DirectoryRenderer {
     }
 
     /// Render constants.
-    fn render_constants(&self, constants: &[&RankedTag], badges: &HashMap<String, Vec<Badge>>) -> String {
+    fn render_constants(
+        &self,
+        constants: &[&RankedTag],
+        badges: &HashMap<String, Vec<Badge>>,
+    ) -> String {
         let mut output = String::from("    const: ");
 
         let const_strs: Vec<_> = constants
@@ -634,7 +649,12 @@ impl DirectoryRenderer {
 /// Organized symbols by type for rendering.
 struct OrganizedSymbols<'a> {
     /// Classes with (name, class_tag, methods, fields)
-    classes: Vec<(Arc<str>, Option<&'a RankedTag>, Vec<&'a RankedTag>, Vec<&'a RankedTag>)>,
+    classes: Vec<(
+        Arc<str>,
+        Option<&'a RankedTag>,
+        Vec<&'a RankedTag>,
+        Vec<&'a RankedTag>,
+    )>,
     /// Standalone functions
     functions: Vec<&'a RankedTag>,
     /// Constants
@@ -665,7 +685,7 @@ mod tests {
             parent_line: None,
             signature,
             fields: None,
-        metadata: None,
+            metadata: None,
         }
     }
 
@@ -695,8 +715,14 @@ mod tests {
 
         let tags = vec![
             RankedTag::new(0.9, make_tag("test.rs", "MyClass", "class", None, None)),
-            RankedTag::new(0.8, make_tag("test.rs", "method1", "method", Some("MyClass"), None)),
-            RankedTag::new(0.7, make_tag("test.rs", "standalone", "function", None, None)),
+            RankedTag::new(
+                0.8,
+                make_tag("test.rs", "method1", "method", Some("MyClass"), None),
+            ),
+            RankedTag::new(
+                0.7,
+                make_tag("test.rs", "standalone", "function", None, None),
+            ),
             RankedTag::new(0.6, make_tag("test.rs", "MAX_SIZE", "constant", None, None)),
         ];
 
@@ -745,9 +771,10 @@ mod tests {
             raw: None,
         };
 
-        let tags = vec![
-            RankedTag::new(0.9, make_tag("test.py", "check", "function", None, Some(sig))),
-        ];
+        let tags = vec![RankedTag::new(
+            0.9,
+            make_tag("test.py", "check", "function", None, Some(sig)),
+        )];
 
         let badges = HashMap::new();
         let temporal = HashMap::new();

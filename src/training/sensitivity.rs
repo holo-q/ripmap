@@ -221,12 +221,14 @@ where
     let mut interactions = HashMap::new();
 
     // Only check top parameters (interaction detection is expensive)
-    let mut sorted_params: Vec<_> = params.iter()
+    let mut sorted_params: Vec<_> = params
+        .iter()
         .map(|p| (p.clone(), ablation.get(p).copied().unwrap_or(0.0)))
         .collect();
     sorted_params.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-    let top_params: Vec<_> = sorted_params.into_iter()
+    let top_params: Vec<_> = sorted_params
+        .into_iter()
         .take(6) // Top 6 most important
         .map(|(p, _)| p)
         .collect();
@@ -250,7 +252,8 @@ where
             let expected_additive = effect_a + effect_b;
             let interaction = effect_both - expected_additive;
 
-            if interaction.abs() > 0.01 { // Only record significant interactions
+            if interaction.abs() > 0.01 {
+                // Only record significant interactions
                 // Key format: "param_a|param_b" for JSON compatibility
                 let key = format!("{}|{}", param_a, param_b);
                 interactions.insert(key, interaction);
@@ -262,10 +265,7 @@ where
 }
 
 /// Compute full sensitivity analysis.
-pub fn full_analysis<F>(
-    baseline: &ParameterPoint,
-    evaluator: F,
-) -> SensitivityAnalysis
+pub fn full_analysis<F>(baseline: &ParameterPoint, evaluator: F) -> SensitivityAnalysis
 where
     F: Fn(&ParameterPoint) -> f64 + Copy,
 {
@@ -318,7 +318,9 @@ pub fn print_summary(analysis: &SensitivityAnalysis) {
 
         let mut sorted_interactions: Vec<_> = analysis.interactions.iter().collect();
         sorted_interactions.sort_by(|a, b| {
-            b.1.abs().partial_cmp(&a.1.abs()).unwrap_or(std::cmp::Ordering::Equal)
+            b.1.abs()
+                .partial_cmp(&a.1.abs())
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         for (key, strength) in sorted_interactions.iter().take(5) {
@@ -329,7 +331,11 @@ pub fn print_summary(analysis: &SensitivityAnalysis) {
             } else {
                 (key.as_str(), "?")
             };
-            let direction = if **strength > 0.0 { "synergistic" } else { "antagonistic" };
+            let direction = if **strength > 0.0 {
+                "synergistic"
+            } else {
+                "antagonistic"
+            };
             println!("  {} × {} = {:+.4} ({})", a, b, strength, direction);
         }
     }
@@ -360,9 +366,8 @@ mod tests {
         let baseline = ParameterPoint::default();
 
         // Mock evaluator: score = sum of boost values (simplistic)
-        let evaluator = |p: &ParameterPoint| {
-            p.boost_mentioned_ident * 0.1 + p.boost_chat_file * 0.05
-        };
+        let evaluator =
+            |p: &ParameterPoint| p.boost_mentioned_ident * 0.1 + p.boost_chat_file * 0.05;
 
         let importance = ablation_study(&baseline, evaluator(&baseline), evaluator);
 

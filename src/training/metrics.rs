@@ -186,11 +186,7 @@ impl CaseMetrics {
 /// # Returns
 ///
 /// NDCG score in range [0.0, 1.0]. Higher is better.
-pub fn weighted_ndcg(
-    ranking: &[String],
-    ground_truth: &[(String, f64)],
-    k: usize,
-) -> f64 {
+pub fn weighted_ndcg(ranking: &[String], ground_truth: &[(String, f64)], k: usize) -> f64 {
     if ground_truth.is_empty() {
         return 0.0;
     }
@@ -219,11 +215,7 @@ pub fn weighted_ndcg(
         .map(|(rank, &rel)| rel / (rank as f64 + 2.0).log2())
         .sum();
 
-    if idcg == 0.0 {
-        0.0
-    } else {
-        dcg / idcg
-    }
+    if idcg == 0.0 { 0.0 } else { dcg / idcg }
 }
 
 /// Precision at position k.
@@ -282,11 +274,7 @@ pub fn recall_at_k(
         return 0.0;
     }
 
-    let top_k: std::collections::HashSet<_> = ranking
-        .iter()
-        .take(k)
-        .map(|f| f.as_str())
-        .collect();
+    let top_k: std::collections::HashSet<_> = ranking.iter().take(k).map(|f| f.as_str()).collect();
 
     let hits = relevant.intersection(&top_k).count();
 
@@ -396,7 +384,11 @@ mod tests {
         ];
 
         let ndcg = weighted_ndcg(&ranking, &truth, 3);
-        assert!((ndcg - 1.0).abs() < 1e-6, "Perfect ranking should have NDCG=1.0, got {}", ndcg);
+        assert!(
+            (ndcg - 1.0).abs() < 1e-6,
+            "Perfect ranking should have NDCG=1.0, got {}",
+            ndcg
+        );
     }
 
     #[test]
@@ -410,7 +402,11 @@ mod tests {
         ];
 
         let ndcg = weighted_ndcg(&ranking, &truth, 3);
-        assert!(ndcg < 1.0, "Reversed ranking should have NDCG < 1.0, got {}", ndcg);
+        assert!(
+            ndcg < 1.0,
+            "Reversed ranking should have NDCG < 1.0, got {}",
+            ndcg
+        );
         assert!(ndcg > 0.0, "Reversed ranking should have NDCG > 0.0");
     }
 
@@ -418,10 +414,7 @@ mod tests {
     fn test_ndcg_partial_match() {
         // Only some items in ranking
         let ranking = vec!["a".to_string(), "x".to_string(), "y".to_string()];
-        let truth = vec![
-            ("a".to_string(), 1.0),
-            ("b".to_string(), 0.5),
-        ];
+        let truth = vec![("a".to_string(), 1.0), ("b".to_string(), 0.5)];
 
         let ndcg = weighted_ndcg(&ranking, &truth, 3);
         assert!(ndcg > 0.0, "Should get credit for 'a'");
@@ -449,7 +442,11 @@ mod tests {
 
         // P@3 = 2/3 (a, b relevant, x not)
         let p3 = precision_at_k(&ranking, &truth, 3, 0.5);
-        assert!((p3 - 2.0 / 3.0).abs() < 1e-6, "P@3 should be 0.667, got {}", p3);
+        assert!(
+            (p3 - 2.0 / 3.0).abs() < 1e-6,
+            "P@3 should be 0.667, got {}",
+            p3
+        );
 
         // P@5 = 3/5 (a, b, c relevant)
         let p5 = precision_at_k(&ranking, &truth, 5, 0.5);
@@ -458,11 +455,7 @@ mod tests {
 
     #[test]
     fn test_recall_at_k() {
-        let ranking = vec![
-            "a".to_string(),
-            "x".to_string(),
-            "b".to_string(),
-        ];
+        let ranking = vec!["a".to_string(), "x".to_string(), "b".to_string()];
         let truth = vec![
             ("a".to_string(), 1.0),
             ("b".to_string(), 0.8),
@@ -471,25 +464,33 @@ mod tests {
 
         // R@1 = 1/3 (only a in top-1)
         let r1 = recall_at_k(&ranking, &truth, 1, 0.5);
-        assert!((r1 - 1.0 / 3.0).abs() < 1e-6, "R@1 should be 0.333, got {}", r1);
+        assert!(
+            (r1 - 1.0 / 3.0).abs() < 1e-6,
+            "R@1 should be 0.333, got {}",
+            r1
+        );
 
         // R@3 = 2/3 (a, b in top-3, c missing)
         let r3 = recall_at_k(&ranking, &truth, 3, 0.5);
-        assert!((r3 - 2.0 / 3.0).abs() < 1e-6, "R@3 should be 0.667, got {}", r3);
+        assert!(
+            (r3 - 2.0 / 3.0).abs() < 1e-6,
+            "R@3 should be 0.667, got {}",
+            r3
+        );
     }
 
     #[test]
     fn test_mrr() {
         // Relevant item at rank 3 (0-indexed: 2)
-        let ranking = vec![
-            "x".to_string(),
-            "y".to_string(),
-            "a".to_string(),
-        ];
+        let ranking = vec!["x".to_string(), "y".to_string(), "a".to_string()];
         let truth = vec![("a".to_string(), 1.0)];
 
         let mrr = mean_reciprocal_rank(&ranking, &truth, 0.5);
-        assert!((mrr - 1.0 / 3.0).abs() < 1e-6, "MRR should be 0.333, got {}", mrr);
+        assert!(
+            (mrr - 1.0 / 3.0).abs() < 1e-6,
+            "MRR should be 0.333, got {}",
+            mrr
+        );
     }
 
     #[test]
@@ -498,7 +499,10 @@ mod tests {
         let truth = vec![("a".to_string(), 1.0)];
 
         let mrr = mean_reciprocal_rank(&ranking, &truth, 0.5);
-        assert!((mrr - 1.0).abs() < 1e-6, "MRR should be 1.0 when first is relevant");
+        assert!(
+            (mrr - 1.0).abs() < 1e-6,
+            "MRR should be 1.0 when first is relevant"
+        );
     }
 
     #[test]
@@ -510,16 +514,18 @@ mod tests {
             "b".to_string(),
             "y".to_string(),
         ];
-        let truth = vec![
-            ("a".to_string(), 1.0),
-            ("b".to_string(), 0.8),
-        ];
+        let truth = vec![("a".to_string(), 1.0), ("b".to_string(), 0.8)];
 
         // At rank 1: P=1/1=1.0, At rank 3: P=2/3
         // MAP = (1.0 + 0.667) / 2 = 0.833
         let map = mean_average_precision(&ranking, &truth, 0.5);
         let expected = (1.0 + 2.0 / 3.0) / 2.0;
-        assert!((map - expected).abs() < 1e-6, "MAP should be {}, got {}", expected, map);
+        assert!(
+            (map - expected).abs() < 1e-6,
+            "MAP should be {}, got {}",
+            expected,
+            map
+        );
     }
 
     #[test]
@@ -580,6 +586,10 @@ mod tests {
         // 0, 10 -> mean 5, std dev ~7.07
         let values = vec![0.0, 10.0];
         let sd = std_dev(&values);
-        assert!((sd - 7.071).abs() < 0.01, "Std dev should be ~7.07, got {}", sd);
+        assert!(
+            (sd - 7.071).abs() < 0.01,
+            "Std dev should be ~7.07, got {}",
+            sd
+        );
     }
 }

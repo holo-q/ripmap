@@ -10,10 +10,10 @@
 //! 3. ImportStrategy (0.8) - resolved via import statements
 //! 4. NameMatchStrategy (0.5) - fuzzy name matching (fallback)
 
+use super::graph::FunctionId;
+use crate::types::Tag;
 use std::collections::HashMap;
 use std::sync::Arc;
-use crate::types::Tag;
-use super::graph::FunctionId;
 
 /// A resolution candidate with confidence score.
 #[derive(Debug, Clone)]
@@ -108,11 +108,7 @@ pub trait ResolutionStrategy: Send + Sync {
 
     /// Attempt to resolve a call reference to its definition.
     /// Returns all possible candidates with confidence scores.
-    fn resolve(
-        &self,
-        call: &Tag,
-        context: &ResolutionContext,
-    ) -> Vec<Candidate>;
+    fn resolve(&self, call: &Tag, context: &ResolutionContext) -> Vec<Candidate>;
 
     /// Whether this strategy applies to the given language
     fn supports_language(&self, lang: &str) -> bool {
@@ -157,11 +153,8 @@ impl ResolutionStrategy for SameFileStrategy {
         defs.into_iter()
             .filter(|def| def.rel_fname == call.rel_fname)
             .map(|def| Candidate {
-                target: FunctionId::new(
-                    def.rel_fname.clone(),
-                    def.name.clone(),
-                    def.line,
-                ).with_parent_opt(def.parent_name.clone()),
+                target: FunctionId::new(def.rel_fname.clone(), def.name.clone(), def.line)
+                    .with_parent_opt(def.parent_name.clone()),
                 confidence: self.confidence,
                 type_hint: None,
             })
@@ -199,7 +192,9 @@ impl ResolutionStrategy for TypeHintStrategy {
 
     fn resolve(&self, call: &Tag, context: &ResolutionContext) -> Vec<Candidate> {
         // Only applies to method calls with a receiver
-        let receiver = call.metadata.as_ref()
+        let receiver = call
+            .metadata
+            .as_ref()
             .and_then(|m| m.get("receiver"))
             .map(|s| s.as_str());
 
@@ -218,14 +213,13 @@ impl ResolutionStrategy for TypeHintStrategy {
         defs.into_iter()
             .filter(|def| {
                 // Check if this definition is a method of the receiver's type
-                def.parent_name.as_ref().map_or(false, |p| p.as_ref() == receiver_type)
+                def.parent_name
+                    .as_ref()
+                    .map_or(false, |p| p.as_ref() == receiver_type)
             })
             .map(|def| Candidate {
-                target: FunctionId::new(
-                    def.rel_fname.clone(),
-                    def.name.clone(),
-                    def.line,
-                ).with_parent(receiver_type.as_str()),
+                target: FunctionId::new(def.rel_fname.clone(), def.name.clone(), def.line)
+                    .with_parent(receiver_type.as_str()),
                 confidence: self.confidence,
                 type_hint: Some(format!("{}: {}", receiver, receiver_type)),
             })
@@ -275,11 +269,8 @@ impl ResolutionStrategy for ImportStrategy {
                 def.rel_fname.contains(&module_path)
             })
             .map(|def| Candidate {
-                target: FunctionId::new(
-                    def.rel_fname.clone(),
-                    def.name.clone(),
-                    def.line,
-                ).with_parent_opt(def.parent_name.clone()),
+                target: FunctionId::new(def.rel_fname.clone(), def.name.clone(), def.line)
+                    .with_parent_opt(def.parent_name.clone()),
                 confidence: self.confidence,
                 type_hint: Some(format!("from {} import {}", module, original_name)),
             })
@@ -337,11 +328,8 @@ impl ResolutionStrategy for NameMatchStrategy {
                 };
 
                 Candidate {
-                    target: FunctionId::new(
-                        def.rel_fname.clone(),
-                        def.name.clone(),
-                        def.line,
-                    ).with_parent_opt(def.parent_name.clone()),
+                    target: FunctionId::new(def.rel_fname.clone(), def.name.clone(), def.line)
+                        .with_parent_opt(def.parent_name.clone()),
                     confidence,
                     type_hint: None,
                 }

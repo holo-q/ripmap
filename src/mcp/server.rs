@@ -8,17 +8,18 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use rmcp::{
+    ServerHandler,
     handler::server::{router::tool::ToolRouter, tool::Parameters},
-    model::{ErrorData as McpError, ErrorCode, *},
-    tool, tool_handler, tool_router, ServerHandler,
+    model::{ErrorCode, ErrorData as McpError, *},
+    tool, tool_handler, tool_router,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::discovery::find_source_files;
 use crate::extraction::{Parser, extract_tags};
-use crate::ranking::{PageRanker, BoostCalculator};
+use crate::ranking::{BoostCalculator, PageRanker};
 use crate::rendering::DirectoryRenderer;
-use crate::types::{RankingConfig, DetailLevel};
+use crate::types::{DetailLevel, RankingConfig};
 
 /// Ripmap MCP server - exposes codebase cartography as an MCP tool.
 ///
@@ -31,14 +32,16 @@ pub struct RipmapServer {
 
 /// Request parameters for the grep_map tool.
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
-#[allow(dead_code)]  // Future: implement other_files, exclude_unranked, force_refresh
+#[allow(dead_code)] // Future: implement other_files, exclude_unranked, force_refresh
 pub struct GrepMapRequest {
     /// Absolute path to the project root directory.
     #[schemars(description = "Absolute path to the project root directory")]
     pub project_root: String,
 
     /// Files you're actively working on (relative paths). Get highest ranking boost.
-    #[schemars(description = "Files you're actively working on (relative paths). Get highest ranking boost.")]
+    #[schemars(
+        description = "Files you're actively working on (relative paths). Get highest ranking boost."
+    )]
     pub chat_files: Option<Vec<String>>,
 
     /// Additional files to consider. If omitted, scans entire project.
@@ -173,7 +176,7 @@ impl RipmapServer {
         // Stage 2: Tag Extraction
         let parser = Parser::new();
         let mut tags_by_file: HashMap<String, Vec<crate::Tag>> = HashMap::new();
-        let mut _total_tags = 0;  // Future: include in detailed stats
+        let mut _total_tags = 0; // Future: include in detailed stats
         let mut definition_matches = 0;
         let mut reference_matches = 0;
 
@@ -211,11 +214,7 @@ impl RipmapServer {
             .iter()
             .filter_map(|f| {
                 let path = root.join(f);
-                if path.exists() {
-                    Some(f.clone())
-                } else {
-                    None
-                }
+                if path.exists() { Some(f.clone()) } else { None }
             })
             .collect();
 
@@ -250,12 +249,7 @@ impl RipmapServer {
             DetailLevel::Low
         };
 
-        let output = renderer.render(
-            &ranked_tags,
-            detail,
-            &HashMap::new(),
-            &HashMap::new(),
-        );
+        let output = renderer.render(&ranked_tags, detail, &HashMap::new(), &HashMap::new());
 
         // Build response
         let header = format!(

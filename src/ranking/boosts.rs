@@ -79,10 +79,8 @@ impl BoostCalculator {
         let mut result = Vec::new();
 
         // Convert chat_fnames (absolute paths) to relative for comparison
-        let chat_rel_fnames: HashSet<String> = chat_fnames
-            .iter()
-            .map(|f| extract_rel_fname(f))
-            .collect();
+        let chat_rel_fnames: HashSet<String> =
+            chat_fnames.iter().map(|f| extract_rel_fname(f)).collect();
 
         for (fname, tags) in tags_by_file {
             let rel_fname = extract_rel_fname(fname);
@@ -196,7 +194,7 @@ mod tests {
             parent_line: None,
             signature: None,
             fields: None,
-        metadata: None,
+            metadata: None,
         }
     }
 
@@ -520,10 +518,7 @@ mod tests {
 
         assert_eq!(result.len(), 1);
         // 0.1 × (5.0 × 0.8) = 0.4
-        assert_eq!(
-            result[0].rank,
-            0.1 * config.boost_focus_expansion * 0.8
-        );
+        assert_eq!(result[0].rank, 0.1 * config.boost_focus_expansion * 0.8);
     }
 
     #[test]

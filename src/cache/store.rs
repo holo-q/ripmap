@@ -60,8 +60,7 @@ impl CacheEntry {
             return false;
         };
 
-        self.mtime_secs == duration.as_secs()
-            && self.mtime_nanos == duration.subsec_nanos()
+        self.mtime_secs == duration.as_secs() && self.mtime_nanos == duration.subsec_nanos()
     }
 
     /// Serialize to bytes using bincode
@@ -99,8 +98,9 @@ impl TagCache {
         let cache_dir = root.join(".ripmap.cache");
 
         // Ensure cache directory exists
-        fs::create_dir_all(&cache_dir)
-            .with_context(|| format!("Failed to create cache directory: {}", cache_dir.display()))?;
+        fs::create_dir_all(&cache_dir).with_context(|| {
+            format!("Failed to create cache directory: {}", cache_dir.display())
+        })?;
 
         let db_path = cache_dir.join("tags.redb");
 
@@ -151,20 +151,23 @@ impl TagCache {
         let bytes = entry.to_bytes()?;
 
         // Write transaction - ACID guarantees from redb
-        let write_txn = self.db.begin_write()
+        let write_txn = self
+            .db
+            .begin_write()
             .context("Failed to begin write transaction")?;
 
         {
-            let mut table = write_txn.open_table(TAGS_TABLE)
+            let mut table = write_txn
+                .open_table(TAGS_TABLE)
                 .context("Failed to open tags table")?;
 
-            table.insert(fname, bytes.as_slice())
+            table
+                .insert(fname, bytes.as_slice())
                 .with_context(|| format!("Failed to insert cache entry for {}", fname))?;
         }
 
         // Commit transaction - durability guaranteed
-        write_txn.commit()
-            .context("Failed to commit cache write")?;
+        write_txn.commit().context("Failed to commit cache write")?;
 
         Ok(())
     }
@@ -174,15 +177,19 @@ impl TagCache {
     /// Removes all entries from the cache database.
     /// Does not delete the database file itself.
     pub fn clear(&self) -> Result<()> {
-        let write_txn = self.db.begin_write()
+        let write_txn = self
+            .db
+            .begin_write()
             .context("Failed to begin write transaction for clear")?;
 
         {
-            let mut table = write_txn.open_table(TAGS_TABLE)
+            let mut table = write_txn
+                .open_table(TAGS_TABLE)
                 .context("Failed to open tags table")?;
 
             // Drain iterator removes all entries
-            let keys: Vec<String> = table.iter()
+            let keys: Vec<String> = table
+                .iter()
                 .ok()
                 .into_iter()
                 .flatten()
@@ -191,13 +198,13 @@ impl TagCache {
                 .collect();
 
             for key in keys {
-                table.remove(key.as_str())
+                table
+                    .remove(key.as_str())
                     .context("Failed to remove cache entry during clear")?;
             }
         }
 
-        write_txn.commit()
-            .context("Failed to commit cache clear")?;
+        write_txn.commit().context("Failed to commit cache clear")?;
 
         Ok(())
     }
@@ -219,7 +226,8 @@ impl TagCache {
         let entries = table.len().unwrap_or(0) as usize;
 
         // Approximate size by iterating entries and summing value lengths
-        let size_bytes = table.iter()
+        let size_bytes = table
+            .iter()
             .ok()
             .into_iter()
             .flatten()
@@ -227,7 +235,10 @@ impl TagCache {
             .map(|(k, v)| k.value().len() + v.value().len())
             .sum::<usize>() as u64;
 
-        CacheStats { entries, size_bytes }
+        CacheStats {
+            entries,
+            size_bytes,
+        }
     }
 }
 
@@ -262,7 +273,7 @@ impl CacheStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{TagKind, Tag};
+    use crate::types::{Tag, TagKind};
 
     fn make_test_tag(name: &str) -> Tag {
         Tag {
@@ -276,7 +287,7 @@ mod tests {
             parent_line: None,
             signature: None,
             fields: None,
-        metadata: None,
+            metadata: None,
         }
     }
 
@@ -298,10 +309,7 @@ mod tests {
     #[test]
     fn test_cache_entry_serialization() {
         let now = SystemTime::now();
-        let tags = vec![
-            make_test_tag("foo"),
-            make_test_tag("bar"),
-        ];
+        let tags = vec![make_test_tag("foo"), make_test_tag("bar")];
 
         let entry = CacheEntry::new(now, tags.clone()).unwrap();
         let bytes = entry.to_bytes().unwrap();

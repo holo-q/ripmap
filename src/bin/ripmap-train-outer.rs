@@ -32,13 +32,12 @@
 //!       ...
 //! ```
 
-use std::path::PathBuf;
 use clap::Parser;
 use ripmap::training::reasoning::Agent;
 use ripmap::training_outer::{
-    OuterLoop, OuterScratchpad, OuterConfig, RunConfig, RunContext,
-    Promptgram, baseline_promptgram,
+    OuterConfig, OuterLoop, OuterScratchpad, Promptgram, RunConfig, RunContext, baseline_promptgram,
 };
+use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(name = "ripmap-train-outer")]
@@ -101,10 +100,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // Parse agents
-    let inner_agent: Agent = args.agent_inner.parse()
-        .map_err(|e: String| e)?;
-    let _outer_agent: Agent = args.agent_outer.parse()
-        .map_err(|e: String| e)?;
+    let inner_agent: Agent = args.agent_inner.parse().map_err(|e: String| e)?;
+    let _outer_agent: Agent = args.agent_outer.parse().map_err(|e: String| e)?;
 
     // Set up run configuration
     let run_config = RunConfig {
@@ -177,20 +174,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  Inner agent:    {}", args.agent_inner);
     println!("  Outer agent:    {}", args.agent_outer);
     println!("  Corpus:         {}", args.corpus);
-    println!("  L2 reasoning:   {}", if edit_prompts { "enabled" } else { "dry run" });
+    println!(
+        "  L2 reasoning:   {}",
+        if edit_prompts { "enabled" } else { "dry run" }
+    );
     println!("  Output dir:     {:?}", ctx.config.output_dir());
     println!();
 
     // Determine starting step
     let start_step = outer_scratchpad.episodes.len();
     if start_step > 0 {
-        println!("📊 Resuming from step {} (best NDCG: {:.4})",
-            start_step, outer_scratchpad.best_ndcg);
+        println!(
+            "📊 Resuming from step {} (best NDCG: {:.4})",
+            start_step, outer_scratchpad.best_ndcg
+        );
     }
 
     // Save initial config
     let config_path = ctx.config.output_dir().join("config.toml");
-    let config_content = format!(r#"# L2 Outer Loop Configuration
+    let config_content = format!(
+        r#"# L2 Outer Loop Configuration
 [run]
 name = "{}"
 steps_outer = {}
@@ -212,30 +215,43 @@ dry = {}
 
     // Run outer loop
     println!("{}", "─".repeat(65));
-    println!("Starting outer loop ({} steps)...\n", args.steps_outer - start_step);
+    println!(
+        "Starting outer loop ({} steps)...\n",
+        args.steps_outer - start_step
+    );
 
     for step in start_step..args.steps_outer {
-        println!("{}", format!(" OUTER STEP {}/{} ", step + 1, args.steps_outer).bold().on_cyan());
+        println!(
+            "{}",
+            format!(" OUTER STEP {}/{} ", step + 1, args.steps_outer)
+                .bold()
+                .on_cyan()
+        );
 
         // Run one outer episode
         match outer_loop.run_outer_episode(step + 1, &ctx, &mut outer_scratchpad) {
             Ok(summary) => {
                 // Print summary
                 println!("\n  📈 Results:");
-                println!("     NDCG: {:.4} → {:.4} (Δ{:+.4})",
-                    summary.baseline_metrics.ndcg,
-                    summary.final_metrics.ndcg,
-                    summary.delta.ndcg);
-                println!("     Failures: {} → {}",
-                    summary.baseline_metrics.failures,
-                    summary.final_metrics.failures);
+                println!(
+                    "     NDCG: {:.4} → {:.4} (Δ{:+.4})",
+                    summary.baseline_metrics.ndcg, summary.final_metrics.ndcg, summary.delta.ndcg
+                );
+                println!(
+                    "     Failures: {} → {}",
+                    summary.baseline_metrics.failures, summary.final_metrics.failures
+                );
                 println!("     Duration: {:.1}s", summary.duration_secs);
-                println!("     Stability: {} collapses, {:.4} variance",
-                    summary.stability.collapse_events,
-                    summary.stability.ndcg_variance);
+                println!(
+                    "     Stability: {} collapses, {:.4} variance",
+                    summary.stability.collapse_events, summary.stability.ndcg_variance
+                );
 
                 // Print meta-levers
-                println!("     Meta-levers: {}", summary.meta_levers_estimate.summary());
+                println!(
+                    "     Meta-levers: {}",
+                    summary.meta_levers_estimate.summary()
+                );
 
                 // Print strategy capsules (if any)
                 if !summary.strategy_capsules.is_empty() {
@@ -247,8 +263,10 @@ dry = {}
 
                 // Update best if improved
                 if summary.final_metrics.ndcg > outer_scratchpad.best_ndcg {
-                    println!("\n  🏆 NEW BEST! {:.4} → {:.4}",
-                        outer_scratchpad.best_ndcg, summary.final_metrics.ndcg);
+                    println!(
+                        "\n  🏆 NEW BEST! {:.4} → {:.4}",
+                        outer_scratchpad.best_ndcg, summary.final_metrics.ndcg
+                    );
                 }
             }
             Err(e) => {
@@ -274,7 +292,9 @@ dry = {}
 
     // Print structural insights (not in statistical_summary to keep it focused on numbers)
     if !outer_scratchpad.episodes.is_empty() {
-        let all_insights: std::collections::HashSet<_> = outer_scratchpad.episodes.iter()
+        let all_insights: std::collections::HashSet<_> = outer_scratchpad
+            .episodes
+            .iter()
             .flat_map(|e| e.structural_insights.iter())
             .collect();
         if !all_insights.is_empty() {
@@ -286,7 +306,9 @@ dry = {}
         }
 
         // Print strategy capsule diversity
-        let all_capsules: Vec<_> = outer_scratchpad.episodes.iter()
+        let all_capsules: Vec<_> = outer_scratchpad
+            .episodes
+            .iter()
             .flat_map(|e| e.strategy_capsules.iter())
             .collect();
         println!("Total strategy capsules recorded: {}", all_capsules.len());
