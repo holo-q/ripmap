@@ -1,0 +1,9 @@
+# L2 Outer Loop Configuration
+[run]
+name = "outer_run"
+outer_steps = 10
+inner_episodes = 20
+inner_agent = "claude"
+outer_agent = "codex"
+corpus = "curated"
+edit_prompts = false

@@ -1,0 +1,85 @@
+{
+  "episodes": [
+    {
+      "outer_step": 1,
+      "prompt_id": "inner_v001",
+      "baseline_metrics": {
+        "ndcg": 0.8592123762188533,
+        "failures": 10,
+        "mean_confidence": 0.5
+      },
+      "final_metrics": {
+        "ndcg": 0.8554573611295738,
+        "failures": 6,
+        "mean_confidence": 0.6966666666666667
+      },
+      "delta": {
+        "ndcg": -0.0037550150892794454,
+        "failures": 0,
+        "mean_confidence": 0.19666666666666666
+      },
+      "stability": {
+        "collapse_events": 0,
+        "ndcg_variance": 9.522124670261239e-6,
+        "converged": true,
+        "oscillations": 1
+      },
+      "meta_levers_estimate": {
+        "structural_trust": 0.85,
+        "temporal_horizon": 0.0,
+        "exploration_bias": 0.5,
+        "depth_sensitivity": 0.1,
+        "hub_damping": 0.5,
+        "focus_locality": 0.3
+      },
+      "strategy_capsules": [
+        "Suppress distractor pollution by strengthening temporal/focus signals and localizing PageRank",
+        "Amplify temporal/git signals to drown out structurally-similar distractors that lack co-change history",
+        "Localize PageRank, flatten depth penalty, amplify temporal signal to surface co-changed files over structurally-isolated distractors"
+      ],
+      "notable_failures": [],
+      "structural_insights": [
+        "Repo uses 'curated' test set with synthetic distractors - distractor suppression is key",
+        "Debug/Extend intents should weight temporal coupling highest - these are co-change patterns",
+        "Same-crate files (crates/X/src/*.rs) should form strong local clusters via lower alpha",
+        "tests/regression.rs is a hub file connecting multiple crates - it needs strong temporal coupling to find its true partners",
+        "Distractors are identifiable by ABSENCE of git co-change signals - amplifying temporal/git boosts will naturally suppress them",
+        "Debug intent failures dominate - consider intent-specific parameter overrides where Debug uses 2x temporal weights",
+        "Distractors are identifiable by complete absence of call-graph edges AND git co-change signals - they're structurally orphaned",
+        "The depth penalty creates an implicit bias toward shallow src/ files over deep crates/X/src/ files, which is wrong for Rust monorepos",
+        "Hub test files need longer focus expansion reach (3 hops) to find their true structural partners across crate boundaries"
+      ],
+      "inner_episodes": 3,
+      "duration_secs": 135.992358761,
+      "timestamp": 1765173359,
+      "proposal": {
+        "mode": "explore",
+        "mode_justification": "Cold start - no trajectory data exists. Must establish baseline and add foundational structure for faster learning. This isn't exploration-after-plateau, but first-principles scaffolding.",
+        "confidence": 0.65,
+        "edits": [
+          {
+            "section": "Policy",
+            "edit_type": "append",
+            "target": "",
+            "content": "\nStep size guidance:\n- Small moves: ±10-20% of current value for refinement\n- Medium moves: ±30-50% when changing direction\n- Large moves: 2x or 0.5x when escaping local minimum\n- Never change more than 3 params simultaneously",
+            "rationale": "Without step-size heuristics, inner optimizer variance is high - sometimes tiny tweaks, sometimes wild swings. This adds actionable constraints that reduce exploration noise while preserving flexibility. The '3 params max' rule helps isolate signal."
+          }
+        ],
+        "expected_effects": [
+          "More consistent step sizes across episodes",
+          "Cleaner signal attribution (fewer concurrent changes)",
+          "Faster convergence when improving, clearer collapse signals when degrading"
+        ],
+        "hypothesis": "Explicit step-size guidance reduces inner optimizer variance without constraining exploration, leading to more interpretable trajectories.",
+        "risk_level": "low"
+      },
+      "selection_mode": "best"
+    }
+  ],
+  "best_prompt_id": "inner_v001",
+  "best_ndcg": 0.8554573611295738,
+  "hall_of_fame": [],
+  "success_patterns": [],
+  "failure_patterns": [],
+  "meta_insights": []
+}

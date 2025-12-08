@@ -1,18 +1,19 @@
 //! ripmap-train-outer: L2 Promptgram Optimizer
 //!
 //! The outer loop that evolves prompts for the inner reasoning-based optimizer.
+//! Each run is self-contained - output promptgram lives in the run directory.
 //!
 //! ## Usage
 //!
 //! ```bash
-//! # Run Stage 0: baseline outer loop (no prompt edits, just recording)
-//! ripmap-train-outer --outer-steps 10 --inner-episodes 20 --run-name test_outer
+//! # Full outer loop with L2 prompt evolution (default)
+//! ripmap-train-outer my_experiment --steps-outer 50 --episodes-inner 30
 //!
-//! # Run with a specific inner promptgram
-//! ripmap-train-outer --promptgram training-outer/prompts/inner/explorer.toml
+//! # Dry run: just record metrics, no L2 reasoning/prompt editing
+//! ripmap-train-outer baseline_run --dry
 //!
-//! # Full outer loop with prompt editing (Stage 1+)
-//! ripmap-train-outer --outer-steps 50 --inner-episodes 30 --edit-prompts
+//! # Seed from a previous run's promptgram
+//! ripmap-train-outer new_experiment --promptgram training-outer/runs/old_run/promptgram.toml
 //! ```
 //!
 //! ## Directory Structure
@@ -20,6 +21,7 @@
 //! ```text
 //! training-outer/runs/<run-name>/
 //!   config.toml           # Outer run configuration
+//!   promptgram.toml       # Current/final promptgram (self-contained)
 //!   outer_scratchpad.json # L2 scratchpad
 //!   inner_runs/
 //!     step_001/           # Inner run for outer step 1
@@ -42,33 +44,32 @@ use ripmap::training_outer::{
 #[command(name = "ripmap-train-outer")]
 #[command(about = "L2 Promptgram Optimizer - evolves prompts for the inner optimizer")]
 struct Args {
+    /// Name for this outer run (creates training-outer/runs/<name>/)
+    run_name: String,
+
     /// Number of outer steps to run
     #[arg(long, default_value = "10")]
-    outer_steps: usize,
+    steps_outer: usize,
 
     /// Number of inner episodes per outer step
     #[arg(long, default_value = "20")]
-    inner_episodes: usize,
-
-    /// Name for this outer run
-    #[arg(long, default_value = "outer_run")]
-    run_name: String,
+    episodes_inner: usize,
 
     /// Agent to use for inner loop (claude, gemini, codex)
     #[arg(long, default_value = "claude")]
-    inner_agent: String,
+    agent_inner: String,
 
-    /// Agent to use for outer loop reasoning
+    /// Agent to use for outer loop L2 reasoning
     #[arg(long, default_value = "codex")]
-    outer_agent: String,
+    agent_outer: String,
 
-    /// Path to inner promptgram (optional, uses default if not specified)
+    /// Seed promptgram (path or run name). Uses default if not specified.
     #[arg(long)]
-    promptgram: Option<PathBuf>,
+    promptgram: Option<String>,
 
-    /// Enable prompt editing (Stage 1+). Without this, runs Stage 0 (recording only).
+    /// Dry run: record metrics only, no L2 reasoning or prompt editing
     #[arg(long)]
-    edit_prompts: bool,
+    dry: bool,
 
     /// Resume from existing outer scratchpad
     #[arg(long)]
@@ -93,16 +94,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     // Parse agents
-    let inner_agent: Agent = args.inner_agent.parse()
+    let inner_agent: Agent = args.agent_inner.parse()
         .map_err(|e: String| e)?;
-    let _outer_agent: Agent = args.outer_agent.parse()
+    let _outer_agent: Agent = args.agent_outer.parse()
         .map_err(|e: String| e)?;
 
     // Set up run configuration
     let run_config = RunConfig {
         run_name: args.run_name.clone(),
         base_dir: PathBuf::from("training-outer/runs"),
-        episodes: args.inner_episodes,
+        episodes: args.episodes_inner,
         agent: inner_agent,
         model: None,
         save_interval: args.save_interval,
@@ -130,37 +131,46 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // Load or create inner promptgram
-    let inner_promptgram = if let Some(path) = &args.promptgram {
+    // --promptgram can be a path or a run name (resolves to training-outer/runs/<name>/promptgram.toml)
+    let inner_promptgram = if let Some(ref source) = args.promptgram {
+        let path = if source.contains('/') || source.ends_with(".toml") {
+            PathBuf::from(source)
+        } else {
+            // Treat as run name
+            PathBuf::from(format!("training-outer/runs/{}/promptgram.toml", source))
+        };
         println!("📄 Loading promptgram from {:?}", path);
-        Promptgram::load(path)?
+        Promptgram::load(&path)?
     } else {
         println!("📄 Using default inner promptgram");
         baseline_promptgram()
     };
 
     // Set up outer loop
+    // --dry inverts the default (edit_prompts=true means L2 reasoning is active)
+    let edit_prompts = !args.dry;
     let mut outer_loop = OuterLoop::new();
     outer_loop.population = vec![inner_promptgram];
     outer_loop.inner_config = OuterConfig {
-        inner_episodes: args.inner_episodes,
-        inner_agent: args.inner_agent.clone(),
-        outer_agent: args.outer_agent.clone(),
-        max_outer_steps: args.outer_steps,
+        inner_episodes: args.episodes_inner,
+        inner_agent: args.agent_inner.clone(),
+        outer_agent: args.agent_outer.clone(),
+        max_outer_steps: args.steps_outer,
         exploration_quota: 0.2,
         corpus: args.corpus.clone(),
-        edit_prompts: args.edit_prompts,
+        edit_prompts,
         ..Default::default()
     };
 
     // Print configuration
     println!("Configuration:");
     println!("  Run name:       {}", args.run_name);
-    println!("  Outer steps:    {}", args.outer_steps);
-    println!("  Inner episodes: {}", args.inner_episodes);
-    println!("  Inner agent:    {}", args.inner_agent);
-    println!("  Outer agent:    {}", args.outer_agent);
+    println!("  Outer steps:    {}", args.steps_outer);
+    println!("  Inner episodes: {}", args.episodes_inner);
+    println!("  Inner agent:    {}", args.agent_inner);
+    println!("  Outer agent:    {}", args.agent_outer);
     println!("  Corpus:         {}", args.corpus);
-    println!("  Edit prompts:   {}", args.edit_prompts);
+    println!("  L2 reasoning:   {}", if edit_prompts { "enabled" } else { "dry run" });
     println!("  Output dir:     {:?}", ctx.config.output_dir());
     println!();
 
@@ -176,29 +186,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config_content = format!(r#"# L2 Outer Loop Configuration
 [run]
 name = "{}"
-outer_steps = {}
-inner_episodes = {}
-inner_agent = "{}"
-outer_agent = "{}"
+steps_outer = {}
+episodes_inner = {}
+agent_inner = "{}"
+agent_outer = "{}"
 corpus = "{}"
-edit_prompts = {}
+dry = {}
 "#,
         args.run_name,
-        args.outer_steps,
-        args.inner_episodes,
-        args.inner_agent,
-        args.outer_agent,
+        args.steps_outer,
+        args.episodes_inner,
+        args.agent_inner,
+        args.agent_outer,
         args.corpus,
-        args.edit_prompts,
+        args.dry,
     );
     std::fs::write(&config_path, config_content)?;
 
     // Run outer loop
     println!("{}", "─".repeat(65));
-    println!("Starting outer loop ({} steps)...\n", args.outer_steps - start_step);
+    println!("Starting outer loop ({} steps)...\n", args.steps_outer - start_step);
 
-    for step in start_step..args.outer_steps {
-        println!("{}", format!(" OUTER STEP {}/{} ", step + 1, args.outer_steps).bold().on_cyan());
+    for step in start_step..args.steps_outer {
+        println!("{}", format!(" OUTER STEP {}/{} ", step + 1, args.steps_outer).bold().on_cyan());
 
         // Run one outer episode
         match outer_loop.run_outer_episode(step + 1, &ctx, &mut outer_scratchpad) {
