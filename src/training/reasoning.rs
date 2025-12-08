@@ -244,9 +244,41 @@ pub fn call_codex(prompt: &str, model: Option<&str>) -> Result<String, String> {
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let exit_code = output.status.code().unwrap_or(-1);
+
+        // Save failed prompt for debugging
+        let debug_file = std::env::temp_dir().join(format!("codex_failed_{}.txt", std::process::id()));
+        let _ = std::fs::write(&debug_file, format!(
+            "=== CODEX CALL FAILED ===\nExit code: {}\nArgs: {:?}\n\n=== PROMPT ({} chars) ===\n{}\n\n=== STDOUT ===\n{}\n\n=== STDERR ===\n{}",
+            exit_code, args, prompt.len(), prompt, stdout, stderr
+        ));
+
+        // Extract actual error from stderr (skip Codex session header noise)
+        let error_lines: Vec<&str> = stderr.lines()
+            .filter(|l| !l.starts_with("OpenAI Codex") &&
+                       !l.starts_with("--------") &&
+                       !l.starts_with("workdir:") &&
+                       !l.starts_with("model:") &&
+                       !l.starts_with("provider:") &&
+                       !l.starts_with("approval:") &&
+                       !l.starts_with("sandbox:") &&
+                       !l.starts_with("reasoning") &&
+                       !l.starts_with("session id:") &&
+                       !l.trim().is_empty())
+            .collect();
+
+        let clean_error = if error_lines.is_empty() {
+            format!("Exit code {} (no error message, check {})", exit_code, debug_file.display())
+        } else {
+            error_lines.join("\n")
+        };
+
         // Clean up temp file
         let _ = std::fs::remove_file(&output_file);
-        return Err(format!("Codex returned error: {}", stderr));
+
+        eprintln!("[codex] Failed with exit code {}. Debug saved to: {}", exit_code, debug_file.display());
+        return Err(format!("Codex failed (exit {}): {}", exit_code, clean_error));
     }
 
     // Read output from file
