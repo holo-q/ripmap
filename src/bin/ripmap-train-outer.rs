@@ -42,45 +42,52 @@ use ripmap::training_outer::{
 
 #[derive(Parser)]
 #[command(name = "ripmap-train-outer")]
-#[command(about = "L2 Promptgram Optimizer - evolves prompts for the inner optimizer")]
+#[command(about = "L2 Promptgram Optimizer")]
+#[command(help_template = "\
+{name} - {about}
+
+{usage-heading} {usage}
+
+{all-args}
+")]
 struct Args {
-    /// Name for this outer run (creates training-outer/runs/<name>/)
+    /// Run name (creates training-outer/runs/<name>/)
     run_name: String,
 
-    /// Number of outer steps to run
-    #[arg(long, default_value = "10")]
+    /// Outer steps
+    #[arg(long, default_value = "10", value_name = "N")]
     steps_outer: usize,
 
-    /// Number of inner episodes per outer step
-    #[arg(long, default_value = "20")]
+    /// Inner episodes per step
+    #[arg(long, default_value = "20", value_name = "N")]
     episodes_inner: usize,
 
-    /// Agent to use for inner loop (claude, gemini, codex)
-    #[arg(long, default_value = "claude")]
+    /// Inner loop agent
+    #[arg(long, default_value = "claude", value_name = "AGENT")]
     agent_inner: String,
 
-    /// Agent to use for outer loop L2 reasoning
-    #[arg(long, default_value = "codex")]
+    /// Outer loop L2 agent
+    #[arg(long, default_value = "codex", value_name = "AGENT")]
     agent_outer: String,
 
-    /// Seed promptgram (path or run name). Uses default if not specified.
-    #[arg(long)]
+    /// Seed promptgram (path or run name)
+    #[arg(long, value_name = "PATH")]
     promptgram: Option<String>,
 
-    /// Dry run: record metrics only, no L2 reasoning or prompt editing
+    /// Record only, no L2 reasoning
     #[arg(long)]
     dry: bool,
 
-    /// Resume from existing outer scratchpad
+    /// Resume from checkpoint
     #[arg(long)]
     resume: bool,
 
-    /// Corpus to use: quick, curated, or full
-    #[arg(long, default_value = "curated")]
+    /// quick|curated|full
+    #[arg(long, default_value = "curated", value_name = "NAME")]
     corpus: String,
 
-    /// Save interval for checkpoints
-    #[arg(long, default_value = "1")]
+    /// Checkpoint interval
+    #[arg(long, default_value = "1", value_name = "N")]
     save_interval: usize,
 }
 
