@@ -27,6 +27,7 @@ pub mod callgraph;
 pub mod config;
 pub mod discovery;
 pub mod extraction;
+pub mod lsp;
 pub mod mcp;
 pub mod ranking;
 pub mod rendering;
@@ -46,3 +47,6 @@ pub use callgraph::{
     ResolutionContext, ResolutionStats, ResolutionStrategy, ResolverBuilder, ResolverConfig,
     SameFileStrategy, TypeHintStrategy,
 };
+
+// Re-export LSP types
+pub use lsp::{LspClient, LspPolicyCoordinates, PolicyEngine};
