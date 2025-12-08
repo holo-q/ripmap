@@ -550,16 +550,16 @@ fn is_source_file(path: &str) -> bool {
         ".rs", // Python
         ".py", // JavaScript/TypeScript
         ".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs", // Go
-        ".go", // C/C++
+        ".go",  // C/C++
         ".c", ".h", ".cpp", ".hpp", ".cc", ".hh", // Java/Kotlin
-        ".java", ".kt", ".kts", // Ruby
-        ".rb", // PHP
-        ".php", // Swift
+        ".java", ".kt", ".kts",   // Ruby
+        ".rb",    // PHP
+        ".php",   // Swift
         ".swift", // C#
-        ".cs", // Scala
+        ".cs",    // Scala
         ".scala", // Elixir
         ".ex", ".exs", // Haskell
-        ".hs", // OCaml
+        ".hs",  // OCaml
         ".ml", ".mli", // Zig
         ".zig",
     ];
