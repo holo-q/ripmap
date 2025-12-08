@@ -1236,7 +1236,22 @@ fn run_reasoning_training(
         spinner.set_message(format!("{} reasoning ({} failures)...", agent, failures.len()));
         spinner.enable_steady_tick(std::time::Duration::from_millis(80));
 
-        match reason_about_failures(&prompt_template, &failures, &current_params, &scratchpad, metrics.ndcg_at_10, agent, model) {
+        // Phase 1 agentic mode: pass run directory for file access
+        // Extract directory from scratchpad path (e.g., "training/runs/my-run/scratchpad.json" -> "training/runs/my-run")
+        let run_dir = args.scratchpad.parent()
+            .and_then(|p| p.to_str())
+            .map(|s| s.to_string());
+
+        match reason_about_failures(
+            &prompt_template,
+            &failures,
+            &current_params,
+            &scratchpad,
+            metrics.ndcg_at_10,
+            agent,
+            model,
+            run_dir.as_deref(),
+        ) {
             Ok(episode) => {
                 spinner.finish_and_clear();
 
@@ -1439,8 +1454,13 @@ fn run_distillation(args: &Args) -> anyhow::Result<()> {
     println!("Loaded {} episodes from scratchpad", scratchpad.episodes.len());
     print_scratchpad_summary(&scratchpad);
 
+    // Phase 1 agentic mode: pass run directory for file access
+    let run_dir = args.scratchpad.parent()
+        .and_then(|p| p.to_str())
+        .map(|s| s.to_string());
+
     println!("\nCalling {} for distillation...", agent);
-    match distill_scratchpad(&scratchpad, agent, model) {
+    match distill_scratchpad(&scratchpad, agent, model, run_dir.as_deref()) {
         Ok(wisdom) => {
             println!("\n=== DISTILLED WISDOM ===\n");
             println!("{}", wisdom);

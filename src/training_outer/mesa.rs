@@ -463,7 +463,7 @@ impl OuterLoop {
                 .map_err(|e: String| e)?;
 
             // Call L2 reasoning with full history context
-            match self.reason_about_prompt(&promptgram, &recent, outer_scratchpad, outer_agent) {
+            match self.reason_about_prompt(&promptgram, &recent, outer_scratchpad, outer_agent, ctx) {
                 Ok(proposal) => {
                     println!("  📝 L2 proposal: mode={}, confidence={:.2}", proposal.mode, proposal.confidence);
                     println!("     {} edits proposed", proposal.edits.len());
@@ -740,6 +740,7 @@ impl OuterLoop {
         recent_summaries: &[&OuterEpisodeSummary],
         outer_scratchpad: &OuterScratchpad,
         outer_agent: crate::training::reasoning::Agent,
+        ctx: &RunContext,
     ) -> Result<OuterProposal, String> {
         use crate::training::call_agent;
 
@@ -748,8 +749,13 @@ impl OuterLoop {
 
         println!("  🧠 Invoking L2 reasoning ({})...", outer_agent);
 
+        // Phase 1 agentic mode: pass run directory for file access to promptgrams and inner run results
+        let run_dir = ctx.config.output_dir()
+            .to_str()
+            .map(|s| s.to_string());
+
         // Call the outer agent
-        let response = call_agent(outer_agent, &prompt, None)?;
+        let response = call_agent(outer_agent, &prompt, None, run_dir.as_deref())?;
 
         // Parse the response
         self.parse_l2_response(&response)
@@ -1005,7 +1011,8 @@ Choose your mode based on trajectory:
 
 ### Edit Constraints
 - Only edit mutable sections (Policy, Heuristics, Style)
-- Never touch Role, API_contract, or Output_schema
+- Never touch Role (the agent's immutable identity)
+- Note: API_contract and Output_schema are injected at runtime, not part of the promptgram you're editing
 - Small edits (1-2 lines) for exploit mode
 - Larger structural changes (new rules, reframing) for explore mode
 

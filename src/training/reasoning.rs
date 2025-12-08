@@ -156,14 +156,32 @@ pub struct Scratchpad {
 /// Call Claude CLI and return response.
 ///
 /// Uses `claude --print -p "prompt"` for non-interactive output.
-pub fn call_claude(prompt: &str, model: Option<&str>) -> Result<String, String> {
-    let mut args = vec!["--print", "-p", prompt];
+///
+/// ## Phase 1 Agentic Mode (when `run_dir` is provided):
+/// - Enables Read, Grep, Glob tools for single-shot file exploration
+/// - Grants access to scratchpad and episode history
+/// - Agent can read files before reasoning, but still produces response in one turn
+pub fn call_claude(prompt: &str, model: Option<&str>, run_dir: Option<&str>) -> Result<String, String> {
+    let mut args = vec!["--print"];
     let model_str;
     if let Some(m) = model {
         model_str = m.to_string();
         args.insert(0, "--model");
         args.insert(1, &model_str);
     }
+
+    // Phase 1 agentic mode: enable read-only tools and directory access
+    if let Some(dir) = run_dir {
+        args.push("--tools");
+        args.push("Read,Glob,Grep");
+        args.push("--permission-mode");
+        args.push("bypassPermissions");
+        args.push("--add-dir");
+        args.push(dir);
+    }
+
+    args.push("-p");
+    args.push(prompt);
 
     let output = Command::new("claude")
         .args(&args)
@@ -182,12 +200,24 @@ pub fn call_claude(prompt: &str, model: Option<&str>) -> Result<String, String> 
 ///
 /// Uses `gemini -o text "prompt"` for non-interactive output.
 /// Gemini outputs plain text by default, we ask for text mode explicitly.
-pub fn call_gemini(prompt: &str, model: Option<&str>) -> Result<String, String> {
+///
+/// ## Phase 1 Agentic Mode (when `run_dir` is provided):
+/// - Gemini is ALREADY agentic with `-y` (yolo mode)
+/// - Adds `--include-directories` to grant file access to scratchpad/episodes
+/// - Agent can explore files during single-shot reasoning
+pub fn call_gemini(prompt: &str, model: Option<&str>, run_dir: Option<&str>) -> Result<String, String> {
     let mut cmd = Command::new("gemini");
     cmd.args(["-o", "text", "-y"]);
     if let Some(m) = model {
         cmd.args(["-m", m]);
     }
+
+    // Phase 1 agentic mode: grant directory access (Gemini is already agentic with -y)
+    if let Some(dir) = run_dir {
+        cmd.arg("--include-directories");
+        cmd.arg(dir);
+    }
+
     cmd.arg(prompt);
 
     let output = cmd.output()
@@ -205,7 +235,12 @@ pub fn call_gemini(prompt: &str, model: Option<&str>) -> Result<String, String> 
 ///
 /// Uses `codex exec` for non-interactive output.
 /// Reads prompt from stdin and writes output to a temp file.
-pub fn call_codex(prompt: &str, model: Option<&str>) -> Result<String, String> {
+///
+/// ## Phase 1 Agentic Mode (when `run_dir` is provided):
+/// - Codex is ALREADY agentic with `exec`
+/// - Adds `--add-dir` to grant file access to scratchpad/episodes
+/// - Agent can explore files during execution before producing final output
+pub fn call_codex(prompt: &str, model: Option<&str>, run_dir: Option<&str>) -> Result<String, String> {
     use std::io::Write;
 
     // Create temp file for output
@@ -220,6 +255,13 @@ pub fn call_codex(prompt: &str, model: Option<&str>) -> Result<String, String> {
         args.push("-m".to_string());
         args.push(m.to_string());
     }
+
+    // Phase 1 agentic mode: grant directory access (Codex is already agentic with exec)
+    if let Some(dir) = run_dir {
+        args.push("--add-dir".to_string());
+        args.push(dir.to_string());
+    }
+
     args.push("-o".to_string());
     args.push(output_file.to_str().unwrap().to_string());
     args.push("-".to_string());  // read prompt from stdin
@@ -292,11 +334,16 @@ pub fn call_codex(prompt: &str, model: Option<&str>) -> Result<String, String> {
 }
 
 /// Call the specified LLM agent and return response.
-pub fn call_agent(agent: Agent, prompt: &str, model: Option<&str>) -> Result<String, String> {
+///
+/// ## Phase 1 Agentic Mode (when `run_dir` is provided):
+/// - Grants agents read-only file access to scratchpad and episode history
+/// - Agents can explore files during reasoning before producing structured output
+/// - Still single-shot execution (no multi-turn iteration)
+pub fn call_agent(agent: Agent, prompt: &str, model: Option<&str>, run_dir: Option<&str>) -> Result<String, String> {
     match agent {
-        Agent::Claude => call_claude(prompt, model),
-        Agent::Gemini => call_gemini(prompt, model),
-        Agent::Codex => call_codex(prompt, model),
+        Agent::Claude => call_claude(prompt, model, run_dir),
+        Agent::Gemini => call_gemini(prompt, model, run_dir),
+        Agent::Codex => call_codex(prompt, model, run_dir),
     }
 }
 
@@ -320,6 +367,11 @@ pub fn call_agent(agent: Agent, prompt: &str, model: Option<&str>) -> Result<Str
 ///
 /// Supports multiple agents via the `agent` parameter.
 /// Optionally specify a model (e.g., "opus", "o3", "gemini-2.0-flash").
+///
+/// ## Phase 1 Agentic Mode (when `run_dir` is provided):
+/// - Agent gets read-only access to scratchpad.json and episode history
+/// - Agent can explore previous reasoning before proposing changes
+/// - Enables informed decision-making based on trajectory analysis
 pub fn reason_about_failures(
     prompt_template: &str,
     failures: &[RankingFailure],
@@ -328,6 +380,7 @@ pub fn reason_about_failures(
     current_ndcg: f64,
     agent: Agent,
     model: Option<&str>,
+    run_dir: Option<&str>,
 ) -> Result<ReasoningEpisode, String> {
     let episode_start = std::time::Instant::now();
 
@@ -489,7 +542,8 @@ Repo: {} ({} files)"#,
     // The context (episode_history, params, failures) is dynamically injected
     let prompt = format!("{}\n\n{}", evolved_policy, protocol);
 
-    let response = call_agent(agent, &prompt, model)?;
+    // Phase 1 agentic mode: agent can read scratchpad.json and episode files if run_dir provided
+    let response = call_agent(agent, &prompt, model, run_dir)?;
 
     // Extract the reasoning section (everything before JSON:) for storage
     let reasoning_text = if let Some(json_marker) = response.find("JSON:") {
@@ -655,7 +709,11 @@ pub fn apply_changes(params: &ParameterPoint, changes: &HashMap<String, (String,
 }
 
 /// Distill accumulated insights into operator wisdom.
-pub fn distill_scratchpad(scratchpad: &Scratchpad, agent: Agent, model: Option<&str>) -> Result<String, String> {
+///
+/// ## Phase 1 Agentic Mode (when `run_dir` is provided):
+/// - Agent can read episode files to extract deeper patterns
+/// - Enables more comprehensive distillation of insights
+pub fn distill_scratchpad(scratchpad: &Scratchpad, agent: Agent, model: Option<&str>, run_dir: Option<&str>) -> Result<String, String> {
     if scratchpad.episodes.is_empty() {
         return Err("No episodes to distill".to_string());
     }
@@ -717,7 +775,8 @@ Distill these insights into operator wisdom. Return JSON:
         sorted_changes.iter().take(10).map(|(k, v)| format!("• {}: {} episodes", k, v)).collect::<Vec<_>>().join("\n"),
     );
 
-    call_agent(agent, &prompt, model)
+    // Phase 1 agentic mode: agent can read episode files if run_dir provided
+    call_agent(agent, &prompt, model, run_dir)
 }
 
 /// Print a summary of the scratchpad state.

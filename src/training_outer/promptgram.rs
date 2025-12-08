@@ -251,6 +251,10 @@ impl Promptgram {
     /// ## Policy
     /// More content...
     /// ```
+    ///
+    /// Architecture note: For inner promptgrams (L1), only "Role" is immutable.
+    /// Protocol sections (API_contract, Output_schema) are injected at runtime
+    /// by reasoning.rs and should not be in the markdown files that L2 evolves.
     pub fn from_markdown(id: &str, content: &str) -> Self {
         let mut promptgram = Self::new(id);
         let mut current_section: Option<String> = None;
@@ -260,6 +264,9 @@ impl Promptgram {
             if line.starts_with("## ") {
                 // Save previous section if any
                 if let Some(section_name) = current_section.take() {
+                    // For inner promptgrams (L1): only Role is immutable
+                    // Protocol sections (API_contract, Output_schema) are injected at runtime
+                    // and kept immutable to prevent L2 from modifying the protocol itself
                     let immutable = matches!(
                         section_name.as_str(),
                         "Role" | "API_contract" | "Output_schema"
@@ -387,24 +394,18 @@ fn count_lines(s: &str) -> usize {
 ///
 /// This is the seed promptgram - L2 will mutate it over time.
 /// Version numbers track lineage, not archetypes.
+///
+/// NOTE: Protocol sections (API_contract, Output_schema) are now injected
+/// at runtime by reasoning.rs from training/prompts/protocol/inner_output_schema.md.
+/// The baseline only contains the policy sections that L2 can evolve:
+/// Role, Policy, Heuristics, and Style.
 pub fn baseline_promptgram() -> Promptgram {
     Promptgram::new("inner_v001")
+        // Role: immutable - defines the agent's fundamental identity
         .with_section(sections::ROLE, r#"You approximate the gradient in concept space.
 Given failures and trajectory, propose parameter changes."#, true)
 
-        .with_section(sections::API_CONTRACT, r#"Input:
-- NDCG, episode number, trajectory history
-- 17 hyperparameters
-- Up to 5 ranking failures with context
-
-Output JSON:
-- strategy_capsule: intent encoding
-- diagnosis: analysis summary
-- param_interactions: discovered couplings
-- proposed_changes: {param: [direction, magnitude, rationale]}
-- structural_insights: beyond-tuning observations
-- confidence: 0.0-1.0"#, true)
-
+        // Policy: mutable - high-level approach to the problem
         .with_section(sections::POLICY, r#"Analyze trajectory state:
 - Improving: continue direction
 - Degrading: revert or reverse
@@ -414,25 +415,14 @@ Analyze failures:
 - Missing signal vs overwhelming signal
 - Parameter interactions"#, false)
 
+        // Heuristics: mutable - specific rules and patterns discovered
         .with_section(sections::HEURISTICS, r#"- NDCG drop >5% = collapse signal
 - Temporal and structural signals compete
 - High boosts cause tunnel vision
 - Low alpha localizes, high alpha globalizes
 - Depth penalties break monorepos"#, false)
 
-        .with_section(sections::OUTPUT_SCHEMA, r#"REASONING:
-[analysis]
-
-JSON:
-{
-  "strategy_capsule": "...",
-  "diagnosis": "...",
-  "param_interactions": [],
-  "proposed_changes": {},
-  "structural_insights": [],
-  "confidence": 0.7
-}"#, true)
-
+        // Style: mutable - tone and presentation guidance
         .with_section(sections::STYLE, r#"Analytical. Specific. Reference concrete failures."#, false)
 }
 
