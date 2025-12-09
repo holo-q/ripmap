@@ -11,11 +11,13 @@
 //! - **Acceptance Physics**: How candidates pass through the gate
 //! - **Blending Dynamics**: How multiple strategies combine
 
+use serde::{Deserialize, Serialize};
+
 /// Trainable coordinates for strategy weighting and candidate selection.
 ///
 /// These coordinates replace the hard-coded confidence values and boolean toggles
 /// in the resolver. L1 can tune them to shift between regimes (14% heuristic → 80% LSP).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StrategyCoordinates {
     // ==========================================================================
     // Strategy Weights (relative trust in each signal)
@@ -105,6 +107,67 @@ impl Default for StrategyCoordinates {
 }
 
 impl StrategyCoordinates {
+    /// Defaults optimized for Shadow Graph pass (RECALL).
+    ///
+    /// The shadow graph's job is to find hubs and potential call targets,
+    /// even if noisy. We cast a wide net so PageRank can identify important nodes.
+    ///
+    /// Key settings:
+    /// - High `weight_name_match` (0.9) - keep fuzzy matches for hub discovery
+    /// - Low `acceptance_bias` (0.2) - lenient gate, accept more candidates
+    /// - LSP weight neutral (1.0) - LSP not available in shadow pass
+    ///
+    /// This prevents "Shadow Collapse" where the shadow graph becomes too sparse
+    /// to reveal load-bearing structure. The name-match heuristic, though noisy,
+    /// is critical for discovering hub nodes that PageRank will later promote.
+    pub fn shadow_defaults() -> Self {
+        Self {
+            weight_same_file: 1.0,
+            weight_type_hint: 1.0,
+            weight_import: 1.0,
+            weight_name_match: 0.9,   // HIGH: we need the noise for hub finding
+            weight_lsp: 1.0,          // Neutral: LSP not used in shadow pass
+
+            acceptance_bias: 0.2,     // LOW: lenient, accept more candidates
+            acceptance_slope: 8.0,    // Moderate slope
+
+            selection_temperature: 0.2,   // Slightly exploratory
+            evidence_accumulation: 0.0,
+            proximity_boost: 0.15,    // Boost same-directory for recall
+        }
+    }
+
+    /// Defaults optimized for Final Graph pass (PRECISION).
+    ///
+    /// The final graph synthesizes LSP truth with heuristic fallback.
+    /// We suppress noisy heuristics and trust LSP ground truth.
+    ///
+    /// Key settings:
+    /// - Low `weight_name_match` (0.2) - suppress fuzzy match noise
+    /// - High `weight_lsp` (1.5) - trust LSP over heuristics
+    /// - Higher `acceptance_bias` (0.4) - stricter gate, reject low-confidence
+    ///
+    /// This targets the 80% LSP regime where precision matters more than recall.
+    /// Name-match suppression prevents the heuristic noise that plagued earlier
+    /// attempts (Shadow Collapse), while LSP elevation ensures we use ground truth
+    /// when available.
+    pub fn final_defaults() -> Self {
+        Self {
+            weight_same_file: 1.0,
+            weight_type_hint: 1.1,    // Slight boost for type info
+            weight_import: 1.0,
+            weight_name_match: 0.2,   // LOW: suppress heuristic noise
+            weight_lsp: 1.5,          // HIGH: trust LSP ground truth
+
+            acceptance_bias: 0.4,     // HIGHER: stricter acceptance
+            acceptance_slope: 12.0,   // Steeper for precision
+
+            selection_temperature: 0.05,  // Near-deterministic selection
+            evidence_accumulation: 0.0,
+            proximity_boost: 0.1,
+        }
+    }
+
     /// Compute acceptance probability for a candidate.
     /// Sigmoid: 1 / (1 + exp(-slope * (confidence - bias)))
     pub fn acceptance_probability(&self, raw_confidence: f64) -> f64 {
@@ -152,6 +215,84 @@ impl StrategyCoordinates {
     }
 }
 
+/// Coordinates for the full bicameral pipeline (Shadow + LSP Policy + Final).
+///
+/// This struct aggregates all trainable coordinates for the two-phase resolution
+/// system. Training optimizes these parameters jointly to maximize graph quality
+/// while minimizing LSP overhead.
+///
+/// # Architecture
+///
+/// ```text
+/// Tags → [Shadow: StrategyCoordinates] → PageRank
+///          ↓
+///        [LSP Policy: LspPolicyCoordinates] → Select query sites
+///          ↓
+///        LSP queries execute
+///          ↓
+///        [Final: StrategyCoordinates] → Refined CallGraph
+/// ```
+///
+/// # Training Integration
+///
+/// These coordinates are embedded in `ParameterPoint` (gridsearch.rs) as an
+/// optional field. When `Some(pipeline)`, training optimizes the full LSP-powered
+/// resolution. When `None`, falls back to heuristic-only baseline (14% resolution).
+///
+/// This enables A/B comparison and graceful degradation when LSP unavailable.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PipelineCoordinates {
+    /// Shadow pass coordinates (recall-optimized, no LSP).
+    ///
+    /// The shadow graph casts a wide net to discover hubs. High name-match weight,
+    /// lenient acceptance gate. Noise is acceptable - PageRank will filter.
+    pub shadow_strategy: StrategyCoordinates,
+
+    /// LSP query policy coordinates.
+    ///
+    /// Controls wavefront selection, resource allocation, and signal weighting.
+    /// These parameters determine which edges get LSP verification and how many
+    /// query waves to execute.
+    pub lsp_policy: crate::lsp::LspPolicyCoordinates,
+
+    /// Final pass coordinates (precision-optimized, LSP-enhanced).
+    ///
+    /// The final graph synthesizes LSP ground truth with conservative heuristics.
+    /// Low name-match weight, high LSP trust, strict acceptance. Targets 80%+ resolution.
+    pub final_strategy: StrategyCoordinates,
+}
+
+impl Default for PipelineCoordinates {
+    fn default() -> Self {
+        Self {
+            shadow_strategy: StrategyCoordinates::shadow_defaults(),
+            lsp_policy: crate::lsp::LspPolicyCoordinates::default(),
+            final_strategy: StrategyCoordinates::final_defaults(),
+        }
+    }
+}
+
+impl PipelineCoordinates {
+    /// Create pipeline coordinates with shadow defaults.
+    pub fn shadow_defaults() -> Self {
+        Self::default()
+    }
+
+    /// Create pipeline coordinates with final defaults.
+    pub fn final_defaults() -> Self {
+        Self::default()
+    }
+
+    /// Validate all coordinate ranges.
+    pub fn validate(&self) -> Result<(), String> {
+        self.shadow_strategy.validate()?;
+        self.final_strategy.validate()?;
+        // LspPolicyCoordinates doesn't have a validate method yet, but it has
+        // well-defined ranges in its documentation
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -194,5 +335,46 @@ mod tests {
         let mut coords = StrategyCoordinates::default();
         coords.weight_same_file = 5.0;  // Out of bounds
         assert!(coords.validate().is_err());
+    }
+
+    #[test]
+    fn test_shadow_defaults_valid() {
+        let coords = StrategyCoordinates::shadow_defaults();
+        assert!(coords.validate().is_ok());
+        // Shadow needs high name match for hub discovery
+        assert!(coords.weight_name_match > 0.5);
+        // Lenient acceptance gate
+        assert!(coords.acceptance_bias < 0.3);
+    }
+
+    #[test]
+    fn test_final_defaults_valid() {
+        let coords = StrategyCoordinates::final_defaults();
+        assert!(coords.validate().is_ok());
+        // Final suppresses name match noise
+        assert!(coords.weight_name_match < 0.5);
+        // Final trusts LSP ground truth
+        assert!(coords.weight_lsp > 1.0);
+        // Stricter acceptance
+        assert!(coords.acceptance_bias > 0.3);
+    }
+
+    #[test]
+    fn test_bicameral_separation() {
+        let shadow = StrategyCoordinates::shadow_defaults();
+        let final_ = StrategyCoordinates::final_defaults();
+
+        // Shadow should be more lenient (lower bias = accepts more)
+        assert!(shadow.acceptance_bias < final_.acceptance_bias);
+
+        // Name match separation prevents Shadow Collapse
+        // Shadow needs high name-match, Final suppresses it
+        assert!(shadow.weight_name_match > final_.weight_name_match * 3.0);
+
+        // LSP preference in final pass
+        assert!(final_.weight_lsp > shadow.weight_lsp);
+
+        // Temperature: shadow explores, final exploits
+        assert!(shadow.selection_temperature > final_.selection_temperature);
     }
 }

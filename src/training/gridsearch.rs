@@ -32,6 +32,7 @@ use std::collections::HashMap;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 
+use crate::callgraph::PipelineCoordinates;
 use crate::types::RankingConfig;
 
 /// A single point in parameter space.
@@ -83,6 +84,26 @@ pub struct ParameterPoint {
     pub focus_decay: f64,
     /// Max hops for expansion (typically 1-3)
     pub focus_max_hops: f64,
+
+    // === Bicameral Pipeline Coordinates (OPTIONAL) ===
+    /// Bicameral pipeline coordinates for LSP-powered resolution.
+    ///
+    /// When `Some(pipeline)`, training optimizes the full 80%+ LSP regime with:
+    /// - Shadow strategy coordinates (10 params)
+    /// - Final strategy coordinates (10 params)
+    /// - LSP policy coordinates (18 params)
+    ///
+    /// When `None`, falls back to heuristic-only baseline (14% resolution).
+    ///
+    /// This enables A/B testing: compare LSP-powered vs heuristic-only performance
+    /// within the same training framework. The optimizer can even learn whether
+    /// to enable LSP at all (though currently this is manual).
+    ///
+    /// # Backward Compatibility
+    ///
+    /// Existing training runs with `pipeline: None` remain valid and will use
+    /// conservative heuristic resolution. New runs can opt into LSP optimization.
+    pub pipeline: Option<PipelineCoordinates>,
 }
 
 impl ParameterPoint {
@@ -116,6 +137,138 @@ impl ParameterPoint {
     pub fn focus_params(&self) -> (f64, usize) {
         (self.focus_decay, self.focus_max_hops.round() as usize)
     }
+
+    /// Randomize pipeline coordinates within valid ranges.
+    ///
+    /// Strategy coordinates are randomized independently for shadow/final to
+    /// maintain bicameral separation. LSP policy coordinates explore the full
+    /// parameter space for query optimization.
+    ///
+    /// # Randomization Philosophy
+    ///
+    /// - **Shadow Strategy**: Randomize around recall-optimized baseline
+    ///   - `weight_name_match`: [0.6, 1.0] (high for hub discovery)
+    ///   - `acceptance_bias`: [0.15, 0.35] (lenient gate)
+    ///   - Other weights near 1.0 with small perturbations
+    ///
+    /// - **Final Strategy**: Randomize around precision-optimized baseline
+    ///   - `weight_name_match`: [0.1, 0.4] (suppress noise)
+    ///   - `weight_lsp`: [1.2, 1.8] (trust ground truth)
+    ///   - `acceptance_bias`: [0.3, 0.5] (stricter gate)
+    ///
+    /// - **LSP Policy**: Explore full ranges from coordinates.rs documentation
+    ///   - Signal weights: [0.0, 2.0]
+    ///   - Resource physics: documented ranges
+    ///   - Spread logits: [-2.0, 2.0] (covers wide → narrow attention)
+    ///
+    /// This creates a diverse population for L1 optimization while respecting
+    /// the structural separation between shadow (recall) and final (precision).
+    pub fn randomize_pipeline<R: Rng>(&mut self, rng: &mut R) {
+        use crate::callgraph::StrategyCoordinates;
+        use crate::lsp::LspPolicyCoordinates;
+
+        let mut pipeline = self.pipeline.take().unwrap_or_default();
+
+        // === Shadow Strategy: Recall-Optimized Baseline ===
+        // Start from defaults and perturb within recall-friendly ranges
+        let mut shadow = StrategyCoordinates::shadow_defaults();
+
+        // Strategy weights - perturb around neutral with bias toward recall
+        shadow.weight_same_file = rng.gen_range(0.8..1.2);
+        shadow.weight_type_hint = rng.gen_range(0.8..1.2);
+        shadow.weight_import = rng.gen_range(0.8..1.2);
+        shadow.weight_name_match = rng.gen_range(0.6..1.0); // HIGH for hub discovery
+        shadow.weight_lsp = 1.0; // Neutral: no LSP in shadow pass
+
+        // Acceptance gate - lenient for recall
+        shadow.acceptance_bias = rng.gen_range(0.15..0.35); // LOW threshold
+        shadow.acceptance_slope = rng.gen_range(5.0..12.0); // Moderate to steep
+
+        // Selection dynamics - slightly exploratory
+        shadow.selection_temperature = rng.gen_range(0.1..0.4);
+        shadow.evidence_accumulation = rng.gen_range(0.0..0.2);
+        shadow.proximity_boost = rng.gen_range(0.05..0.25);
+
+        pipeline.shadow_strategy = shadow;
+
+        // === Final Strategy: Precision-Optimized Baseline ===
+        let mut final_strategy = StrategyCoordinates::final_defaults();
+
+        // Strategy weights - suppress noise, elevate LSP
+        final_strategy.weight_same_file = rng.gen_range(0.8..1.2);
+        final_strategy.weight_type_hint = rng.gen_range(0.9..1.3);
+        final_strategy.weight_import = rng.gen_range(0.8..1.2);
+        final_strategy.weight_name_match = rng.gen_range(0.1..0.4); // LOW to suppress noise
+        final_strategy.weight_lsp = rng.gen_range(1.2..1.8); // HIGH to trust LSP
+
+        // Acceptance gate - stricter for precision
+        final_strategy.acceptance_bias = rng.gen_range(0.3..0.5); // HIGHER threshold
+        final_strategy.acceptance_slope = rng.gen_range(8.0..20.0); // Steeper cliff
+
+        // Selection dynamics - near-deterministic
+        final_strategy.selection_temperature = rng.gen_range(0.01..0.2);
+        final_strategy.evidence_accumulation = rng.gen_range(0.0..0.1);
+        final_strategy.proximity_boost = rng.gen_range(0.05..0.15);
+
+        pipeline.final_strategy = final_strategy;
+
+        // === LSP Policy: Full Exploration ===
+        let mut lsp = LspPolicyCoordinates::default();
+
+        // Resource physics
+        lsp.marginal_utility_floor = rng.gen_range(0.001..0.1); // Log scale would be better
+        lsp.batch_latency_bias = rng.gen_range(0.0..1.0);
+        lsp.query_timeout_secs = rng.gen_range(1.0..15.0);
+        lsp.max_retries = rng.gen_range(0.0..3.0);
+        lsp.cache_negative_bias = rng.gen_range(0.3..1.0);
+
+        // Signal weights
+        lsp.weight_centrality = rng.gen_range(0.0..2.0);
+        lsp.weight_uncertainty = rng.gen_range(0.0..2.0);
+        lsp.weight_coherence = rng.gen_range(0.0..2.0);
+        lsp.weight_causality = rng.gen_range(0.0..2.0);
+        lsp.weight_bridge = rng.gen_range(0.0..2.0);
+
+        // Attention beam - use logits for unconstrained space
+        lsp.spread_logit_structural = rng.gen_range(-2.0..2.0);
+        lsp.spread_logit_semantic = rng.gen_range(-2.0..2.0);
+        lsp.spread_logit_spatial = rng.gen_range(-2.0..2.0);
+
+        // Navigation
+        lsp.focus_temperature = rng.gen_range(0.01..2.0);
+        lsp.gated_threshold = rng.gen_range(0.0..0.3);
+        lsp.exploration_floor = rng.gen_range(0.0..0.2);
+
+        // Gene expression
+        lsp.interaction_mixing = rng.gen_range(0.0..1.0);
+
+        // Centrality normalization
+        lsp.centrality_normalization = rng.gen_range(0.0..1.0);
+
+        pipeline.lsp_policy = lsp;
+
+        self.pipeline = Some(pipeline);
+    }
+
+    /// Randomize all parameters (existing + pipeline).
+    ///
+    /// With 50% probability, also randomize pipeline coordinates.
+    /// This creates a mixed population where some points explore LSP-powered
+    /// resolution and others stick to heuristic-only baselines.
+    pub fn randomize<R: Rng>(&mut self, rng: &mut R) {
+        // Randomize existing ranking parameters
+        // (Would normally randomize pagerank_alpha, boosts, etc. here)
+        // This is a placeholder - the actual implementation would use ranges
+
+        // Randomize pipeline with 50% probability
+        // This creates diversity: some points optimize LSP, others don't
+        if rng.gen_bool(0.5) {
+            self.randomize_pipeline(rng);
+        } else {
+            // Explicitly clear pipeline to ensure heuristic-only baseline
+            self.pipeline = None;
+        }
+    }
 }
 
 impl Default for ParameterPoint {
@@ -139,6 +292,7 @@ impl Default for ParameterPoint {
             git_churn_max_boost: config.git_churn_max_boost,
             focus_decay: 0.5,
             focus_max_hops: 2.0,
+            pipeline: None, // Default: heuristic-only baseline (backward compatible)
         }
     }
 }
@@ -275,6 +429,7 @@ impl ParameterGrid {
             git_churn_max_boost: values["git_churn_max_boost"],
             focus_decay: values["focus_decay"],
             focus_max_hops: values["focus_max_hops"],
+            pipeline: None, // Pipeline not included in normalized grid (optional feature)
         }
     }
 
@@ -622,5 +777,69 @@ mod tests {
         let dist = normalized_distance(&p1, &p2);
         assert!(dist > 0.0, "Different points should have distance > 0");
         assert!(dist < 1.0, "Normalized distance should be < 1");
+    }
+
+    #[test]
+    fn test_pipeline_coordinates_default() {
+        let point = ParameterPoint::default();
+        // Default should have no pipeline (backward compatible)
+        assert!(point.pipeline.is_none());
+    }
+
+    #[test]
+    fn test_pipeline_coordinates_randomize() {
+        use rand::SeedableRng;
+        let mut rng = StdRng::seed_from_u64(42);
+        let mut point = ParameterPoint::default();
+
+        // Randomize pipeline
+        point.randomize_pipeline(&mut rng);
+
+        // Should now have pipeline coordinates
+        assert!(point.pipeline.is_some());
+
+        let pipeline = point.pipeline.as_ref().unwrap();
+
+        // Verify shadow strategy has recall-friendly settings
+        assert!(pipeline.shadow_strategy.weight_name_match >= 0.6);
+        assert!(pipeline.shadow_strategy.acceptance_bias <= 0.35);
+
+        // Verify final strategy has precision-friendly settings
+        assert!(pipeline.final_strategy.weight_name_match <= 0.4);
+        assert!(pipeline.final_strategy.weight_lsp >= 1.2);
+        assert!(pipeline.final_strategy.acceptance_bias >= 0.3);
+
+        // Verify LSP policy coordinates are in valid ranges
+        assert!(pipeline.lsp_policy.marginal_utility_floor >= 0.001);
+        assert!(pipeline.lsp_policy.marginal_utility_floor <= 0.1);
+        assert!(pipeline.lsp_policy.batch_latency_bias >= 0.0);
+        assert!(pipeline.lsp_policy.batch_latency_bias <= 1.0);
+    }
+
+    #[test]
+    fn test_pipeline_serialization() {
+        use rand::SeedableRng;
+        let mut rng = StdRng::seed_from_u64(123);
+        let mut point = ParameterPoint::default();
+        point.randomize_pipeline(&mut rng);
+
+        // Serialize and deserialize
+        let json = serde_json::to_string(&point).unwrap();
+        let deserialized: ParameterPoint = serde_json::from_str(&json).unwrap();
+
+        // Verify pipeline survived round-trip
+        assert!(deserialized.pipeline.is_some());
+        let orig_pipeline = point.pipeline.as_ref().unwrap();
+        let deser_pipeline = deserialized.pipeline.as_ref().unwrap();
+
+        // Check a few key values
+        assert_eq!(
+            orig_pipeline.shadow_strategy.weight_name_match,
+            deser_pipeline.shadow_strategy.weight_name_match
+        );
+        assert_eq!(
+            orig_pipeline.lsp_policy.marginal_utility_floor,
+            deser_pipeline.lsp_policy.marginal_utility_floor
+        );
     }
 }

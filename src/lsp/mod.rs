@@ -87,6 +87,6 @@ mod client;
 mod coordinates;
 mod policy;
 
-pub use client::LspClient;
+pub use client::{LspClient, TypeInfo};
 pub use coordinates::LspPolicyCoordinates;
 pub use policy::PolicyEngine;

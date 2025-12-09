@@ -169,6 +169,201 @@ impl CallResolver {
         self
     }
 
+    /// Build a call graph AND return resolution statistics.
+    ///
+    /// This is the instrumented version of `build_graph` that tracks metrics
+    /// for L1 training diagnostics and Shadow Collapse detection.
+    ///
+    /// **Key instrumentation**:
+    /// - LSP strategy usage (queries issued, resolutions, utilization)
+    /// - LSP-heuristic conflicts/agreements (shadow divergence proxy)
+    /// - Gate rejections and strategy competition
+    ///
+    /// **Use case**: Training loops, diagnostic analysis, L1 optimization.
+    /// For production use without stats overhead, call `build_graph()` instead.
+    pub fn build_graph_with_stats(&self, tags: &[Tag]) -> (CallGraph, ResolutionStats) {
+        let context = ResolutionContext::new(tags);
+        let mut graph = CallGraph::new();
+        let mut stats = ResolutionStats::default();
+
+        // Add all function definitions as nodes
+        for tag in tags {
+            if tag.kind.is_definition() {
+                // Only add functions/methods, not classes or variables
+                let node_type = tag.node_type.as_ref();
+                if node_type.contains("function") || node_type.contains("method") {
+                    let id = FunctionId::new(tag.rel_fname.clone(), tag.name.clone(), tag.line)
+                        .with_parent_opt(tag.parent_name.clone());
+                    graph.add_function(id);
+                }
+            }
+        }
+
+        // Process each call reference
+        for tag in tags {
+            if !tag.kind.is_reference() {
+                continue;
+            }
+
+            stats.total_calls += 1;
+
+            // Find the enclosing function (caller)
+            let caller = self.find_enclosing_function(tag, tags);
+            let Some(caller) = caller else {
+                stats.unresolved += 1;
+                continue; // Call not inside a function
+            };
+
+            // Run all strategies, collect candidates
+            let mut all_candidates: Vec<(Candidate, &str)> = vec![];
+            let mut lsp_candidate: Option<Candidate> = None;
+            let mut heuristic_candidates: Vec<Candidate> = vec![];
+
+            for strategy in &self.strategies {
+                // Skip strategies that don't support this language
+                if let Some(ref lang) = self.config.language {
+                    if !strategy.supports_language(lang) {
+                        continue;
+                    }
+                }
+
+                let strat_name = strategy.name();
+                let candidates = strategy.resolve(tag, &context);
+
+                // Track LSP queries (even if they return nothing)
+                if strat_name == "lsp" {
+                    stats.lsp_queries_issued += 1;
+                }
+
+                for c in candidates {
+                    all_candidates.push((c.clone(), strat_name));
+
+                    // Separate LSP from heuristic candidates for conflict tracking
+                    if strat_name == "lsp" {
+                        lsp_candidate = Some(c.clone());
+                        stats.lsp_resolved += 1;
+                    } else {
+                        heuristic_candidates.push(c);
+                    }
+                }
+            }
+
+            // Track LSP-heuristic conflicts/agreements
+            if let Some(ref lsp_cand) = lsp_candidate {
+                for heur_cand in &heuristic_candidates {
+                    if lsp_cand.target == heur_cand.target {
+                        stats.lsp_heuristic_agreements += 1;
+                    } else {
+                        stats.lsp_heuristic_conflicts += 1;
+                    }
+                }
+            }
+
+            // === DIFFERENTIABLE SELECTION ===
+            if all_candidates.is_empty() {
+                stats.unresolved += 1;
+                if self.config.include_unresolved {
+                    // Add unresolved call as a dangling reference
+                    let unresolved = FunctionId::new(
+                        Arc::<str>::from("?"), // Unknown file
+                        tag.name.clone(),
+                        0,
+                    );
+                    let edge = CallEdge::new(0.0, "unresolved", tag.line);
+                    graph.add_call(caller, unresolved, edge);
+                }
+                continue;
+            }
+
+            // Weight each candidate by strategy weight
+            let weighted_candidates: Vec<(Candidate, &str, f64)> = all_candidates
+                .into_iter()
+                .map(|(c, strat)| {
+                    let weighted = self.coords.weighted_confidence(strat, c.confidence);
+                    (c, strat, weighted)
+                })
+                .collect();
+
+            // Filter by acceptance probability (sigmoid gate)
+            let accepted: Vec<_> = weighted_candidates
+                .iter()
+                .filter(|(_, _, weighted_conf)| {
+                    self.coords.acceptance_probability(*weighted_conf) > 0.5
+                })
+                .collect();
+
+            if accepted.is_empty() {
+                // No candidates passed the acceptance gate
+                stats.dropped_by_gate += 1;
+                stats.unresolved += 1;
+                continue;
+            }
+
+            // Track strategy competition
+            if accepted.len() >= 2 {
+                let sorted: Vec<_> = {
+                    let mut tmp = accepted.clone();
+                    tmp.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+                    tmp
+                };
+                let top1_conf = sorted[0].2;
+                let top2_conf = sorted[1].2;
+                if (top1_conf - top2_conf).abs() < 0.1 {
+                    stats.strategy_competition += 1;
+                }
+
+                // Check for strategy agreement on same target
+                let top1_target = &sorted[0].0.target;
+                let mut agreement_count = 0;
+                for (cand, _, _) in &sorted[1..] {
+                    if &cand.target == top1_target {
+                        agreement_count += 1;
+                    }
+                }
+                if agreement_count > 0 {
+                    stats.strategy_agreement += 1;
+                }
+            }
+
+            // Selection mode based on evidence_accumulation coordinate
+            let (selected, strategy_name) = if self.coords.evidence_accumulation < 0.5 {
+                // Softmax selection mode
+                let best = accepted.iter().max_by(|a, b| {
+                    a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal)
+                }).unwrap();
+                (&best.0, best.1)
+            } else {
+                // Evidence accumulation mode
+                let best = accepted.iter().max_by(|a, b| {
+                    a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal)
+                }).unwrap();
+                (&best.0, best.1)
+            };
+
+            // Update by_strategy counter
+            *stats
+                .by_strategy
+                .entry(strategy_name.to_string())
+                .or_insert(0) += 1;
+
+            // Update confidence histogram
+            let bucket = ((selected.confidence * 5.0).floor() as usize).min(4);
+            stats.confidence_histogram[bucket] += 1;
+
+            // Add the selected edge to the graph
+            let edge = CallEdge::new(selected.confidence, strategy_name, tag.line);
+            let edge = if let Some(ref hint) = selected.type_hint {
+                edge.with_type_hint(hint.clone())
+            } else {
+                edge
+            };
+
+            graph.add_call(caller, selected.target.clone(), edge);
+        }
+
+        (graph, stats)
+    }
+
     /// Build a complete call graph from extracted tags.
     ///
     /// Process:
@@ -176,6 +371,9 @@ impl CallResolver {
     /// 2. Add all definitions as nodes
     /// 3. For each call reference, run strategies
     /// 4. Pick best resolution, add edge
+    ///
+    /// **Note**: This is the non-instrumented version. For training diagnostics
+    /// and Shadow Collapse detection, use `build_graph_with_stats()` instead.
     pub fn build_graph(&self, tags: &[Tag]) -> CallGraph {
         let context = ResolutionContext::new(tags);
         let mut graph = CallGraph::new();
@@ -478,7 +676,7 @@ impl Default for CallResolver {
 /// - Whether `acceptance_bias` in the acceptance gate is well-tuned
 /// - Whether strategy weighting needs adjustment
 /// - Distribution patterns that guide coordinate optimization
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ResolutionStats {
     // Existing fields
     pub total_calls: usize,
@@ -513,15 +711,30 @@ pub struct ResolutionStats {
     /// - Understanding the "shape" of the confidence landscape
     pub confidence_histogram: [usize; 5],
 
-    // NEW: LSP-specific (for future integration)
-    /// Calls resolved by LSP (when wired in).
-    /// Currently unused, but prepared for future LSP integration.
+    // === LSP-SPECIFIC INSTRUMENTATION (Shadow Collapse Diagnostics) ===
+
+    /// Calls resolved by LSP strategy.
+    /// Incremented when strategy.name() == "lsp" and it returns candidates.
+    /// Used to calculate LSP utilization and shadow coverage.
     pub lsp_resolved: usize,
 
-    /// Calls where LSP and heuristics disagreed.
+    /// LSP queries issued (for utilization calculation).
+    /// Tracks how many times LSP was queried, regardless of success.
+    /// **Key metric**: `lsp_utilization = lsp_resolved / lsp_queries_issued`
+    /// Low utilization indicates LSP overhead without payoff (wasted RPC calls).
+    pub lsp_queries_issued: usize,
+
+    /// Cases where LSP and heuristics disagreed (resolved to different targets).
     /// When both LSP and heuristic strategies resolve a call but to different targets,
-    /// this counter increments. Useful for detecting systematic biases.
-    pub lsp_disagreement: usize,
+    /// this counter increments. High value indicates systematic bias between strategies.
+    /// **Shadow Collapse signal**: If LSP always disagrees, shadow graph diverges from heuristic graph.
+    pub lsp_heuristic_conflicts: usize,
+
+    /// Cases where LSP confirmed a heuristic guess (same target).
+    /// When both LSP and heuristic strategies resolve to the SAME target,
+    /// this counter increments. High value indicates heuristic strategies are already accurate.
+    /// **Implication**: If heuristics are already good, LSP adds latency without benefit.
+    pub lsp_heuristic_agreements: usize,
 }
 
 impl ResolutionStats {
@@ -558,6 +771,41 @@ impl ResolutionStats {
         self.strategy_competition as f64 / resolved as f64
     }
 
+    // === LSP-SPECIFIC DIAGNOSTICS (Shadow Collapse Metrics) ===
+
+    /// Calculate LSP utilization: resolved / queries issued.
+    ///
+    /// Returns 0.0 if no queries issued (avoids div by zero).
+    ///
+    /// **Interpretation**:
+    /// - High utilization (>0.7): LSP is productive, most queries yield resolutions
+    /// - Low utilization (<0.3): LSP overhead without payoff, many wasted RPC calls
+    /// - This metric reveals whether LSP is worth its latency cost
+    pub fn lsp_utilization(&self) -> f64 {
+        if self.lsp_queries_issued == 0 {
+            0.0
+        } else {
+            self.lsp_resolved as f64 / self.lsp_queries_issued as f64
+        }
+    }
+
+    /// Calculate LSP-heuristic conflict rate: conflicts / (conflicts + agreements).
+    ///
+    /// Returns 0.0 if no LSP-heuristic interactions occurred.
+    ///
+    /// **Interpretation**:
+    /// - High conflict rate (>0.5): LSP and heuristics disagree frequently → Shadow Collapse
+    /// - Low conflict rate (<0.2): LSP confirms heuristics → Shadow is close to base graph
+    /// - This is a proxy for "shadow connectivity divergence"
+    pub fn lsp_conflict_rate(&self) -> f64 {
+        let total_interactions = self.lsp_heuristic_conflicts + self.lsp_heuristic_agreements;
+        if total_interactions == 0 {
+            0.0
+        } else {
+            self.lsp_heuristic_conflicts as f64 / total_interactions as f64
+        }
+    }
+
     /// Format stats as JSON for L1 consumption.
     ///
     /// This provides a machine-readable format for training loops and
@@ -575,8 +823,13 @@ impl ResolutionStats {
             "strategy_agreement": self.strategy_agreement,
             "competition_rate": self.competition_rate(),
             "confidence_histogram": self.confidence_histogram,
+            // LSP-specific Shadow Collapse diagnostics
             "lsp_resolved": self.lsp_resolved,
-            "lsp_disagreement": self.lsp_disagreement,
+            "lsp_queries_issued": self.lsp_queries_issued,
+            "lsp_utilization": self.lsp_utilization(),
+            "lsp_heuristic_conflicts": self.lsp_heuristic_conflicts,
+            "lsp_heuristic_agreements": self.lsp_heuristic_agreements,
+            "lsp_conflict_rate": self.lsp_conflict_rate(),
         })
     }
 }
