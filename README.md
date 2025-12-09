@@ -129,16 +129,55 @@ Full file contents for small projects:
 $ ripmap --join -e rs
 ```
 
+## Configuration
+
+ripmap auto-detects your project's include/exclude patterns from existing tooling.
+No config needed for most projects.
+
+### Auto-detected config files
+
+| File | What's extracted |
+|------|------------------|
+| `ripmap.toml` | Native config (preferred) |
+| `pyproject.toml` | `[tool.ripmap]` → `[tool.ty]` → `[tool.ruff]` → `[tool.pyright]` → ... |
+| `tsconfig.json` | `include` / `exclude` |
+| `biome.json` | `files.include` / `files.ignore` |
+| `package.json` | `eslintConfig.ignorePatterns` |
+| `deno.json` | `include` / `exclude` |
+| `Cargo.toml` | `[workspace]` members |
+| `composer.json` | `autoload.psr-4` directories |
+| `nx.json` | `workspaceLayout` |
+| `.prettierignore` | gitignore-style patterns |
+
+Use `--verbose` to see which config was detected:
+
+```console
+$ ripmap --verbose .
+📂 Scanning: /path/to/project
+   Config: /path/to/project/pyproject.toml [ruff]
+   Include: src/**
+   Exclude: **/node_modules/**, **/.git/**, ... (+14 more)
+```
+
+### Native config (ripmap.toml)
+
+```toml
+include = ["src/**", "lib/**"]
+exclude = ["**/generated/**"]
+extend-exclude = ["**/vendor/**"]  # adds to defaults
+src = ["src", "lib"]               # source roots
+```
+
 ## How it works
 
 ```
 File Discovery → Tag Extraction → Graph Building → PageRank → Boosts → Rendering
       ↓              ↓                ↓              ↓          ↓          ↓
-   ignore        tree-sitter      petgraph      iterative   contextual   ANSI
-   crate          + .scm          DiGraph        power       signals     colors
+   config        tree-sitter      petgraph      iterative   contextual   ANSI
+   cascade        + .scm          DiGraph        power       signals     colors
 ```
 
-1. **File Discovery**: Respects `.gitignore`, filters by extension
+1. **File Discovery**: Auto-detects config, respects `.gitignore`, filters by extension
 2. **Tag Extraction**: tree-sitter parses symbols (classes, functions, methods)
 3. **Graph Building**: References between symbols become directed edges
 4. **PageRank**: Iterative power method computes importance scores
@@ -198,6 +237,7 @@ $ ripmap-mcp
 src/
 ├── main.rs              # CLI entry point
 ├── lib.rs               # Public API
+├── config.rs            # Auto-detect project config
 ├── discovery/           # File finding
 ├── extraction/          # tree-sitter parsing
 ├── callgraph/           # Call relationship resolution
