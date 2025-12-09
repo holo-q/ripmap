@@ -185,7 +185,12 @@ fn extract_ty(v: &JsonValue) -> Option<ExtractedConfig> {
     if src.is_empty() && include.is_empty() && exclude.is_empty() {
         None
     } else {
-        Some(ExtractedConfig { include, exclude, src, ..Default::default() })
+        Some(ExtractedConfig {
+            include,
+            exclude,
+            src,
+            ..Default::default()
+        })
     }
 }
 
@@ -376,7 +381,10 @@ fn extract_eslint_flat(v: &JsonValue) -> Option<ExtractedConfig> {
     if exclude.is_empty() {
         None
     } else {
-        Some(ExtractedConfig { exclude, ..Default::default() })
+        Some(ExtractedConfig {
+            exclude,
+            ..Default::default()
+        })
     }
 }
 
@@ -424,8 +432,16 @@ fn extract_nx(v: &JsonValue) -> Option<ExtractedConfig> {
     let layout = v.get("workspaceLayout")?;
     let cfg = ExtractedConfig {
         src: vec![
-            layout.get("appsDir").and_then(|v| v.as_str()).unwrap_or("apps").to_string(),
-            layout.get("libsDir").and_then(|v| v.as_str()).unwrap_or("libs").to_string(),
+            layout
+                .get("appsDir")
+                .and_then(|v| v.as_str())
+                .unwrap_or("apps")
+                .to_string(),
+            layout
+                .get("libsDir")
+                .and_then(|v| v.as_str())
+                .unwrap_or("libs")
+                .to_string(),
         ],
         ..Default::default()
     };
@@ -460,7 +476,10 @@ fn extract_vite(v: &JsonValue) -> Option<ExtractedConfig> {
     if external.is_empty() {
         None
     } else {
-        Some(ExtractedConfig { exclude: external, ..Default::default() })
+        Some(ExtractedConfig {
+            exclude: external,
+            ..Default::default()
+        })
     }
 }
 
@@ -474,7 +493,10 @@ fn extract_webpack(v: &JsonValue) -> Option<ExtractedConfig> {
     if modules.is_empty() {
         None
     } else {
-        Some(ExtractedConfig { src: modules, ..Default::default() })
+        Some(ExtractedConfig {
+            src: modules,
+            ..Default::default()
+        })
     }
 }
 
@@ -488,7 +510,10 @@ fn extract_go_work(v: &JsonValue) -> Option<ExtractedConfig> {
     if uses.is_empty() {
         None
     } else {
-        Some(ExtractedConfig { include: uses, ..Default::default() })
+        Some(ExtractedConfig {
+            include: uses,
+            ..Default::default()
+        })
     }
 }
 
@@ -517,7 +542,10 @@ fn extract_composer(v: &JsonValue) -> Option<ExtractedConfig> {
     if src.is_empty() {
         None
     } else {
-        Some(ExtractedConfig { src, ..Default::default() })
+        Some(ExtractedConfig {
+            src,
+            ..Default::default()
+        })
     }
 }
 
@@ -543,7 +571,10 @@ fn extract_gradle(v: &JsonValue) -> Option<ExtractedConfig> {
     if dirs.is_empty() {
         None
     } else {
-        Some(ExtractedConfig { src: dirs, ..Default::default() })
+        Some(ExtractedConfig {
+            src: dirs,
+            ..Default::default()
+        })
     }
 }
 
@@ -593,7 +624,10 @@ fn load_ignore_file(path: &Path) -> Option<ExtractedConfig> {
     if patterns.is_empty() {
         None
     } else {
-        Some(ExtractedConfig { exclude: patterns, ..Default::default() })
+        Some(ExtractedConfig {
+            exclude: patterns,
+            ..Default::default()
+        })
     }
 }
 
@@ -689,30 +723,102 @@ const PACKAGE_JSON_ADAPTERS: &[ToolAdapter] = &[
 /// Priority: explicit ripmap config > language-specific tools > monorepo tools > ignore files
 const CONFIG_FILES: &[(&str, &[ToolAdapter])] = &[
     // === EXPLICIT RIPMAP CONFIG ===
-    ("ripmap.toml", &[]),  // Special case: direct config
-
+    ("ripmap.toml", &[]), // Special case: direct config
     // === PYTHON ECOSYSTEM ===
     ("pyproject.toml", PYPROJECT_ADAPTERS),
-
     // === JAVASCRIPT/TYPESCRIPT ECOSYSTEM ===
     ("package.json", PACKAGE_JSON_ADAPTERS),
-    ("tsconfig.json", &[ToolAdapter { name: "tsconfig", snark: None, extract: extract_tsconfig }]),
-    ("jsconfig.json", &[ToolAdapter { name: "jsconfig", snark: None, extract: extract_tsconfig }]),  // Same format as tsconfig
-    ("biome.json", &[ToolAdapter { name: "biome", snark: None, extract: extract_biome }]),
-    ("biome.jsonc", &[ToolAdapter { name: "biome", snark: None, extract: extract_biome }]),
-    ("deno.json", &[ToolAdapter { name: "deno", snark: None, extract: extract_deno }]),
-    ("deno.jsonc", &[ToolAdapter { name: "deno", snark: None, extract: extract_deno }]),
-    ("jest.config.json", &[ToolAdapter { name: "jest", snark: None, extract: extract_jest }]),
-
+    (
+        "tsconfig.json",
+        &[ToolAdapter {
+            name: "tsconfig",
+            snark: None,
+            extract: extract_tsconfig,
+        }],
+    ),
+    (
+        "jsconfig.json",
+        &[ToolAdapter {
+            name: "jsconfig",
+            snark: None,
+            extract: extract_tsconfig,
+        }],
+    ), // Same format as tsconfig
+    (
+        "biome.json",
+        &[ToolAdapter {
+            name: "biome",
+            snark: None,
+            extract: extract_biome,
+        }],
+    ),
+    (
+        "biome.jsonc",
+        &[ToolAdapter {
+            name: "biome",
+            snark: None,
+            extract: extract_biome,
+        }],
+    ),
+    (
+        "deno.json",
+        &[ToolAdapter {
+            name: "deno",
+            snark: None,
+            extract: extract_deno,
+        }],
+    ),
+    (
+        "deno.jsonc",
+        &[ToolAdapter {
+            name: "deno",
+            snark: None,
+            extract: extract_deno,
+        }],
+    ),
+    (
+        "jest.config.json",
+        &[ToolAdapter {
+            name: "jest",
+            snark: None,
+            extract: extract_jest,
+        }],
+    ),
     // === MONOREPO / BUILD TOOLS ===
-    ("nx.json", &[ToolAdapter { name: "nx", snark: None, extract: extract_nx }]),
-    ("turbo.json", &[ToolAdapter { name: "turbo", snark: None, extract: extract_turbo }]),
-
+    (
+        "nx.json",
+        &[ToolAdapter {
+            name: "nx",
+            snark: None,
+            extract: extract_nx,
+        }],
+    ),
+    (
+        "turbo.json",
+        &[ToolAdapter {
+            name: "turbo",
+            snark: None,
+            extract: extract_turbo,
+        }],
+    ),
     // === RUST ECOSYSTEM ===
-    ("Cargo.toml", &[ToolAdapter { name: "cargo", snark: None, extract: extract_cargo }]),
-
+    (
+        "Cargo.toml",
+        &[ToolAdapter {
+            name: "cargo",
+            snark: None,
+            extract: extract_cargo,
+        }],
+    ),
     // === PHP ECOSYSTEM ===
-    ("composer.json", &[ToolAdapter { name: "composer", snark: None, extract: extract_composer }]),
+    (
+        "composer.json",
+        &[ToolAdapter {
+            name: "composer",
+            snark: None,
+            extract: extract_composer,
+        }],
+    ),
 ];
 
 /// Gitignore-style files to check as fallback (in priority order)
@@ -720,10 +826,10 @@ const CONFIG_FILES: &[(&str, &[ToolAdapter])] = &[
 /// Note: .dockerignore is intentionally excluded - it has inverted anchoring
 /// behavior where simple patterns match root only (opposite of .gitignore).
 const IGNORE_FILES: &[&str] = &[
-    ".ripmapignore",     // Our own ignore file (gitignore syntax)
-    ".eslintignore",     // ESLint (gitignore syntax, legacy - flat config preferred)
-    ".prettierignore",   // Prettier (true gitignore syntax)
-    ".stylelintignore",  // Stylelint (true gitignore syntax, uses node-ignore)
+    ".ripmapignore",    // Our own ignore file (gitignore syntax)
+    ".eslintignore",    // ESLint (gitignore syntax, legacy - flat config preferred)
+    ".prettierignore",  // Prettier (true gitignore syntax)
+    ".stylelintignore", // Stylelint (true gitignore syntax, uses node-ignore)
 ];
 
 impl Config {

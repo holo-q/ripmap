@@ -116,6 +116,34 @@ impl LspTypeCache {
     pub fn is_empty(&self) -> bool {
         self.cache.is_empty()
     }
+
+    /// Create cache from LSP batch query results.
+    ///
+    /// Converts the HashMap returned by TypeResolver::resolve_batch into an LspTypeCache.
+    /// This is used in the pipeline's Phase 3 to convert LSP query results into a cache
+    /// that LspStrategy can use during final pass resolution.
+    ///
+    /// # Arguments
+    ///
+    /// * `results` - HashMap from (file, line, col) to TypeInfo, using 0-based coordinates
+    ///
+    /// # Returns
+    ///
+    /// LspTypeCache populated with the query results.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let results = resolver.resolve_batch(&queries);
+    /// let type_cache = LspTypeCache::from_lsp_results(&results);
+    /// ```
+    pub fn from_lsp_results(results: &HashMap<(String, u32, u32), TypeInfo>) -> Self {
+        let mut cache = Self::new();
+        for ((file, line, col), type_info) in results {
+            cache.insert(Arc::from(file.as_str()), *line, *col, type_info.clone());
+        }
+        cache
+    }
 }
 
 impl Default for LspTypeCache {
@@ -323,10 +351,7 @@ mod tests {
             Some("User")
         );
         assert_eq!(candidates[0].confidence, 0.95);
-        assert_eq!(
-            candidates[0].type_hint.as_deref(),
-            Some("user: User")
-        );
+        assert_eq!(candidates[0].type_hint.as_deref(), Some("user: User"));
     }
 
     #[test]

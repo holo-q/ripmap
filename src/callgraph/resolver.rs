@@ -328,15 +328,17 @@ impl CallResolver {
             // Selection mode based on evidence_accumulation coordinate
             let (selected, strategy_name) = if self.coords.evidence_accumulation < 0.5 {
                 // Softmax selection mode
-                let best = accepted.iter().max_by(|a, b| {
-                    a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal)
-                }).unwrap();
+                let best = accepted
+                    .iter()
+                    .max_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal))
+                    .unwrap();
                 (&best.0, best.1)
             } else {
                 // Evidence accumulation mode
-                let best = accepted.iter().max_by(|a, b| {
-                    a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal)
-                }).unwrap();
+                let best = accepted
+                    .iter()
+                    .max_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal))
+                    .unwrap();
                 (&best.0, best.1)
             };
 
@@ -474,17 +476,19 @@ impl CallResolver {
                 // Softmax selection mode (probabilistic, temperature-controlled)
                 // For determinism in current implementation, we take argmax of weighted scores
                 // Future work: sample from softmax(scores / temperature) for true exploration
-                let best = accepted.iter().max_by(|a, b| {
-                    a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal)
-                }).unwrap();
+                let best = accepted
+                    .iter()
+                    .max_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal))
+                    .unwrap();
                 (&best.0, best.1)
             } else {
                 // Evidence accumulation mode
                 // For now, still single target (take highest accumulated evidence)
                 // Future work: Emit multiple weighted edges (ensemble)
-                let best = accepted.iter().max_by(|a, b| {
-                    a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal)
-                }).unwrap();
+                let best = accepted
+                    .iter()
+                    .max_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal))
+                    .unwrap();
                 (&best.0, best.1)
             };
 
@@ -712,7 +716,6 @@ pub struct ResolutionStats {
     pub confidence_histogram: [usize; 5],
 
     // === LSP-SPECIFIC INSTRUMENTATION (Shadow Collapse Diagnostics) ===
-
     /// Calls resolved by LSP strategy.
     /// Incremented when strategy.name() == "lsp" and it returns candidates.
     /// Used to calculate LSP utilization and shadow coverage.
@@ -845,7 +848,7 @@ impl ResolutionStats {
 /// Backward-compatible boolean methods preserved for existing code.
 pub struct ResolverBuilder {
     config: ResolverConfig,
-    coords: StrategyCoordinates,  // NEW: coordinate-based selection policy
+    coords: StrategyCoordinates, // NEW: coordinate-based selection policy
 
     // Continuous strategy weights [0.0, 1.0] - smooth gradients for L1
     same_file_weight: f64,
@@ -858,7 +861,7 @@ impl ResolverBuilder {
     pub fn new() -> Self {
         Self {
             config: ResolverConfig::default(),
-            coords: StrategyCoordinates::default(),  // NEW: default coordinates
+            coords: StrategyCoordinates::default(), // NEW: default coordinates
             // All strategies enabled by default (weight = 1.0)
             same_file_weight: 1.0,
             type_hints_weight: 1.0,
@@ -957,17 +960,23 @@ impl ResolverBuilder {
         if self.same_file_weight > 0.01 {
             // Apply weight to base confidence: 0.9 * weight
             let base_confidence = 0.9 * self.same_file_weight;
-            resolver.add_strategy(Box::new(SameFileStrategy::with_base_confidence(base_confidence)));
+            resolver.add_strategy(Box::new(SameFileStrategy::with_base_confidence(
+                base_confidence,
+            )));
         }
 
         if self.type_hints_weight > 0.01 {
             let base_confidence = 0.85 * self.type_hints_weight;
-            resolver.add_strategy(Box::new(TypeHintStrategy::with_base_confidence(base_confidence)));
+            resolver.add_strategy(Box::new(TypeHintStrategy::with_base_confidence(
+                base_confidence,
+            )));
         }
 
         if self.imports_weight > 0.01 {
             let base_confidence = 0.8 * self.imports_weight;
-            resolver.add_strategy(Box::new(ImportStrategy::with_base_confidence(base_confidence)));
+            resolver.add_strategy(Box::new(ImportStrategy::with_base_confidence(
+                base_confidence,
+            )));
         }
 
         if self.name_match_weight > 0.01 {
@@ -975,7 +984,10 @@ impl ResolverBuilder {
             let proximity_boost = 0.1 * self.name_match_weight;
             // Both base confidence and proximity_boost are scaled by weight
             // to maintain the relative importance of the proximity signal
-            resolver.add_strategy(Box::new(NameMatchStrategy::with_params(base_confidence, proximity_boost)));
+            resolver.add_strategy(Box::new(NameMatchStrategy::with_params(
+                base_confidence,
+                proximity_boost,
+            )));
         }
 
         // Transfer coordinates to resolver
@@ -1072,9 +1084,7 @@ mod tests {
 
         // Test legacy mode with hard threshold
         let legacy_config = ResolverConfig::with_min_confidence(0.3);
-        let legacy_resolver = ResolverBuilder::new()
-            .config(legacy_config)
-            .build();
+        let legacy_resolver = ResolverBuilder::new().config(legacy_config).build();
         let legacy_graph = legacy_resolver.build_graph(&tags);
 
         // Test modern mode with sigmoid gate

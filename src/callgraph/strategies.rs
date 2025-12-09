@@ -149,13 +149,17 @@ pub struct SameFileStrategy {
 impl SameFileStrategy {
     /// Default constructor - uses compiled default confidence of 0.9
     pub fn new() -> Self {
-        Self { base_confidence: 0.9 }
+        Self {
+            base_confidence: 0.9,
+        }
     }
 
     /// Constructor with explicit confidence injection.
     /// Allows runtime configuration of strategy weights.
     pub fn with_base_confidence(confidence: f64) -> Self {
-        Self { base_confidence: confidence }
+        Self {
+            base_confidence: confidence,
+        }
     }
 }
 
@@ -197,13 +201,17 @@ pub struct TypeHintStrategy {
 impl TypeHintStrategy {
     /// Default constructor - uses compiled default confidence of 0.85
     pub fn new() -> Self {
-        Self { base_confidence: 0.85 }
+        Self {
+            base_confidence: 0.85,
+        }
     }
 
     /// Constructor with explicit confidence injection.
     /// Allows runtime configuration of strategy weights.
     pub fn with_base_confidence(confidence: f64) -> Self {
-        Self { base_confidence: confidence }
+        Self {
+            base_confidence: confidence,
+        }
     }
 }
 
@@ -272,13 +280,17 @@ pub struct ImportStrategy {
 impl ImportStrategy {
     /// Default constructor - uses compiled default confidence of 0.8
     pub fn new() -> Self {
-        Self { base_confidence: 0.8 }
+        Self {
+            base_confidence: 0.8,
+        }
     }
 
     /// Constructor with explicit confidence injection.
     /// Allows runtime configuration of strategy weights.
     pub fn with_base_confidence(confidence: f64) -> Self {
-        Self { base_confidence: confidence }
+        Self {
+            base_confidence: confidence,
+        }
     }
 }
 

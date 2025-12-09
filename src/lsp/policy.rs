@@ -740,8 +740,8 @@ mod tests {
 
         // Moderate yield (0.12) should continue for a few waves then stop
         // Wave 2: threshold = 0.1 / 0.9^2 ≈ 0.123 → 0.12 < 0.123 → stops
-        assert!(engine.should_continue_wavefront(0.12, 0));  // threshold = 0.1
-        assert!(engine.should_continue_wavefront(0.12, 1));  // threshold ≈ 0.111
+        assert!(engine.should_continue_wavefront(0.12, 0)); // threshold = 0.1
+        assert!(engine.should_continue_wavefront(0.12, 1)); // threshold ≈ 0.111
         assert!(!engine.should_continue_wavefront(0.12, 2)); // threshold ≈ 0.123 → stops
     }
 
@@ -1037,7 +1037,7 @@ mod tests {
         // Low raw PR but high percentile
         let candidate = QueryCandidate {
             tag: &tag,
-            pagerank: 0.001,  // Very low raw
+            pagerank: 0.001,                // Very low raw
             pagerank_percentile: Some(0.9), // But high percentile
             heuristic_confidence: 0.5,
             coherence: 0.0,
