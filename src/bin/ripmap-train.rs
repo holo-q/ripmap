@@ -1617,6 +1617,9 @@ fn collect_failures(
                 commit_context: format!("intent: {:?}", case.inferred_intent),
                 repo_name: "curated".to_string(),
                 repo_file_count: 100, // Placeholder
+                // No pipeline stats for simulated ranking (classical training mode)
+                // Real pipeline stats would come from actual bicameral pipeline execution
+                pipeline_stats: None,
             });
 
             if failures.len() >= 10 {

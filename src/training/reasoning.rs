@@ -86,6 +86,42 @@ pub struct RankingFailure {
     /// Repository metadata
     pub repo_name: String,
     pub repo_file_count: usize,
+    /// Pipeline statistics (if bicameral mode enabled)
+    /// Provides critical diagnostic signals for L1 reasoning:
+    /// - shadow_connectivity: Edge density revealing shadow graph quality
+    /// - lsp_utilization: Query efficiency (resolved / issued)
+    /// - shadow_final_rank_correlation: How well shadow predicts final
+    /// - lsp_latency_ms: Cost metric for policy optimization
+    #[serde(default)]
+    pub pipeline_stats: Option<PipelineStatsSnapshot>,
+}
+
+/// Serializable snapshot of PipelineStats for training context.
+/// Captures the bicameral pipeline diagnostics at the moment of failure.
+/// L1 uses these metrics to diagnose failure modes:
+/// - Shadow Collapse: average_degree < 1.0 → shadow_strategy.weight_name_match too low
+/// - LSP Waste: utilization < 0.3 → lsp_policy.marginal_utility_floor too low
+/// - Rank Divergence: correlation < 0.5 → shadow graph too noisy
+/// - Cost Overrun: latency > 10s → query_budget too high or floor too low
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PipelineStatsSnapshot {
+    /// Edge density of shadow graph (edges / possible_edges)
+    /// Note: Raw density scales inversely with graph size! Use average_degree for alerts.
+    pub shadow_connectivity: f64,
+    /// Average degree of shadow graph (edges / nodes)
+    /// This metric is size-invariant and should be >= 1.0 for tree-like connectivity.
+    /// Low values (<1.0) indicate shadow collapse - each node has less than one edge on average.
+    #[serde(default)]
+    pub average_degree: f64,
+    /// LSP success rate (resolved / queried)
+    /// Low values (<0.3) indicate wasted queries - policy selecting bad sites
+    pub lsp_utilization: f64,
+    /// Spearman correlation between shadow and final PageRank
+    /// Low values (<0.5) indicate shadow graph doesn't predict final structure
+    pub shadow_final_rank_correlation: f64,
+    /// Total LSP latency in milliseconds
+    /// High values (>10000) indicate excessive query cost
+    pub lsp_latency_ms: u64,
 }
 
 /// One round of reasoning about failures.
@@ -469,8 +505,60 @@ Repo: {} ({} files)"#,
         .collect::<Vec<_>>()
         .join("\n\n");
 
-    // Format current parameters
-    let params_desc = format!(
+    // Extract pipeline diagnostics if available (bicameral mode)
+    // These metrics reveal failure modes that NDCG alone cannot diagnose:
+    // - Is the shadow graph too sparse? (connectivity)
+    // - Are LSP queries being wasted? (utilization)
+    // - Is PageRank misleading the policy? (correlation)
+    // - Is the pipeline too slow? (latency)
+    let pipeline_context =
+        if let Some(ref stats) = failures.first().and_then(|f| f.pipeline_stats.as_ref()) {
+            format!(
+                r#"
+
+═══════════════════════════════════════════════════════════════════════════════
+PIPELINE DIAGNOSTICS (Bicameral Shadow→LSP→Final)
+═══════════════════════════════════════════════════════════════════════════════
+
+Shadow Graph Metrics:
+  Edge Connectivity: {:.3} ({:.1}% edge density)
+    → Measures shadow graph sparsity. <0.01 = COLLAPSE (PageRank has no structure)
+
+  Rank Correlation: {:.3} (shadow vs final PageRank)
+    → Measures how well shadow predicts final importance
+    → <0.5 = shadow graph is NOISY, misleading the LSP policy
+
+LSP Query Metrics:
+  Query Utilization: {:.1}% (queries that successfully resolved)
+    → Measures policy efficiency. <30% = WASTING queries on bad sites
+
+  Query Latency: {}ms ({:.1}s total)
+    → Direct cost metric. >10s = TOO EXPENSIVE for production
+
+⚠️  DIAGNOSTIC ALERTS:
+{}
+
+Context: These metrics diagnose bicameral pipeline health. L1 should consider:
+- If shadow_connectivity is low → shadow_strategy heuristics may be too conservative
+- If lsp_utilization is low → lsp_policy is selecting unresolvable sites
+- If correlation is low → shadow graph doesn't predict final structure (noise!)
+- If latency is high → reduce query_budget or increase marginal_utility_floor
+═══════════════════════════════════════════════════════════════════════════════
+"#,
+                stats.shadow_connectivity,
+                stats.shadow_connectivity * 100.0,
+                stats.shadow_final_rank_correlation,
+                stats.lsp_utilization * 100.0,
+                stats.lsp_latency_ms,
+                stats.lsp_latency_ms as f64 / 1000.0,
+                generate_pipeline_alerts(stats),
+            )
+        } else {
+            String::new()
+        };
+
+    // Format current parameters - base ranking params
+    let mut params_desc = format!(
         r#"  pagerank_alpha: {:.3}
   pagerank_chat_multiplier: {:.1}
   depth_weight_root: {:.2}
@@ -506,6 +594,99 @@ Repo: {} ({} files)"#,
         current_params.focus_decay,
         current_params.focus_max_hops,
     );
+
+    // Append pipeline coordinates if present (38 additional params for bicameral LSP resolution)
+    // L1 can now see and modify the full resolution pipeline, not just ranking heuristics
+    if let Some(ref pipeline) = current_params.pipeline {
+        params_desc.push_str(&format!(
+            r#"
+
+  # Shadow Strategy (recall-optimized, noisy heuristics for hub discovery)
+  pipeline.shadow_strategy.weight_same_file: {:.2}
+  pipeline.shadow_strategy.weight_type_hint: {:.2}
+  pipeline.shadow_strategy.weight_import: {:.2}
+  pipeline.shadow_strategy.weight_name_match: {:.2}
+  pipeline.shadow_strategy.weight_lsp: {:.2}
+  pipeline.shadow_strategy.acceptance_bias: {:.2}
+  pipeline.shadow_strategy.acceptance_slope: {:.1}
+  pipeline.shadow_strategy.selection_temperature: {:.2}
+  pipeline.shadow_strategy.evidence_accumulation: {:.2}
+  pipeline.shadow_strategy.proximity_boost: {:.2}
+
+  # Final Strategy (precision-optimized, LSP-enhanced resolution)
+  pipeline.final_strategy.weight_same_file: {:.2}
+  pipeline.final_strategy.weight_type_hint: {:.2}
+  pipeline.final_strategy.weight_import: {:.2}
+  pipeline.final_strategy.weight_name_match: {:.2}
+  pipeline.final_strategy.weight_lsp: {:.2}
+  pipeline.final_strategy.acceptance_bias: {:.2}
+  pipeline.final_strategy.acceptance_slope: {:.1}
+  pipeline.final_strategy.selection_temperature: {:.2}
+  pipeline.final_strategy.evidence_accumulation: {:.2}
+  pipeline.final_strategy.proximity_boost: {:.2}
+
+  # LSP Query Policy (resource allocation and signal weighting)
+  pipeline.lsp_policy.marginal_utility_floor: {:.4}
+  pipeline.lsp_policy.batch_latency_bias: {:.2}
+  pipeline.lsp_policy.query_timeout_secs: {:.1}
+  pipeline.lsp_policy.max_retries: {:.1}
+  pipeline.lsp_policy.cache_negative_bias: {:.2}
+  pipeline.lsp_policy.weight_centrality: {:.2}
+  pipeline.lsp_policy.weight_uncertainty: {:.2}
+  pipeline.lsp_policy.weight_coherence: {:.2}
+  pipeline.lsp_policy.weight_causality: {:.2}
+  pipeline.lsp_policy.weight_bridge: {:.2}
+  pipeline.lsp_policy.spread_logit_structural: {:.2}
+  pipeline.lsp_policy.spread_logit_semantic: {:.2}
+  pipeline.lsp_policy.spread_logit_spatial: {:.2}
+  pipeline.lsp_policy.focus_temperature: {:.2}
+  pipeline.lsp_policy.gated_threshold: {:.2}
+  pipeline.lsp_policy.exploration_floor: {:.2}
+  pipeline.lsp_policy.interaction_mixing: {:.2}
+  pipeline.lsp_policy.centrality_normalization: {:.2}"#,
+            // Shadow strategy (10 params)
+            pipeline.shadow_strategy.weight_same_file,
+            pipeline.shadow_strategy.weight_type_hint,
+            pipeline.shadow_strategy.weight_import,
+            pipeline.shadow_strategy.weight_name_match,
+            pipeline.shadow_strategy.weight_lsp,
+            pipeline.shadow_strategy.acceptance_bias,
+            pipeline.shadow_strategy.acceptance_slope,
+            pipeline.shadow_strategy.selection_temperature,
+            pipeline.shadow_strategy.evidence_accumulation,
+            pipeline.shadow_strategy.proximity_boost,
+            // Final strategy (10 params)
+            pipeline.final_strategy.weight_same_file,
+            pipeline.final_strategy.weight_type_hint,
+            pipeline.final_strategy.weight_import,
+            pipeline.final_strategy.weight_name_match,
+            pipeline.final_strategy.weight_lsp,
+            pipeline.final_strategy.acceptance_bias,
+            pipeline.final_strategy.acceptance_slope,
+            pipeline.final_strategy.selection_temperature,
+            pipeline.final_strategy.evidence_accumulation,
+            pipeline.final_strategy.proximity_boost,
+            // LSP policy (18 params)
+            pipeline.lsp_policy.marginal_utility_floor,
+            pipeline.lsp_policy.batch_latency_bias,
+            pipeline.lsp_policy.query_timeout_secs,
+            pipeline.lsp_policy.max_retries,
+            pipeline.lsp_policy.cache_negative_bias,
+            pipeline.lsp_policy.weight_centrality,
+            pipeline.lsp_policy.weight_uncertainty,
+            pipeline.lsp_policy.weight_coherence,
+            pipeline.lsp_policy.weight_causality,
+            pipeline.lsp_policy.weight_bridge,
+            pipeline.lsp_policy.spread_logit_structural,
+            pipeline.lsp_policy.spread_logit_semantic,
+            pipeline.lsp_policy.spread_logit_spatial,
+            pipeline.lsp_policy.focus_temperature,
+            pipeline.lsp_policy.gated_threshold,
+            pipeline.lsp_policy.exploration_floor,
+            pipeline.lsp_policy.interaction_mixing,
+            pipeline.lsp_policy.centrality_normalization,
+        ));
+    }
 
     // Build FULL episode history - the model needs to see the trajectory
     let episode_history = if scratchpad.episodes.is_empty() {
@@ -621,6 +802,7 @@ Repo: {} ({} files)"#,
     })?;
 
     // Inject dynamic context into the prompt template (evolved policy)
+    // Pipeline diagnostics are injected after failure_desc to provide structural context
     let evolved_policy = prompt_template
         .replace("{current_ndcg:.4}", &format!("{:.4}", current_ndcg))
         .replace(
@@ -629,7 +811,10 @@ Repo: {} ({} files)"#,
         )
         .replace("{episode_history}", &episode_history)
         .replace("{params_desc}", &params_desc)
-        .replace("{failure_desc}", &failure_desc);
+        .replace(
+            "{failure_desc}",
+            &format!("{}{}", failure_desc, pipeline_context),
+        );
 
     // Assemble final prompt: {protocol} + {evolved_policy} + {context}
     // The protocol is immutable and defines the output format
@@ -790,25 +975,133 @@ pub fn apply_changes(
             1.0 - mult
         };
 
-        match param_name.as_str() {
-            "pagerank_alpha" => new_params.pagerank_alpha *= factor,
-            "pagerank_chat_multiplier" => new_params.pagerank_chat_multiplier *= factor,
-            "depth_weight_root" => new_params.depth_weight_root *= factor,
-            "depth_weight_moderate" => new_params.depth_weight_moderate *= factor,
-            "depth_weight_deep" => new_params.depth_weight_deep *= factor,
-            "depth_weight_vendor" => new_params.depth_weight_vendor *= factor,
-            "boost_mentioned_ident" => new_params.boost_mentioned_ident *= factor,
-            "boost_mentioned_file" => new_params.boost_mentioned_file *= factor,
-            "boost_chat_file" => new_params.boost_chat_file *= factor,
-            "boost_temporal_coupling" => new_params.boost_temporal_coupling *= factor,
-            "boost_focus_expansion" => new_params.boost_focus_expansion *= factor,
-            "git_recency_decay_days" => new_params.git_recency_decay_days *= factor,
-            "git_recency_max_boost" => new_params.git_recency_max_boost *= factor,
-            "git_churn_threshold" => new_params.git_churn_threshold *= factor,
-            "git_churn_max_boost" => new_params.git_churn_max_boost *= factor,
-            "focus_decay" => new_params.focus_decay *= factor,
-            "focus_max_hops" => new_params.focus_max_hops *= factor,
-            _ => {}
+        // Parse dot-notation for pipeline coordinates: "pipeline.shadow_strategy.weight_name_match"
+        // This enables L1 to tune the bicameral LSP resolution system
+        if param_name.starts_with("pipeline.") {
+            if let Some(ref mut pipeline) = new_params.pipeline {
+                let parts: Vec<&str> = param_name.split('.').collect();
+                if parts.len() == 3 {
+                    let section = parts[1]; // "shadow_strategy" or "final_strategy" or "lsp_policy"
+                    let field = parts[2]; // "weight_name_match" etc
+
+                    match section {
+                        "shadow_strategy" => match field {
+                            "weight_same_file" => {
+                                pipeline.shadow_strategy.weight_same_file *= factor
+                            }
+                            "weight_type_hint" => {
+                                pipeline.shadow_strategy.weight_type_hint *= factor
+                            }
+                            "weight_import" => pipeline.shadow_strategy.weight_import *= factor,
+                            "weight_name_match" => {
+                                pipeline.shadow_strategy.weight_name_match *= factor
+                            }
+                            "weight_lsp" => pipeline.shadow_strategy.weight_lsp *= factor,
+                            "acceptance_bias" => pipeline.shadow_strategy.acceptance_bias *= factor,
+                            "acceptance_slope" => {
+                                pipeline.shadow_strategy.acceptance_slope *= factor
+                            }
+                            "selection_temperature" => {
+                                pipeline.shadow_strategy.selection_temperature *= factor
+                            }
+                            "evidence_accumulation" => {
+                                pipeline.shadow_strategy.evidence_accumulation *= factor
+                            }
+                            "proximity_boost" => pipeline.shadow_strategy.proximity_boost *= factor,
+                            _ => {}
+                        },
+                        "final_strategy" => match field {
+                            "weight_same_file" => {
+                                pipeline.final_strategy.weight_same_file *= factor
+                            }
+                            "weight_type_hint" => {
+                                pipeline.final_strategy.weight_type_hint *= factor
+                            }
+                            "weight_import" => pipeline.final_strategy.weight_import *= factor,
+                            "weight_name_match" => {
+                                pipeline.final_strategy.weight_name_match *= factor
+                            }
+                            "weight_lsp" => pipeline.final_strategy.weight_lsp *= factor,
+                            "acceptance_bias" => pipeline.final_strategy.acceptance_bias *= factor,
+                            "acceptance_slope" => {
+                                pipeline.final_strategy.acceptance_slope *= factor
+                            }
+                            "selection_temperature" => {
+                                pipeline.final_strategy.selection_temperature *= factor
+                            }
+                            "evidence_accumulation" => {
+                                pipeline.final_strategy.evidence_accumulation *= factor
+                            }
+                            "proximity_boost" => pipeline.final_strategy.proximity_boost *= factor,
+                            _ => {}
+                        },
+                        "lsp_policy" => match field {
+                            "marginal_utility_floor" => {
+                                pipeline.lsp_policy.marginal_utility_floor *= factor
+                            }
+                            "batch_latency_bias" => {
+                                pipeline.lsp_policy.batch_latency_bias *= factor
+                            }
+                            "query_timeout_secs" => {
+                                pipeline.lsp_policy.query_timeout_secs *= factor
+                            }
+                            "max_retries" => pipeline.lsp_policy.max_retries *= factor,
+                            "cache_negative_bias" => {
+                                pipeline.lsp_policy.cache_negative_bias *= factor
+                            }
+                            "weight_centrality" => pipeline.lsp_policy.weight_centrality *= factor,
+                            "weight_uncertainty" => {
+                                pipeline.lsp_policy.weight_uncertainty *= factor
+                            }
+                            "weight_coherence" => pipeline.lsp_policy.weight_coherence *= factor,
+                            "weight_causality" => pipeline.lsp_policy.weight_causality *= factor,
+                            "weight_bridge" => pipeline.lsp_policy.weight_bridge *= factor,
+                            "spread_logit_structural" => {
+                                pipeline.lsp_policy.spread_logit_structural *= factor
+                            }
+                            "spread_logit_semantic" => {
+                                pipeline.lsp_policy.spread_logit_semantic *= factor
+                            }
+                            "spread_logit_spatial" => {
+                                pipeline.lsp_policy.spread_logit_spatial *= factor
+                            }
+                            "focus_temperature" => pipeline.lsp_policy.focus_temperature *= factor,
+                            "gated_threshold" => pipeline.lsp_policy.gated_threshold *= factor,
+                            "exploration_floor" => pipeline.lsp_policy.exploration_floor *= factor,
+                            "interaction_mixing" => {
+                                pipeline.lsp_policy.interaction_mixing *= factor
+                            }
+                            "centrality_normalization" => {
+                                pipeline.lsp_policy.centrality_normalization *= factor
+                            }
+                            _ => {}
+                        },
+                        _ => {}
+                    }
+                }
+            }
+        } else {
+            // Base ranking parameters (no dot notation)
+            match param_name.as_str() {
+                "pagerank_alpha" => new_params.pagerank_alpha *= factor,
+                "pagerank_chat_multiplier" => new_params.pagerank_chat_multiplier *= factor,
+                "depth_weight_root" => new_params.depth_weight_root *= factor,
+                "depth_weight_moderate" => new_params.depth_weight_moderate *= factor,
+                "depth_weight_deep" => new_params.depth_weight_deep *= factor,
+                "depth_weight_vendor" => new_params.depth_weight_vendor *= factor,
+                "boost_mentioned_ident" => new_params.boost_mentioned_ident *= factor,
+                "boost_mentioned_file" => new_params.boost_mentioned_file *= factor,
+                "boost_chat_file" => new_params.boost_chat_file *= factor,
+                "boost_temporal_coupling" => new_params.boost_temporal_coupling *= factor,
+                "boost_focus_expansion" => new_params.boost_focus_expansion *= factor,
+                "git_recency_decay_days" => new_params.git_recency_decay_days *= factor,
+                "git_recency_max_boost" => new_params.git_recency_max_boost *= factor,
+                "git_churn_threshold" => new_params.git_churn_threshold *= factor,
+                "git_churn_max_boost" => new_params.git_churn_max_boost *= factor,
+                "focus_decay" => new_params.focus_decay *= factor,
+                "focus_max_hops" => new_params.focus_max_hops *= factor,
+                _ => {}
+            }
         }
     }
 
@@ -902,6 +1195,88 @@ Distill these insights into operator wisdom. Return JSON:
 
     // Phase 1 agentic mode: agent can read episode files if run_dir provided
     call_agent(agent, &prompt, model, run_dir)
+}
+
+/// Generate diagnostic alerts from pipeline statistics.
+/// Translates metrics into actionable failure mode warnings for L1.
+/// These alerts help L1 diagnose structural issues beyond parameter tuning.
+fn generate_pipeline_alerts(stats: &PipelineStatsSnapshot) -> String {
+    let mut alerts = Vec::new();
+
+    // Shadow Collapse: heuristics failing to connect the graph
+    // This prevents PageRank from identifying hubs, crippling LSP query selection
+    // Use average_degree (size-invariant) instead of raw density (which breaks on large repos)
+    if stats.average_degree < 1.0 {
+        alerts.push(format!(
+            "• SHADOW COLLAPSE: Average degree {:.2} < 1.0. The shadow graph is disconnected!\n\
+             → Each node has less than 1 edge on average - graph is forest-like\n\
+             → Check shadow_strategy.weight_name_match - may be too conservative\n\
+             → Consider lowering shadow_strategy.acceptance_bias threshold\n\
+             → Impact: PageRank has no structure to work with, LSP queries are blind",
+            stats.average_degree
+        ));
+    } else if stats.average_degree < 2.0 {
+        alerts.push(format!(
+            "• LOW SHADOW CONNECTIVITY: Average degree {:.2}. Graph may be too sparse.\n\
+             → Shadow pass should be recall-optimized - consider boosting heuristic weights",
+            stats.average_degree
+        ));
+    }
+
+    // LSP Waste: policy selecting bad query sites
+    // Low utilization means queries are issued but fail to resolve
+    if stats.lsp_utilization < 0.3 {
+        alerts.push(
+            "• LOW LSP UTILIZATION: <30% of queries resolving successfully!\n\
+             → Policy is selecting sites that LSP can't resolve\n\
+             → Check lsp_policy.marginal_utility_floor - too low wastes queries\n\
+             → Check lsp_policy.centrality_weight - may be over-indexing on PageRank\n\
+             → Impact: Wasting query budget on low-value positions"
+                .to_string(),
+        );
+    } else if stats.lsp_utilization < 0.5 {
+        alerts.push(format!(
+            "• MODERATE LSP UTILIZATION: {:.1}% success rate. Room for policy improvement.",
+            stats.lsp_utilization * 100.0
+        ));
+    }
+
+    // Rank Divergence: shadow graph doesn't predict final structure
+    // This means PageRank on shadow graph is misleading the policy
+    if stats.shadow_final_rank_correlation < 0.3 {
+        alerts.push(
+            "• SEVERE RANK DIVERGENCE: Shadow and final PageRank have <0.3 correlation!\n\
+             → Shadow graph structure is NOISE - doesn't reflect true importance\n\
+             → PageRank is misleading the LSP query policy\n\
+             → Check if shadow_strategy heuristics are creating false edges\n\
+             → Consider tightening shadow_strategy.acceptance_bias\n\
+             → Impact: Policy thinks unimportant nodes are hubs, wastes queries"
+                .to_string(),
+        );
+    } else if stats.shadow_final_rank_correlation < 0.5 {
+        alerts.push(format!(
+            "• RANK DIVERGENCE: {:.2} correlation between shadow and final PageRank.\n\
+             → Shadow graph is moderately noisy - consider tuning shadow heuristics",
+            stats.shadow_final_rank_correlation
+        ));
+    }
+
+    // Cost Overrun: too many queries or queries taking too long
+    if stats.lsp_latency_ms > 10000 {
+        alerts.push(format!(
+            "• HIGH LATENCY: {:.1}s spent in LSP queries!\n\
+             → Reduce query_budget to cap number of queries\n\
+             → Increase lsp_policy.marginal_utility_floor to be more selective\n\
+             → Impact: Training/production will be slow",
+            stats.lsp_latency_ms as f64 / 1000.0
+        ));
+    }
+
+    if alerts.is_empty() {
+        "  ✓ No critical issues - pipeline metrics look healthy".to_string()
+    } else {
+        alerts.join("\n\n")
+    }
 }
 
 /// Print a summary of the scratchpad state.

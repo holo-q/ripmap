@@ -18,12 +18,89 @@
 //! - Badge visibility shows file/symbol role at a glance
 //! - Temporal coupling shows implicit dependencies
 //! - Token counting enables binary search for budget fitting
+//! - Language-aware rendering: uses "struct" for Rust, "class" for Python/JS, etc.
 
 use super::colors::{Badge, Colorizer};
 use crate::callgraph::{CallGraph, FunctionId};
 use crate::types::{DetailLevel, RankedTag, Tag};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+
+/// Detect language from file extension for language-aware rendering.
+fn detect_language(rel_fname: &str) -> Language {
+    let ext = rel_fname.rsplit('.').next().unwrap_or("");
+    match ext {
+        "rs" => Language::Rust,
+        "py" | "pyi" | "pyw" => Language::Python,
+        "js" | "jsx" | "mjs" | "cjs" => Language::JavaScript,
+        "ts" | "tsx" | "mts" | "cts" => Language::TypeScript,
+        "go" => Language::Go,
+        "java" => Language::Java,
+        "c" | "h" => Language::C,
+        "cpp" | "cc" | "cxx" | "hpp" | "hxx" | "hh" => Language::Cpp,
+        "rb" | "rake" | "gemspec" => Language::Ruby,
+        "php" | "phtml" => Language::Php,
+        _ => Language::Unknown,
+    }
+}
+
+/// Source language for rendering decisions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Language {
+    Rust,
+    Python,
+    JavaScript,
+    TypeScript,
+    Go,
+    Java,
+    C,
+    Cpp,
+    Ruby,
+    Php,
+    Unknown,
+}
+
+impl Language {
+    /// Get the appropriate keyword for class-like types.
+    fn type_keyword(&self, node_type: &str) -> &'static str {
+        match self {
+            Language::Rust => match node_type {
+                "interface" => "trait",
+                "impl" => "impl",
+                _ => "struct", // structs, enums, unions, type aliases
+            },
+            Language::Go => "type",
+            Language::C | Language::Cpp => match node_type {
+                "interface" => "class", // C++ abstract class
+                _ => "struct",
+            },
+            _ => "class", // Python, JS, TS, Java, Ruby, PHP
+        }
+    }
+
+    /// Get the appropriate keyword for functions/methods.
+    fn function_keyword(&self) -> &'static str {
+        match self {
+            Language::Rust => "fn",
+            Language::Go => "func",
+            _ => "def", // Python, JS, TS, Java, Ruby, PHP, C, C++
+        }
+    }
+
+    /// Check if this is a test function based on language conventions.
+    fn is_test_function(&self, name: &str) -> bool {
+        match self {
+            Language::Rust => name.starts_with("test_") || name == "tests",
+            Language::Python => name.starts_with("test_") || name.starts_with("Test"),
+            Language::JavaScript | Language::TypeScript => {
+                name.starts_with("test") || name.ends_with("Test") || name.contains("_test")
+            }
+            Language::Go => name.starts_with("Test") || name.starts_with("Benchmark"),
+            Language::Java => name.starts_with("test") || name.ends_with("Test"),
+            _ => name.starts_with("test_") || name.starts_with("test"),
+        }
+    }
+}
 
 /// Directory-style renderer - hierarchical symbol overview with badges.
 ///
@@ -198,6 +275,8 @@ impl DirectoryRenderer {
     ///
     /// At Low/Medium detail (no call graph): compact block format
     /// At High detail or with call graph: one per line with relationships
+    ///
+    /// Filters out test functions in compact mode and deduplicates by name.
     fn render_functions_with_calls(
         &self,
         functions: &[&RankedTag],
@@ -205,14 +284,40 @@ impl DirectoryRenderer {
         badges: &HashMap<String, Vec<Badge>>,
         call_graph: Option<&CallGraph>,
     ) -> String {
-        let mut output = String::from("    def:\n");
-
         // Use compact format when: no call graph AND detail < High
         let use_compact = call_graph.is_none() && detail < DetailLevel::High;
 
+        // Detect language from first function (all in same file)
+        let lang = functions
+            .first()
+            .map(|f| detect_language(&f.tag.rel_fname))
+            .unwrap_or(Language::Unknown);
+
+        // Filter out test functions in compact mode and deduplicate by name
+        let mut seen_names: HashSet<&str> = HashSet::new();
+        let filtered_functions: Vec<_> = functions
+            .iter()
+            .filter(|f| {
+                let name = f.tag.name.as_ref();
+                // In compact mode, skip tests; always deduplicate
+                let dominated_by_tests = use_compact && lang.is_test_function(name);
+                let is_duplicate = !seen_names.insert(name);
+                !dominated_by_tests && !is_duplicate
+            })
+            .copied()
+            .collect();
+
+        if filtered_functions.is_empty() {
+            return String::new();
+        }
+
+        // Use language-aware function keyword
+        let fn_keyword = lang.function_keyword();
+        let mut output = format!("    {}:\n", fn_keyword);
+
         if use_compact {
             // Compact block: names only, wrapped at ~70 chars
-            let names: Vec<_> = functions
+            let names: Vec<_> = filtered_functions
                 .iter()
                 .map(|f| (Colorizer::function_name(&f.tag.name), f.tag.name.len()))
                 .collect();
@@ -243,7 +348,8 @@ impl DirectoryRenderer {
             }
         } else {
             // Detailed format: one per line with signatures and call relationships
-            for f in functions {
+            // Still deduplicate but show test functions
+            for f in &filtered_functions {
                 let mut line = String::from("      ");
                 line.push_str(&Colorizer::function_name(&f.tag.name));
 
@@ -315,6 +421,7 @@ impl DirectoryRenderer {
     }
 
     /// Render a class with call graph info for methods.
+    /// Uses language-aware terminology (struct for Rust, class for Python, etc.)
     fn render_class_with_calls(
         &self,
         class_name: &str,
@@ -327,8 +434,17 @@ impl DirectoryRenderer {
     ) -> String {
         let mut output = String::from("    ");
 
-        // Class header
-        output.push_str("class ");
+        // Detect language and get appropriate keyword
+        let rel_fname = class_tag.map(|t| t.tag.rel_fname.as_ref()).unwrap_or("");
+        let lang = detect_language(rel_fname);
+        let node_type = class_tag
+            .map(|t| t.tag.node_type.as_ref())
+            .unwrap_or("class");
+        let keyword = lang.type_keyword(node_type);
+
+        // Type header with language-appropriate keyword
+        output.push_str(keyword);
+        output.push(' ');
         output.push_str(&Colorizer::class_name(class_name));
 
         // Class-level badges
@@ -363,15 +479,30 @@ impl DirectoryRenderer {
             output.push('\n');
         }
 
-        // Render methods with call info
+        // Render methods with call info (deduplicated)
         if !methods.is_empty() {
+            // Deduplicate methods by name (trait + impl can cause duplicates)
+            let mut seen_names: HashSet<&str> = HashSet::new();
+            let deduped_methods: Vec<_> = methods
+                .iter()
+                .filter(|m| seen_names.insert(m.tag.name.as_ref()))
+                .copied()
+                .collect();
+
+            if deduped_methods.is_empty() {
+                return output;
+            }
+
             // Use compact format when: no call graph AND detail < High
             let use_compact = call_graph.is_none() && detail < DetailLevel::High;
 
+            // Use language-aware function keyword
+            let fn_keyword = lang.function_keyword();
+
             if use_compact {
                 // Compact block: names only, wrapped
-                output.push_str("    def:\n");
-                let names: Vec<_> = methods
+                output.push_str(&format!("    {}:\n", fn_keyword));
+                let names: Vec<_> = deduped_methods
                     .iter()
                     .map(|m| (Colorizer::function_name(&m.tag.name), m.tag.name.len()))
                     .collect();
@@ -402,8 +533,8 @@ impl DirectoryRenderer {
                 }
             } else {
                 // Detailed format with call relationships
-                output.push_str("    def:\n");
-                for m in methods {
+                output.push_str(&format!("    {}:\n", fn_keyword));
+                for m in &deduped_methods {
                     let method_name = self.render_method_inline(&m.tag, detail);
                     output.push_str(&format!("      {}\n", method_name));
 
@@ -517,8 +648,8 @@ impl DirectoryRenderer {
             }
 
             match tag.node_type.as_ref() {
-                "class" | "class_definition" | "struct" | "struct_item" => {
-                    // Class definition
+                // Class-like types: classes, structs, enums, traits, impls
+                "class" | "class_definition" | "struct" | "struct_item" | "interface" | "impl" => {
                     classes.entry(tag.name.clone()).or_default().0 = Some(*ranked_tag);
                 }
                 "method" | "method_definition" => {
@@ -583,6 +714,7 @@ impl DirectoryRenderer {
     }
 
     /// Render a class with its methods and fields.
+    /// Uses language-aware terminology (struct for Rust, class for Python, etc.)
     fn render_class(
         &self,
         class_name: &str,
@@ -594,8 +726,17 @@ impl DirectoryRenderer {
     ) -> String {
         let mut output = String::from("    ");
 
-        // Class header
-        output.push_str("class ");
+        // Detect language and get appropriate keyword
+        let rel_fname = class_tag.map(|t| t.tag.rel_fname.as_ref()).unwrap_or("");
+        let lang = detect_language(rel_fname);
+        let node_type = class_tag
+            .map(|t| t.tag.node_type.as_ref())
+            .unwrap_or("class");
+        let keyword = lang.type_keyword(node_type);
+
+        // Type header with language-appropriate keyword
+        output.push_str(keyword);
+        output.push(' ');
         output.push_str(&Colorizer::class_name(class_name));
 
         // Class-level badges (e.g., [api])
@@ -630,47 +771,60 @@ impl DirectoryRenderer {
             output.push('\n');
         }
 
-        // Render methods
+        // Render methods (deduplicated)
         if !methods.is_empty() {
-            if detail >= DetailLevel::High {
-                // High detail: one method per line with signatures
-                output.push_str("    def:\n");
-                for m in methods {
-                    output.push_str("      ");
-                    output.push_str(&self.render_method_inline(&m.tag, detail));
-                    output.push('\n');
-                }
-            } else {
-                // Low/Medium detail: compact block (names only, wrapped)
-                output.push_str("    def:\n");
-                let names: Vec<_> = methods
-                    .iter()
-                    .map(|m| (Colorizer::function_name(&m.tag.name), m.tag.name.len()))
-                    .collect();
+            // Deduplicate methods by name (trait + impl can cause duplicates)
+            let mut seen_names: HashSet<&str> = HashSet::new();
+            let deduped_methods: Vec<_> = methods
+                .iter()
+                .filter(|m| seen_names.insert(m.tag.name.as_ref()))
+                .copied()
+                .collect();
 
-                let mut line = String::from("      ");
-                let mut line_len = 0;
-                const MAX_LINE_LEN: usize = 70;
+            if !deduped_methods.is_empty() {
+                // Use language-aware function keyword
+                let fn_keyword = lang.function_keyword();
 
-                for (colored_name, visible_len) in &names {
-                    if line_len > 0 && line_len + visible_len + 1 > MAX_LINE_LEN {
-                        output.push_str(&line);
+                if detail >= DetailLevel::High {
+                    // High detail: one method per line with signatures
+                    output.push_str(&format!("    {}:\n", fn_keyword));
+                    for m in &deduped_methods {
+                        output.push_str("      ");
+                        output.push_str(&self.render_method_inline(&m.tag, detail));
                         output.push('\n');
-                        line = String::from("      ");
-                        line_len = 0;
+                    }
+                } else {
+                    // Low/Medium detail: compact block (names only, wrapped)
+                    output.push_str(&format!("    {}:\n", fn_keyword));
+                    let names: Vec<_> = deduped_methods
+                        .iter()
+                        .map(|m| (Colorizer::function_name(&m.tag.name), m.tag.name.len()))
+                        .collect();
+
+                    let mut line = String::from("      ");
+                    let mut line_len = 0;
+                    const MAX_LINE_LEN: usize = 70;
+
+                    for (colored_name, visible_len) in &names {
+                        if line_len > 0 && line_len + visible_len + 1 > MAX_LINE_LEN {
+                            output.push_str(&line);
+                            output.push('\n');
+                            line = String::from("      ");
+                            line_len = 0;
+                        }
+
+                        if line_len > 0 {
+                            line.push(' ');
+                            line_len += 1;
+                        }
+                        line.push_str(colored_name);
+                        line_len += visible_len;
                     }
 
                     if line_len > 0 {
-                        line.push(' ');
-                        line_len += 1;
+                        output.push_str(&line);
+                        output.push('\n');
                     }
-                    line.push_str(colored_name);
-                    line_len += visible_len;
-                }
-
-                if line_len > 0 {
-                    output.push_str(&line);
-                    output.push('\n');
                 }
             }
         }
@@ -696,17 +850,46 @@ impl DirectoryRenderer {
     ///
     /// At Low/Medium detail: compact block format (names only, space-separated)
     /// At High detail: one per line with full signatures
+    ///
+    /// Filters out test functions in compact mode and deduplicates by name.
     fn render_functions(
         &self,
         functions: &[&RankedTag],
         detail: DetailLevel,
         badges: &HashMap<String, Vec<Badge>>,
     ) -> String {
-        let mut output = String::from("    def:\n");
+        let use_compact = detail < DetailLevel::High;
+
+        // Detect language from first function (all in same file)
+        let lang = functions
+            .first()
+            .map(|f| detect_language(&f.tag.rel_fname))
+            .unwrap_or(Language::Unknown);
+
+        // Filter out test functions in compact mode and deduplicate by name
+        let mut seen_names: HashSet<&str> = HashSet::new();
+        let filtered_functions: Vec<_> = functions
+            .iter()
+            .filter(|f| {
+                let name = f.tag.name.as_ref();
+                let dominated_by_tests = use_compact && lang.is_test_function(name);
+                let is_duplicate = !seen_names.insert(name);
+                !dominated_by_tests && !is_duplicate
+            })
+            .copied()
+            .collect();
+
+        if filtered_functions.is_empty() {
+            return String::new();
+        }
+
+        // Use language-aware function keyword
+        let fn_keyword = lang.function_keyword();
+        let mut output = format!("    {}:\n", fn_keyword);
 
         if detail >= DetailLevel::High {
             // High detail: one function per line with signatures
-            for f in functions {
+            for f in &filtered_functions {
                 let mut s = String::from("      ");
                 s.push_str(&Colorizer::function_name(&f.tag.name));
                 if let Some(sig) = &f.tag.signature {
@@ -727,7 +910,7 @@ impl DirectoryRenderer {
             }
         } else {
             // Low/Medium detail: compact block (names only, wrapped at ~70 chars)
-            let names: Vec<_> = functions
+            let names: Vec<_> = filtered_functions
                 .iter()
                 .map(|f| (Colorizer::function_name(&f.tag.name), f.tag.name.len()))
                 .collect();

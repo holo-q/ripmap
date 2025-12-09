@@ -12,9 +12,13 @@ all_code.txt
 # Training artifacts
 /training/corpus/
 /training/runs/
+/training-outer/runs/
 /tmp/
+*.old.*
 *.json.bak
 
 # Grepmap cache (legacy)
 .grepmap.tags.cache*/
 gremapper-py/**
+all_code_training.txt
+*.bak

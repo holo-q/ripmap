@@ -1,0 +1,17 @@
+# ripmap configuration for this project
+# Include documentation alongside source code in the map
+
+include = [
+    "src/**",
+    "docs/**/*.md",
+    "README.md",
+]
+
+# Standard excludes (extend defaults)
+extend-exclude = [
+    "**/training-outer/runs/**",
+    "**/.grepmap.tags.cache*/**",
+]
+
+# Source roots for depth weighting
+src = ["src"]

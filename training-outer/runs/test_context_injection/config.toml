@@ -1,9 +1,0 @@
-# L2 Outer Loop Configuration
-[run]
-name = "test_context_injection"
-outer_steps = 1
-inner_episodes = 3
-inner_agent = "claude"
-outer_agent = "claude"
-corpus = "quick"
-edit_prompts = true

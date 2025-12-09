@@ -366,6 +366,127 @@ impl CallResolver {
         (graph, stats)
     }
 
+    /// Build graph and extract per-tag confidence map for query signal computation.
+    ///
+    /// Returns:
+    /// - CallGraph: The resolved call graph
+    /// - HashMap<(Arc<str>, u32), f64>: Confidence map keyed by (file, line)
+    ///
+    /// The confidence map enables the Policy Engine to measure "heuristic certainty" -
+    /// how confident were the shadow strategies about each call site's resolution.
+    /// High confidence (0.9) = SameFile match, low confidence (0.5) = NameMatch fallback.
+    ///
+    /// This is used by `generate_query_candidates()` to compute `heuristic_confidence`
+    /// signal, which guides LSP query selection: query the uncertain sites first.
+    pub fn build_graph_with_confidences(
+        &self,
+        tags: &[Tag],
+    ) -> (CallGraph, HashMap<(Arc<str>, u32), f64>) {
+        let context = ResolutionContext::new(tags);
+        let mut graph = CallGraph::new();
+        let mut confidences: HashMap<(Arc<str>, u32), f64> = HashMap::new();
+
+        // Add all function definitions as nodes
+        for tag in tags {
+            if tag.kind.is_definition() {
+                // Only add functions/methods, not classes or variables
+                let node_type = tag.node_type.as_ref();
+                if node_type.contains("function") || node_type.contains("method") {
+                    let id = FunctionId::new(tag.rel_fname.clone(), tag.name.clone(), tag.line)
+                        .with_parent_opt(tag.parent_name.clone());
+                    graph.add_function(id);
+                }
+            }
+        }
+
+        // Process each call reference and track confidence
+        for tag in tags {
+            if !tag.kind.is_reference() {
+                continue;
+            }
+
+            // Find the enclosing function (caller)
+            let caller = self.find_enclosing_function(tag, tags);
+            let Some(caller) = caller else {
+                continue; // Call not inside a function
+            };
+
+            // Run all strategies, collect candidates
+            let mut all_candidates: Vec<(Candidate, &str)> = vec![];
+
+            for strategy in &self.strategies {
+                // Skip strategies that don't support this language
+                if let Some(ref lang) = self.config.language {
+                    if !strategy.supports_language(lang) {
+                        continue;
+                    }
+                }
+
+                let strat_name = strategy.name();
+                let candidates = strategy.resolve(tag, &context);
+
+                for c in candidates {
+                    all_candidates.push((c, strat_name));
+                }
+            }
+
+            if all_candidates.is_empty() {
+                // Track unresolved sites with confidence 0.0
+                confidences.insert((tag.rel_fname.clone(), tag.line), 0.0);
+                continue;
+            }
+
+            // Weight each candidate by strategy weight
+            let weighted_candidates: Vec<(Candidate, &str, f64)> = all_candidates
+                .into_iter()
+                .map(|(c, strat)| {
+                    let weighted = self.coords.weighted_confidence(strat, c.confidence);
+                    (c, strat, weighted)
+                })
+                .collect();
+
+            // Filter by acceptance probability (sigmoid gate)
+            let accepted: Vec<_> = weighted_candidates
+                .iter()
+                .filter(|(_, _, weighted_conf)| {
+                    self.coords.acceptance_probability(*weighted_conf) > 0.5
+                })
+                .collect();
+
+            if accepted.is_empty() {
+                // Track rejected sites with low confidence
+                let max_weighted = weighted_candidates
+                    .iter()
+                    .map(|(_, _, w)| w)
+                    .cloned()
+                    .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                    .unwrap_or(0.0);
+                confidences.insert((tag.rel_fname.clone(), tag.line), max_weighted);
+                continue;
+            }
+
+            // Select best candidate (same logic as build_graph_with_stats)
+            let best = accepted
+                .iter()
+                .max_by(|a, b| a.2.partial_cmp(&b.2).unwrap_or(std::cmp::Ordering::Equal))
+                .unwrap();
+
+            let selected = &best.0;
+            let weighted_confidence = best.2;
+
+            // Track the weighted confidence for this call site
+            confidences.insert((tag.rel_fname.clone(), tag.line), weighted_confidence);
+
+            // Add edge to graph
+            let edge = CallEdge::new(selected.confidence, best.1, tag.line)
+                .with_type_hint(selected.type_hint.clone().unwrap_or_default());
+
+            graph.add_call(caller, selected.target.clone(), edge);
+        }
+
+        (graph, confidences)
+    }
+
     /// Build a complete call graph from extracted tags.
     ///
     /// Process:

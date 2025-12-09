@@ -13,17 +13,19 @@ categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]
 # Parsing - tree-sitter ecosystem
-tree-sitter = "0.24"
-tree-sitter-python = "0.23"
-tree-sitter-rust = "0.23"
-tree-sitter-javascript = "0.23"
-tree-sitter-typescript = "0.23"
-tree-sitter-go = "0.23"
-tree-sitter-java = "0.23"
-tree-sitter-c = "0.23"
-tree-sitter-cpp = "0.23"
-tree-sitter-ruby = "0.23"
-tree-sitter-php = "0.23"
+# Note: tree-sitter 0.25 for markdown grammar version 15 compatibility
+tree-sitter = "0.25"
+tree-sitter-python = "0.25"
+tree-sitter-rust = "0.24"
+tree-sitter-javascript = "0.25"
+tree-sitter-typescript = "0.23"  # 0.24+ not yet released
+tree-sitter-go = "0.25"
+tree-sitter-java = "0.23"  # 0.24+ not yet released
+tree-sitter-c = "0.24"
+tree-sitter-cpp = "0.23"  # 0.24+ not yet released
+tree-sitter-ruby = "0.23"  # 0.24+ not yet released
+tree-sitter-php = "0.24"
+tree-sitter-md = "0.5"
 streaming-iterator = "0.1"
 
 # Graph algorithms

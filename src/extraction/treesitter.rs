@@ -38,6 +38,7 @@ mod queries {
     pub const C_SHARP: &str = include_str!("../../queries/c_sharp-tags.scm");
     pub const KOTLIN: &str = include_str!("../../queries/kotlin-tags.scm");
     pub const SCALA: &str = include_str!("../../queries/scala-tags.scm");
+    pub const MARKDOWN: &str = include_str!("../../queries/markdown-tags.scm");
 }
 
 /// Language configuration with grammar and query
@@ -59,6 +60,7 @@ fn get_language(name: &str) -> Option<Language> {
         "cpp" | "c++" | "cc" | "cxx" => Some(tree_sitter_cpp::LANGUAGE.into()),
         "ruby" => Some(tree_sitter_ruby::LANGUAGE.into()),
         "php" => Some(tree_sitter_php::LANGUAGE_PHP.into()),
+        "markdown" => Some(tree_sitter_md::LANGUAGE.into()),
         _ => None,
     }
 }
@@ -76,6 +78,7 @@ fn get_query_source(name: &str) -> Option<&'static str> {
         "cpp" | "c++" | "cc" | "cxx" => Some(queries::CPP),
         "ruby" => Some(queries::RUBY),
         "php" => Some(queries::PHP),
+        "markdown" => Some(queries::MARKDOWN),
         _ => None,
     }
 }
@@ -98,6 +101,7 @@ pub fn extension_to_language(ext: &str) -> Option<&'static str> {
         "cs" => Some("c_sharp"),
         "kt" | "kts" => Some("kotlin"),
         "scala" | "sc" => Some("scala"),
+        "md" | "markdown" => Some("markdown"),
         _ => None,
     }
 }
@@ -117,6 +121,7 @@ static LANG_CONFIGS: Lazy<HashMap<&'static str, LangConfig>> = Lazy::new(|| {
         "cpp",
         "ruby",
         "php",
+        "markdown",
     ] {
         if let (Some(language), Some(query_src)) =
             (get_language(lang_name), get_query_source(lang_name))
@@ -234,6 +239,12 @@ impl TreeSitterParser {
                         node_type = Some("macro");
                     } else if capture_name.ends_with(".implementation") {
                         node_type = Some("impl");
+                    } else if capture_name.ends_with(".section") {
+                        // Markdown h1/h2 headings
+                        node_type = Some("section");
+                    } else if capture_name.ends_with(".subsection") {
+                        // Markdown h3-h6 headings
+                        node_type = Some("subsection");
                     }
                 }
             }
