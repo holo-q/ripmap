@@ -52,39 +52,62 @@ ripmap is a recurrent graph neural network with 55 trainable coordinates.
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-The coordinates control:
-- PageRank damping (α): importance spread
-- Strategy weights: name matching vs. type hints vs. imports
-- Acceptance gates: candidate thresholds
-- Focus decay: query relevance falloff
+The pipeline has two hemispheres. The Shadow Pass casts a wide net via fuzzy
+name matching. PageRank propagates importance through the symbol graph. The
+Policy Engine decides when to stop exploring. The Final Pass verifies candidates
+with LSP-style precision.
 
-These are hypothesized to be universal across languages and codebases.
+The coordinates control the physics:
+
+- **PageRank damping** (α): How far importance spreads through the graph
+- **Strategy weights**: Whether to trust name matching, type hints, or imports
+- **Acceptance gates**: Sigmoid thresholds for candidate quality
+- **Focus decay**: How quickly relevance fades from the query epicenter
+- **Interaction mixing** (λ): Interpolates between OR-logic and AND-logic
+
+Traditional code has discrete branches. ripmap dissolves these into continuous
+coordinates. The system can be "30% more greedy" rather than flipping a switch.
+
+The hypothesis: these 55 numbers are universal constants. A single configuration
+governs navigation in Python, Rust, TypeScript, Go—any codebase.
 
 ## Training
 
-Parameters are optimized by LLMs reasoning about ranking failures.
+The optimizer is not gradient descent. The optimizer is Claude.
 
 ```console
 $ ripmap-train --curated --reason --episodes 100 --agent claude
 ```
 
-The LLM observes NDCG scores, analyzes failures, and proposes adjustments:
+ripmap is trained by LLMs reasoning about why rankings fail. The LLM observes
+NDCG scores, analyzes failure cases, and proposes parameter adjustments with
+natural language rationale:
 
 ```json
 {
-  "diagnosis": "High-PR distractors flooding results",
+  "diagnosis": "High-PR distractors from unrelated modules flooding results",
   "proposed_changes": {
     "pagerank_alpha": ["decrease", "medium", "Reduce global spread"],
     "boost_focus_match": ["increase", "small", "Strengthen local signal"]
-  }
+  },
+  "confidence": 0.7
 }
 ```
 
-Ground truth comes from git history—files changed together in bugfix commits.
+This is mesa-optimization. The "gradient" emerges from reasoning in concept
+space. The LLM can propose changes that no numerical gradient could express:
+"the multiplicative combination can't express OR-logic—add an additive pathway."
 
-Two-level optimization:
-- L1: Claude proposes parameter changes
-- L2: Gemini evolves the prompt that steers L1
+Ground truth comes from git history. Files that changed together in bugfix
+commits have causal dependencies. ripmap learns to predict these relationships.
+
+### Two-Level Stack
+
+- **L1 (Inner Loop)**: Claude proposes parameter changes based on ranking failures
+- **L2 (Outer Loop)**: Gemini evolves the prompt that steers L1's reasoning
+
+L2 observes L1's performance across runs and mutates the promptgram—adding
+heuristics, adjusting policy, changing reasoning style. The prompt is a program.
 
 ## Usage
 
