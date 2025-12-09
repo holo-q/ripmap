@@ -157,14 +157,16 @@
 // `user.method()` calls. This is "group gain" - one query buys
 // multiple edge resolutions. The cache enables this.
 
-use std::process::{Command, Stdio, Child, ChildStdin, ChildStdout};
-use std::sync::{Mutex, Arc};
-use std::io::{Write, BufRead, BufReader};
-use std::collections::HashMap;
+use anyhow::{Context, Result, bail};
 use dashmap::DashMap;
-use anyhow::{Result, Context, bail};
-use serde::{Serialize, Deserialize};
-use serde_json::{json, Value};
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+use std::collections::HashMap;
+use std::io::{BufRead, BufReader, Write};
+use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::sync::{Arc, Mutex};
+use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
 
 /// Type information returned by LSP hover
 ///
@@ -206,7 +208,9 @@ struct JsonRpcRequest {
 #[derive(Serialize, Deserialize, Debug)]
 struct JsonRpcResponse {
     jsonrpc: String,
-    id: u64,
+    /// Request ID. None for notifications (server->client messages with no response expected)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     result: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -266,7 +270,10 @@ pub trait TypeResolver {
     /// Batch resolve multiple positions
     ///
     /// Returns sparse results: only successful resolutions included
-    fn resolve_batch(&self, queries: &[(String, u32, u32)]) -> HashMap<(String, u32, u32), TypeInfo>;
+    fn resolve_batch(
+        &self,
+        queries: &[(String, u32, u32)],
+    ) -> HashMap<(String, u32, u32), TypeInfo>;
 }
 
 /// Mock LSP client for Oracle Bootstrap training
@@ -400,7 +407,20 @@ pub struct MockClient {
     ///
     /// This is the "oracle" - perfect type information for all positions.
     /// Built offline by running `ty` on entire corpus.
+    ///
+    /// CRITICAL: Keys are 0-based (LSP standard). If oracle comes from
+    /// `ty dump-types` (0-based), keys match directly. If from ripmap tags
+    /// (1-based), must convert during cache construction.
     oracle_cache: HashMap<(String, u32, u32), TypeInfo>,
+
+    /// Session cache: (file, line, col) -> Option<TypeInfo>
+    ///
+    /// Tracks which positions have been queried in current episode.
+    /// Cleared by reset_cost() between episodes. Enables realistic
+    /// cache hit/miss patterns during training to match production behavior.
+    ///
+    /// Keys are 0-based (same as oracle_cache).
+    session_cache: DashMap<(String, u32, u32), Option<TypeInfo>>,
 
     /// Query counter for simulated cost calculation
     ///
@@ -414,15 +434,17 @@ pub struct MockClient {
 impl MockClient {
     /// Load oracle cache from JSON file
     ///
-    /// Expected format:
+    /// Expected format (KEYS ARE 0-BASED):
     /// ```json
     /// {
-    ///   "file.py:42:10": { "type_str": "User", "confidence": 0.95 },
-    ///   "file.py:43:5": { "type_str": "List[str]", "confidence": 0.95 }
+    ///   "file.py:41:9": { "type_str": "User", "confidence": 0.95 },
+    ///   "file.py:42:4": { "type_str": "List[str]", "confidence": 0.95 }
     /// }
     /// ```
     ///
-    /// Keys are formatted as `"file:line:col"` (1-indexed, matching LSP).
+    /// Note: Line 42, column 10 in editor (1-based) = key "file.py:41:9" (0-based)
+    ///
+    /// Keys are formatted as `"file:line:col"` (0-indexed, matching LSP standard).
     /// Values are TypeInfo structs with type_str and confidence.
     ///
     /// # Errors
@@ -432,23 +454,25 @@ impl MockClient {
     /// - JSON is malformed
     /// - Key format is invalid (not "file:line:col")
     pub fn from_oracle_file(path: &std::path::Path) -> Result<Self> {
-        let content = std::fs::read_to_string(path)
-            .context("Failed to read oracle cache file")?;
-        let raw: HashMap<String, TypeInfo> = serde_json::from_str(&content)
-            .context("Failed to parse oracle cache JSON")?;
+        let content = std::fs::read_to_string(path).context("Failed to read oracle cache file")?;
+        let raw: HashMap<String, TypeInfo> =
+            serde_json::from_str(&content).context("Failed to parse oracle cache JSON")?;
 
-        // Parse keys from "file:line:col" format
+        // Parse keys from "file:line:col" format (0-based)
         let mut oracle_cache = HashMap::new();
         for (key_str, type_info) in raw {
             // Split on ':' from right to left to handle file paths with colons
             let parts: Vec<&str> = key_str.rsplitn(3, ':').collect();
             if parts.len() == 3 {
                 // parts are in reverse order: [col, line, file]
-                let col: u32 = parts[0].parse()
+                let col: u32 = parts[0]
+                    .parse()
                     .with_context(|| format!("Invalid column in key: {}", key_str))?;
-                let line: u32 = parts[1].parse()
+                let line: u32 = parts[1]
+                    .parse()
                     .with_context(|| format!("Invalid line in key: {}", key_str))?;
                 let file = parts[2].to_string();
+                // Keys are stored as-is (0-based) from the JSON file
                 oracle_cache.insert((file, line, col), type_info);
             } else {
                 eprintln!("Warning: Skipping malformed key: {}", key_str);
@@ -457,6 +481,7 @@ impl MockClient {
 
         Ok(Self {
             oracle_cache,
+            session_cache: DashMap::new(),
             query_count: std::sync::atomic::AtomicUsize::new(0),
         })
     }
@@ -468,22 +493,30 @@ impl MockClient {
     pub fn empty() -> Self {
         Self {
             oracle_cache: HashMap::new(),
+            session_cache: DashMap::new(),
             query_count: std::sync::atomic::AtomicUsize::new(0),
         }
     }
 
     /// Insert a single type into the oracle cache (for testing)
     ///
-    /// Useful for building synthetic test scenarios:
+    /// Useful for building synthetic test scenarios.
+    ///
+    /// IMPORTANT: line and col parameters are 0-based (LSP standard).
+    /// To insert for editor line 42, column 10, use line=41, col=9.
+    ///
     /// ```rust
     /// let mut mock = MockClient::empty();
-    /// mock.insert("file.py", 42, 10, TypeInfo {
+    /// // Insert for editor position line 42, col 10 (1-based)
+    /// mock.insert("file.py", 41, 9, TypeInfo {  // 0-based
     ///     type_str: "User".to_string(),
     ///     confidence: 0.95,
     /// });
     /// ```
     pub fn insert(&mut self, file: &str, line: u32, col: u32, type_info: TypeInfo) {
-        self.oracle_cache.insert((file.to_string(), line, col), type_info);
+        // Keys are 0-based in oracle_cache
+        self.oracle_cache
+            .insert((file.to_string(), line, col), type_info);
     }
 
     /// Get simulated cost (total queries made in current episode)
@@ -500,12 +533,14 @@ impl MockClient {
         self.query_count.load(std::sync::atomic::Ordering::Relaxed)
     }
 
-    /// Reset query counter (for new training episode)
+    /// Reset query counter and session cache (for new training episode)
     ///
-    /// Call this at the start of each training episode to reset cost tracking:
+    /// Call this at the start of each training episode to reset cost tracking
+    /// and clear the session cache (simulates fresh LSP session).
+    ///
     /// ```rust
     /// for episode in 0..10000 {
-    ///     oracle.reset_cost();  // Fresh start
+    ///     oracle.reset_cost();  // Fresh start - clears session cache too
     ///     let selected = policy.select_queries(&graph);
     ///     let results = oracle.resolve_batch(&selected);
     ///     let reward = compute_reward(results, oracle.simulated_cost());
@@ -513,7 +548,9 @@ impl MockClient {
     /// }
     /// ```
     pub fn reset_cost(&self) {
-        self.query_count.store(0, std::sync::atomic::Ordering::Relaxed);
+        self.query_count
+            .store(0, std::sync::atomic::Ordering::Relaxed);
+        self.session_cache.clear();
     }
 }
 
@@ -521,23 +558,74 @@ impl MockClient {
 impl TypeResolver for MockClient {
     /// Hover lookup (instant, from oracle cache)
     ///
+    /// CRITICAL: Input coordinates are 1-based (ripmap convention), but are
+    /// converted to 0-based for cache lookup (LSP standard). This matches
+    /// LspClient behavior exactly.
+    ///
     /// Returns None if position not in cache (same semantics as real LSP).
     /// Increments query counter for cost accounting.
     fn hover(&self, file: &str, line: u32, col: u32) -> Option<TypeInfo> {
-        self.query_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        self.oracle_cache.get(&(file.to_string(), line, col)).cloned()
+        self.query_count
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+        // Convert to 0-based for cache lookup (matching LspClient behavior)
+        let key = (
+            file.to_string(),
+            line.saturating_sub(1),
+            col.saturating_sub(1),
+        );
+
+        // Check session cache first
+        if let Some(cached) = self.session_cache.get(&key) {
+            return cached.clone();
+        }
+
+        // Look up in oracle cache (0-based keys)
+        let result = self.oracle_cache.get(&key).cloned();
+
+        // Cache the result for this session
+        self.session_cache.insert(key, result.clone());
+
+        result
     }
 
     /// Batch resolve (instant, from oracle cache)
     ///
+    /// CRITICAL: Input coordinates are 1-based (ripmap convention), but are
+    /// converted to 0-based for cache lookup (LSP standard). Returns results
+    /// with ORIGINAL 1-based coordinates to match caller's expectation.
+    ///
     /// Returns sparse results: only positions in cache are included.
     /// Increments query counter by batch size for cost accounting.
-    fn resolve_batch(&self, queries: &[(String, u32, u32)]) -> HashMap<(String, u32, u32), TypeInfo> {
-        self.query_count.fetch_add(queries.len(), std::sync::atomic::Ordering::Relaxed);
-        queries.iter()
+    fn resolve_batch(
+        &self,
+        queries: &[(String, u32, u32)],
+    ) -> HashMap<(String, u32, u32), TypeInfo> {
+        self.query_count
+            .fetch_add(queries.len(), std::sync::atomic::Ordering::Relaxed);
+
+        queries
+            .iter()
             .filter_map(|(file, line, col)| {
-                self.oracle_cache.get(&(file.clone(), *line, *col))
-                    .map(|info| ((file.clone(), *line, *col), info.clone()))
+                // Convert to 0-based for lookup
+                let lookup_key = (file.clone(), line.saturating_sub(1), col.saturating_sub(1));
+
+                // Check session cache first
+                if let Some(cached) = self.session_cache.get(&lookup_key) {
+                    return cached.clone().map(|info| {
+                        // Return with ORIGINAL (1-based) coordinates
+                        ((file.clone(), *line, *col), info)
+                    });
+                }
+
+                // Look up in oracle cache (0-based keys)
+                let result = self.oracle_cache.get(&lookup_key).cloned();
+
+                // Cache the result for this session
+                self.session_cache.insert(lookup_key, result.clone());
+
+                // Return with ORIGINAL (1-based) coordinates if found
+                result.map(|info| ((file.clone(), *line, *col), info))
             })
             .collect()
     }
@@ -547,14 +635,23 @@ impl TypeResolver for MockClient {
 ///
 /// Process Lifecycle:
 /// 1. Client created (process = None)
-/// 2. First query → ensure_started() → spawn ty server + initialize
+/// 2. First query → ensure_started() → spawn ty server + initialize + start reader thread
 /// 3. Queries → check cache → miss → JSON-RPC → cache result
-/// 4. Shutdown → send shutdown + exit messages
+/// 4. Shutdown → signal reader thread → send shutdown + exit → join thread
 ///
 /// Thread Safety:
 /// - process/stdin: Mutex (single writer to stdin)
 /// - caches: DashMap (concurrent reads, writes)
 /// - next_id: Mutex (sequential request IDs)
+/// - pending_responses: DashMap (lock-free concurrent access for reader thread)
+///
+/// Background Reader Thread (CRITICAL - fixes 64KB deadlock):
+/// The reader thread continuously drains stdout into `pending_responses` DashMap.
+/// This prevents pipe buffer deadlock when batching large numbers of requests:
+/// - Without background reader: write 500 requests → stdin buffer fills → blocks
+///   → ty tries to write responses → stdout buffer fills → ty blocks → DEADLOCK
+/// - With background reader: write all requests (reader drains stdout in parallel)
+///   → no deadlock, responses immediately available in DashMap
 ///
 /// Coherence Tracking:
 /// When we resolve `user: User`, we can immediately resolve all
@@ -567,8 +664,14 @@ pub struct LspClient {
     /// Stdin handle for sending JSON-RPC requests
     stdin: Mutex<Option<ChildStdin>>,
 
-    /// Stdout reader for receiving responses (wrapped in mutex for BufReader)
-    stdout: Mutex<Option<BufReader<ChildStdout>>>,
+    /// Background reader thread handle (drains stdout into pending_responses)
+    /// Prevents 64KB pipe buffer deadlock on large batches
+    reader_thread: Mutex<Option<JoinHandle<()>>>,
+
+    /// Pending responses map: request ID → JSON-RPC response
+    /// Populated by background reader thread, polled by resolve_batch()
+    /// Lock-free concurrent access via DashMap
+    pending_responses: Arc<DashMap<u64, JsonRpcResponse>>,
 
     /// Type cache: (file, line, col) -> TypeInfo
     /// None means "we queried but got no result" (cache negative results too)
@@ -590,7 +693,8 @@ impl LspClient {
         Self {
             process: Mutex::new(None),
             stdin: Mutex::new(None),
-            stdout: Mutex::new(None),
+            reader_thread: Mutex::new(None),
+            pending_responses: Arc::new(DashMap::new()),
             type_cache: Arc::new(DashMap::new()),
             def_cache: Arc::new(DashMap::new()),
             next_id: Mutex::new(1),
@@ -610,6 +714,100 @@ impl LspClient {
             .status()
             .map(|status| status.success())
             .unwrap_or(false)
+    }
+
+    /// Static helper to read JSON-RPC response (for use in reader thread)
+    fn read_response_static(stdout: &mut BufReader<ChildStdout>) -> Result<JsonRpcResponse> {
+        // Read headers until blank line
+        let mut content_length: Option<usize> = None;
+        let mut line = String::new();
+
+        loop {
+            line.clear();
+            stdout.read_line(&mut line)?;
+
+            if line.trim().is_empty() {
+                break; // End of headers
+            }
+
+            if line.starts_with("Content-Length:") {
+                let len_str = line.trim_start_matches("Content-Length:").trim();
+                content_length = Some(len_str.parse()?);
+            }
+        }
+
+        let content_length = content_length.context("Missing Content-Length header")?;
+
+        // Read body
+        let mut buffer = vec![0u8; content_length];
+        std::io::Read::read_exact(stdout, &mut buffer)?;
+
+        let response: JsonRpcResponse = serde_json::from_slice(&buffer)?;
+
+        Ok(response)
+    }
+
+    /// Start background reader thread to drain stdout
+    ///
+    /// The reader thread continuously reads JSON-RPC responses from stdout
+    /// and populates the pending_responses DashMap. This prevents pipe buffer
+    /// deadlock when sending large batches of requests.
+    ///
+    /// Critical for batches > ~64KB of request data (OS pipe buffer size).
+    fn start_reader_thread(&self, stdout: BufReader<ChildStdout>) -> Result<()> {
+        let pending = self.pending_responses.clone();
+
+        let handle = std::thread::spawn(move || {
+            let mut reader = stdout;
+            loop {
+                match LspClient::read_response_static(&mut reader) {
+                    Ok(response) => {
+                        // Handle notifications (no ID) - log and skip
+                        if let Some(id) = response.id {
+                            pending.insert(id, response);
+                        } else {
+                            // Notification from server (e.g., diagnostics, progress)
+                            // We don't need these for type resolution, so just log
+                            eprintln!("LSP notification (ignored): {:?}", response);
+                        }
+                    }
+                    Err(e) => {
+                        // EOF or parse error - server died
+                        eprintln!("LSP reader thread terminating: {}", e);
+                        break;
+                    }
+                }
+            }
+        });
+
+        *self.reader_thread.lock().unwrap() = Some(handle);
+        Ok(())
+    }
+
+    /// Wait for a specific response ID to appear in pending_responses
+    ///
+    /// Polls the DashMap with exponential backoff until the response arrives
+    /// or timeout is reached. Returns None on timeout.
+    fn wait_for_response(&self, id: u64, timeout: Duration) -> Option<JsonRpcResponse> {
+        let start = Instant::now();
+        let mut backoff = Duration::from_micros(10);
+
+        loop {
+            // Check if response has arrived
+            if let Some((_, response)) = self.pending_responses.remove(&id) {
+                return Some(response);
+            }
+
+            // Check timeout
+            if start.elapsed() > timeout {
+                eprintln!("LSP request {} timed out after {:?}", id, timeout);
+                return None;
+            }
+
+            // Exponential backoff (up to 1ms max)
+            std::thread::sleep(backoff);
+            backoff = std::cmp::min(backoff * 2, Duration::from_millis(1));
+        }
     }
 
     /// Ensure ty server is started and initialized
@@ -634,7 +832,6 @@ impl LspClient {
         // Acquire process lock to prevent race
         let mut process_guard = self.process.lock().unwrap();
         let mut stdin_guard = self.stdin.lock().unwrap();
-        let mut stdout_guard = self.stdout.lock().unwrap();
         let mut init_guard = self.initialized.lock().unwrap();
 
         // Double-check after acquiring lock (another thread may have initialized)
@@ -647,18 +844,25 @@ impl LspClient {
             .arg("server")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())  // TODO: Maybe log this for debugging?
+            .stderr(Stdio::null()) // TODO: Maybe log this for debugging?
             .spawn()
             .context("Failed to spawn 'ty server'. Is ty installed?")?;
 
-        let stdin = child.stdin.take()
+        let stdin = child
+            .stdin
+            .take()
             .context("Failed to capture stdin of ty server")?;
-        let stdout = child.stdout.take()
+        let stdout = child
+            .stdout
+            .take()
             .context("Failed to capture stdout of ty server")?;
 
         *process_guard = Some(child);
         *stdin_guard = Some(stdin);
-        *stdout_guard = Some(BufReader::new(stdout));
+
+        // Start background reader thread BEFORE sending any requests
+        // This ensures stdout is drained immediately, preventing deadlock
+        self.start_reader_thread(BufReader::new(stdout))?;
 
         // Send LSP initialize request
         // For now, use a minimal initialize. We can expand capabilities later.
@@ -694,8 +898,10 @@ impl LspClient {
         // Send request
         self.send_request_locked(&init_request, stdin_guard.as_mut().unwrap())?;
 
-        // Read response
-        let _response = self.read_response_locked(stdout_guard.as_mut().unwrap())?;
+        // Wait for response from background reader thread
+        let _response = self
+            .wait_for_response(request_id, Duration::from_secs(5))
+            .context("LSP initialize request timed out")?;
 
         // Send initialized notification
         let initialized_notif = json!({
@@ -715,10 +921,11 @@ impl LspClient {
     pub fn shutdown(&self) {
         let mut process_guard = self.process.lock().unwrap();
         let mut stdin_guard = self.stdin.lock().unwrap();
+        let mut reader_guard = self.reader_thread.lock().unwrap();
         let mut init_guard = self.initialized.lock().unwrap();
 
         if !*init_guard {
-            return;  // Not started
+            return; // Not started
         }
 
         // Try to send shutdown request
@@ -741,10 +948,15 @@ impl LspClient {
             let _ = self.send_notification_locked(&exit_notif, stdin);
         }
 
-        // Kill process if still alive
+        // Kill process (this will cause reader thread to terminate on EOF)
         if let Some(child) = process_guard.as_mut() {
             let _ = child.kill();
             let _ = child.wait();
+        }
+
+        // Join reader thread
+        if let Some(handle) = reader_guard.take() {
+            let _ = handle.join();
         }
 
         *process_guard = None;
@@ -826,7 +1038,10 @@ impl LspClient {
     /// instead of blocking on each round trip.
     ///
     /// Returns only successful resolutions (sparse result).
-    pub fn resolve_batch(&self, queries: &[(String, u32, u32)]) -> HashMap<(String, u32, u32), TypeInfo> {
+    pub fn resolve_batch(
+        &self,
+        queries: &[(String, u32, u32)],
+    ) -> HashMap<(String, u32, u32), TypeInfo> {
         let mut results = HashMap::new();
         let mut pending_queries: Vec<(String, u32, u32)> = Vec::new();
 
@@ -892,23 +1107,13 @@ impl LspClient {
             }
         }
 
-        // Phase 3: Read all responses
-        {
-            let mut stdout_guard = self.stdout.lock().unwrap();
-            if let Some(stdout) = stdout_guard.as_mut() {
-                for _ in 0..id_to_key.len() {
-                    match self.read_response_locked(stdout) {
-                        Ok(response) => {
-                            if let Some(key) = id_to_key.get(&response.id) {
-                                let type_info = self.parse_hover_response(&response);
-                                self.type_cache.insert(key.clone(), type_info.clone());
-                                if let Some(info) = type_info {
-                                    results.insert(key.clone(), info);
-                                }
-                            }
-                        }
-                        Err(_) => break,
-                    }
+        // Phase 3: Wait for all responses (from background reader thread)
+        for (request_id, key) in id_to_key.iter() {
+            if let Some(response) = self.wait_for_response(*request_id, Duration::from_secs(5)) {
+                let type_info = self.parse_hover_response(&response);
+                self.type_cache.insert(key.clone(), type_info.clone());
+                if let Some(info) = type_info {
+                    results.insert(key.clone(), info);
                 }
             }
         }
@@ -977,15 +1182,10 @@ impl LspClient {
             }
         }
 
-        // Read response
-        let response = {
-            let mut stdout_guard = self.stdout.lock().unwrap();
-            if let Some(stdout) = stdout_guard.as_mut() {
-                self.read_response_locked(stdout)?
-            } else {
-                bail!("ty server stdout not available");
-            }
-        };
+        // Wait for response from background reader thread (5s timeout)
+        let response = self
+            .wait_for_response(request_id, Duration::from_secs(5))
+            .context("Hover request timed out")?;
 
         // Parse response
         if let Some(error) = response.error {
@@ -1006,7 +1206,7 @@ impl LspClient {
 
         Ok(Some(TypeInfo {
             type_str,
-            confidence: 0.95,  // LSP is high-confidence
+            confidence: 0.95, // LSP is high-confidence
         }))
     }
 
@@ -1047,14 +1247,10 @@ impl LspClient {
             }
         }
 
-        let response = {
-            let mut stdout_guard = self.stdout.lock().unwrap();
-            if let Some(stdout) = stdout_guard.as_mut() {
-                self.read_response_locked(stdout)?
-            } else {
-                bail!("ty server stdout not available");
-            }
-        };
+        // Wait for response from background reader thread (5s timeout)
+        let response = self
+            .wait_for_response(request_id, Duration::from_secs(5))
+            .context("Definition request timed out")?;
 
         if let Some(error) = response.error {
             bail!("LSP error: {:?}", error);
@@ -1100,18 +1296,16 @@ impl LspClient {
             stdout.read_line(&mut line)?;
 
             if line.trim().is_empty() {
-                break;  // End of headers
+                break; // End of headers
             }
 
             if line.starts_with("Content-Length:") {
-                let len_str = line.trim_start_matches("Content-Length:")
-                    .trim();
+                let len_str = line.trim_start_matches("Content-Length:").trim();
                 content_length = Some(len_str.parse()?);
             }
         }
 
-        let content_length = content_length
-            .context("Missing Content-Length header")?;
+        let content_length = content_length.context("Missing Content-Length header")?;
 
         // Read body
         let mut buffer = vec![0u8; content_length];
@@ -1169,7 +1363,7 @@ impl LspClient {
             let lines: Vec<&str> = s.lines().collect();
             if lines.len() >= 3 {
                 // Skip first (```python) and last (```)
-                return lines[1..lines.len()-1].join("\n").trim().to_string();
+                return lines[1..lines.len() - 1].join("\n").trim().to_string();
             }
         }
 
@@ -1184,24 +1378,30 @@ impl LspClient {
     fn extract_location_from_definition(&self, result: &Value) -> Result<Option<Location>> {
         // Handle array (take first)
         let location_value = if result.is_array() {
-            result.as_array()
+            result
+                .as_array()
                 .and_then(|arr| arr.first())
                 .unwrap_or(result)
         } else {
             result
         };
 
-        let uri = location_value["uri"].as_str()
+        let uri = location_value["uri"]
+            .as_str()
             .context("Missing uri in definition response")?;
 
         // Strip file:// prefix
         let file = uri.trim_start_matches("file://").to_string();
 
         let start = &location_value["range"]["start"];
-        let line = start["line"].as_u64()
-            .context("Missing line in definition response")? as u32 + 1;  // Convert to 1-indexed
-        let col = start["character"].as_u64()
-            .context("Missing character in definition response")? as u32 + 1;
+        let line = start["line"]
+            .as_u64()
+            .context("Missing line in definition response")? as u32
+            + 1; // Convert to 1-indexed
+        let col = start["character"]
+            .as_u64()
+            .context("Missing character in definition response")? as u32
+            + 1;
 
         Ok(Some(Location { file, line, col }))
     }
@@ -1222,7 +1422,10 @@ impl TypeResolver for LspClient {
     ///
     /// Uses pipelined I/O for efficiency (send all requests, then read all responses).
     /// Still pays wall-clock latency, but amortizes round-trip overhead.
-    fn resolve_batch(&self, queries: &[(String, u32, u32)]) -> HashMap<(String, u32, u32), TypeInfo> {
+    fn resolve_batch(
+        &self,
+        queries: &[(String, u32, u32)],
+    ) -> HashMap<(String, u32, u32), TypeInfo> {
         // Delegate to existing resolve_batch method (pipelined, cache-aware)
         self.resolve_batch(queries)
     }
@@ -1276,13 +1479,19 @@ mod tests {
     fn test_mock_client_insert() {
         let mut mock = MockClient::empty();
 
-        // Insert a type
-        mock.insert("file.py", 42, 10, TypeInfo {
-            type_str: "User".to_string(),
-            confidence: 0.95,
-        });
+        // Insert a type at 0-based position (line 41, col 9)
+        // This corresponds to editor position line 42, col 10 (1-based)
+        mock.insert(
+            "file.py",
+            41, // 0-based line
+            9,  // 0-based col
+            TypeInfo {
+                type_str: "User".to_string(),
+                confidence: 0.95,
+            },
+        );
 
-        // Should be able to retrieve it
+        // Query with 1-based coordinates (interface convention)
         let result = mock.hover("file.py", 42, 10);
         assert!(result.is_some());
         assert_eq!(result.unwrap().type_str, "User");
@@ -1295,17 +1504,27 @@ mod tests {
     fn test_mock_client_batch() {
         let mut mock = MockClient::empty();
 
-        // Insert multiple types
-        mock.insert("file.py", 42, 10, TypeInfo {
-            type_str: "User".to_string(),
-            confidence: 0.95,
-        });
-        mock.insert("file.py", 43, 5, TypeInfo {
-            type_str: "List[str]".to_string(),
-            confidence: 0.95,
-        });
+        // Insert multiple types (0-based coordinates)
+        mock.insert(
+            "file.py",
+            41, // 0-based (editor line 42)
+            9,  // 0-based (editor col 10)
+            TypeInfo {
+                type_str: "User".to_string(),
+                confidence: 0.95,
+            },
+        );
+        mock.insert(
+            "file.py",
+            42, // 0-based (editor line 43)
+            4,  // 0-based (editor col 5)
+            TypeInfo {
+                type_str: "List[str]".to_string(),
+                confidence: 0.95,
+            },
+        );
 
-        // Batch query
+        // Batch query with 1-based coordinates (interface convention)
         let queries = vec![
             ("file.py".to_string(), 42, 10),
             ("file.py".to_string(), 43, 5),
@@ -1317,7 +1536,10 @@ mod tests {
         // Should get 2 results (sparse)
         assert_eq!(results.len(), 2);
         assert_eq!(results[&("file.py".to_string(), 42, 10)].type_str, "User");
-        assert_eq!(results[&("file.py".to_string(), 43, 5)].type_str, "List[str]");
+        assert_eq!(
+            results[&("file.py".to_string(), 43, 5)].type_str,
+            "List[str]"
+        );
 
         // Cost should be 3 (all queries counted, even misses)
         assert_eq!(mock.simulated_cost(), 3);
@@ -1325,13 +1547,13 @@ mod tests {
 
     #[test]
     fn test_mock_client_from_json() {
-        // Create a temporary JSON file
+        // Create a temporary JSON file with 0-based coordinates
         use std::io::Write;
         let mut temp_file = tempfile::NamedTempFile::new().unwrap();
 
         let json_data = r#"{
-            "file.py:42:10": { "type_str": "User", "confidence": 0.95 },
-            "file.py:43:5": { "type_str": "List[str]", "confidence": 0.95 }
+            "file.py:41:9": { "type_str": "User", "confidence": 0.95 },
+            "file.py:42:4": { "type_str": "List[str]", "confidence": 0.95 }
         }"#;
 
         temp_file.write_all(json_data.as_bytes()).unwrap();
@@ -1340,7 +1562,8 @@ mod tests {
         // Load from file
         let mock = MockClient::from_oracle_file(temp_file.path()).unwrap();
 
-        // Should have loaded both entries
+        // Query with 1-based coordinates (interface convention)
+        // Editor line 42, col 10 → JSON key "41:9" (0-based)
         assert!(mock.hover("file.py", 42, 10).is_some());
         assert!(mock.hover("file.py", 43, 5).is_some());
         assert!(mock.hover("file.py", 44, 1).is_none());
@@ -1353,18 +1576,28 @@ mod tests {
     #[test]
     fn test_type_resolver_trait() {
         // Test that both LspClient and MockClient implement TypeResolver
-        fn generic_test<T: TypeResolver>(resolver: &T, file: &str, line: u32, col: u32) -> Option<TypeInfo> {
+        fn generic_test<T: TypeResolver>(
+            resolver: &T,
+            file: &str,
+            line: u32,
+            col: u32,
+        ) -> Option<TypeInfo> {
             resolver.hover(file, line, col)
         }
 
-        // MockClient
+        // MockClient - insert with 0-based, query with 1-based
         let mut mock = MockClient::empty();
-        mock.insert("file.py", 42, 10, TypeInfo {
-            type_str: "User".to_string(),
-            confidence: 0.95,
-        });
+        mock.insert(
+            "file.py",
+            41, // 0-based
+            9,  // 0-based
+            TypeInfo {
+                type_str: "User".to_string(),
+                confidence: 0.95,
+            },
+        );
 
-        let result = generic_test(&mock, "file.py", 42, 10);
+        let result = generic_test(&mock, "file.py", 42, 10); // 1-based query
         assert!(result.is_some());
         assert_eq!(result.unwrap().type_str, "User");
 
@@ -1377,14 +1610,19 @@ mod tests {
     #[test]
     fn test_mock_client_cost_tracking() {
         let mut mock = MockClient::empty();
-        mock.insert("file.py", 42, 10, TypeInfo {
-            type_str: "User".to_string(),
-            confidence: 0.95,
-        });
+        mock.insert(
+            "file.py",
+            41, // 0-based
+            9,  // 0-based
+            TypeInfo {
+                type_str: "User".to_string(),
+                confidence: 0.95,
+            },
+        );
 
         // Episode 1
         assert_eq!(mock.simulated_cost(), 0);
-        mock.hover("file.py", 42, 10);
+        mock.hover("file.py", 42, 10); // 1-based query
         assert_eq!(mock.simulated_cost(), 1);
         mock.hover("file.py", 42, 10);
         assert_eq!(mock.simulated_cost(), 2);

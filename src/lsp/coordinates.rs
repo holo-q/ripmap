@@ -21,6 +21,13 @@
 //! - `batch_latency_bias`: Controls wavefront count. 0.0 = sequential (smart,
 //!   3 waves), 1.0 = batch (fast, 1 wave). Trainable latency/quality trade-off.
 //!
+//! - `query_timeout_secs`: LSP query timeout duration. Controls patience vs fail-fast.
+//!
+//! - `max_retries`: Retry attempts for transient failures. Smooths over LSP glitches.
+//!
+//! - `cache_negative_bias`: Probability of caching negative results (query returned None).
+//!   Balances cache efficiency vs recovery from transient errors.
+//!
 //! ## Signal Weights (The "Desire" Vector)
 //!
 //! These weights define what makes a query site valuable:
@@ -30,6 +37,8 @@
 //! - `weight_coherence`: Group gain - shared receiver count (one query → N edges)
 //! - `weight_causality`: Root vs Leaf preference (DAG depth in type inference)
 //! - `weight_bridge`: Betweenness centrality proxy - graph connectivity impact
+//! - `centrality_normalization`: PageRank percentile mapping. Raw PR spans orders of
+//!   magnitude, causing gradient issues. Percentile normalizes to [0, 1].
 //!
 //! ## Attention Beam Direction
 //!
@@ -44,6 +53,8 @@
 //!
 //! - `focus_temperature`: Entropy of sampling distribution (low = tight beam)
 //! - `gated_threshold`: Stochastic dropout for performance
+//! - `exploration_floor`: Minimum exploration rate. Force this fraction through
+//!   even if they fail threshold, preventing "do nothing" local optima.
 //!
 //! ## Structural Plasticity ("Gene Expression")
 //!
@@ -125,7 +136,6 @@ pub struct LspPolicyCoordinates {
     // ========================================================================
     // Resource Physics
     // ========================================================================
-
     /// The "price" of an LSP query. Stop when expected marginal gain < this.
     ///
     /// This is a Lagrangian multiplier, not a crude budget cap. The optimizer
@@ -142,24 +152,98 @@ pub struct LspPolicyCoordinates {
     /// **Training**: L1 adjusts this to balance NDCG vs latency cost.
     pub marginal_utility_floor: f64,
 
-    /// Latency trade-off: 0.0 = Sequential (smart), 1.0 = Batch (fast).
+    /// Latency tolerance: controls diminishing returns decay for wavefront execution.
     ///
-    /// Pure sequential: Query roots, update type cache, re-score, query next wave.
-    /// Maximizes information gain but slowest (3+ wavefronts).
+    /// Instead of hard-coded "run N waves", this coordinate controls the decay rate
+    /// for marginal utility across successive wavefronts. The number of waves emerges
+    /// from the continuous stopping condition in `should_continue_wavefront()`.
     ///
-    /// Pure batch: Query everything at once. Fast but ignores sequential
-    /// information gain (1 wavefront).
+    /// **Mechanics**: Maps to decay rate ∈ [0.9, 0.3]:
+    /// - `bias = 0.0` → `decay = 0.9` (weak decay, tolerates 3+ waves)
+    ///   Sequential mode: each wave needs only slightly higher yield than the last.
+    ///   Maximizes information gain, accepts latency cost.
     ///
-    /// **Compromise**: Generational wavefronts. This coordinate controls the number:
-    /// - 0.0 → 3 waves (Spine, Frontier, Fill)
-    /// - 0.5 → 2 waves (Spine, Fill)
-    /// - 1.0 → 1 wave (Batch)
+    /// - `bias = 1.0` → `decay = 0.3` (strong decay, typically 1 wave)
+    ///   Batch mode: second wave needs >3x the yield of first to continue.
+    ///   Fast execution, limited re-scoring.
+    ///
+    /// - `bias ≈ 0.5` → `decay ≈ 0.6` (moderate decay, typically 2 waves)
+    ///   Balanced: second wave runs if yield is decent, third rarely runs.
+    ///
+    /// **Stopping condition**: At wave N, continue if:
+    /// ```text
+    /// last_yield_rate >= marginal_utility_floor / (decay_rate^N)
+    /// ```
+    ///
+    /// This makes the effective threshold rise with each wave, encoding
+    /// "later waves must have higher yield to justify latency."
+    ///
+    /// **Why continuous?** The old approach had discontinuities at 0.5 and 0.8
+    /// that created gradient dead zones. L1 couldn't optimize through the jumps.
+    /// Now the stopping condition smoothly varies with bias, enabling gradient-based
+    /// discovery of the optimal latency/intelligence trade-off.
     ///
     /// **Range**: [0.0, 1.0]
     ///
-    /// **Training**: L1 discovers optimal latency/accuracy trade-off for the
-    /// specific codebase topology.
+    /// **Training**: L1 tunes this to balance wavefront count vs latency cost:
+    /// - Stable codebases: Lower bias → more waves → exploit sequential gain
+    /// - High-churn codebases: Higher bias → fewer waves → prioritize speed
     pub batch_latency_bias: f64,
+
+    /// Query timeout in seconds. Controls patience for LSP server responses.
+    ///
+    /// **Rationale**: LSP servers can be slow on large codebases or cold starts.
+    /// Higher timeout = more patient (better coverage, slower). Lower timeout =
+    /// fail-fast (worse coverage, faster).
+    ///
+    /// **Range**: [0.5, 30.0]
+    /// - 0.5: Aggressive, fail-fast for quick iteration
+    /// - 5.0: Reasonable default for most servers
+    /// - 30.0: Patient, for expensive cross-project queries
+    ///
+    /// **Training**: L1 tunes based on observed timeout rate. If many queries
+    /// timeout (LSP returns None due to deadline), increase. If timeout rate
+    /// is near-zero, decrease to speed up failure detection.
+    pub query_timeout_secs: f64,
+
+    /// Maximum retry attempts for failed queries (continuous).
+    ///
+    /// **Mechanics**: When an LSP query fails (server error, timeout), retry
+    /// up to floor(max_retries) times with exponential backoff.
+    ///
+    /// **Rationale**: LSP servers can have transient failures (startup, cache
+    /// warming, GC pauses). Retries smooth over these glitches.
+    ///
+    /// **Range**: [0.0, 5.0]
+    /// - 0.0: Never retry (fail-fast, assumes stable server)
+    /// - 1.0: Single retry (good for transient issues)
+    /// - 3.0: Aggressive retrying (for flaky servers)
+    /// - 5.0: Very patient (slow but thorough)
+    ///
+    /// **Training**: L1 monitors transient failure rate (retry succeeded after
+    /// initial failure). If high, increase. If near-zero, decrease to save time.
+    pub max_retries: f64,
+
+    /// Probability of caching negative results (query returned None).
+    ///
+    /// **The Dilemma**: If LSP returns None for a query (symbol not found,
+    /// server error, timeout), should we cache that failure?
+    /// - Yes (1.0): Never re-query. Fast but misses recoverable failures.
+    /// - No (0.0): Always re-query. Slow but catches transient errors.
+    ///
+    /// **Rationale**: Many negative results are permanent (symbol genuinely
+    /// doesn't exist). But some are transient (server not ready, timeout).
+    /// This coordinate balances cache efficiency vs recovery from failures.
+    ///
+    /// **Range**: [0.0, 1.0]
+    /// - 0.0: Never cache negatives (re-query every time)
+    /// - 0.5: Probabilistic caching (50% chance to cache)
+    /// - 0.8: Usually cache (default - most negatives are permanent)
+    /// - 1.0: Always cache (never re-query failures)
+    ///
+    /// **Training**: L1 learns by comparing cache hit rate vs "recovered"
+    /// queries (negative → positive on retry). High recovery rate → lower bias.
+    pub cache_negative_bias: f64,
 
     // ========================================================================
     // Signal Weights (The "Desire" Vector)
@@ -172,7 +256,6 @@ pub struct LspPolicyCoordinates {
     //   score = Σ weight_i * signal_i
     //
     // Then `interaction_mixing` blends this with multiplicative combination.
-
     /// Weight for PageRank centrality score.
     ///
     /// **Signal**: log(pagerank) - centrality in the call graph.
@@ -278,7 +361,6 @@ pub struct LspPolicyCoordinates {
     // softmax([logit_structural, logit_semantic, logit_spatial]) → [p_s, p_e, p_sp]
     //
     // Then we sample/blend query strategies with these probabilities.
-
     /// Logit for structural spread - follow call graph edges.
     ///
     /// **Strategy**: Starting from a seed node, follow outgoing/incoming calls.
@@ -316,7 +398,6 @@ pub struct LspPolicyCoordinates {
     // ========================================================================
     // Navigation
     // ========================================================================
-
     /// Temperature for focus sampling - entropy of the attention beam.
     ///
     /// **Mechanics**: When selecting from scored candidates, use softmax(scores / T).
@@ -351,10 +432,36 @@ pub struct LspPolicyCoordinates {
     /// **Training**: L1 balances coverage vs efficiency.
     pub gated_threshold: f64,
 
+    /// Minimum exploration rate - force this fraction through even if they fail threshold.
+    ///
+    /// **The Economy Paradox**: If `gated_threshold` is too high, no queries are made.
+    /// Cost = 0, but NDCG also doesn't improve. Optimizer settles into a "do nothing"
+    /// local optimum where random exploration (Cost > 0) initially LOWERS reward.
+    /// Gradient is zero - can't escape.
+    ///
+    /// **The Fix**: Epsilon-greedy exploration. Force a minimum fraction of candidates
+    /// through regardless of threshold. This:
+    /// 1. Generates gradient signal even when threshold is high
+    /// 2. Discovers that querying IS valuable
+    /// 3. Escapes the "do nothing" basin
+    ///
+    /// **Mechanics**: In `select_wavefront()`, take the top `exploration_floor` fraction
+    /// of candidates unconditionally (by transformed score), then add additional candidates
+    /// that pass both `gated_threshold` and `marginal_utility_floor`.
+    ///
+    /// **Range**: [0.0, 0.5]
+    /// - 0.0: No forced exploration (can get stuck in "do nothing" optimum)
+    /// - 0.05: Force 5% of candidates through (recommended minimum)
+    /// - 0.1: Force 10% through (moderate exploration)
+    /// - 0.5: Force 50% through (very exploratory, may be wasteful)
+    ///
+    /// **Training**: L1 can reduce this if exploration proves wasteful, but it provides
+    /// a floor that prevents complete stagnation.
+    pub exploration_floor: f64,
+
     // ========================================================================
     // Gene Expression (Structural Plasticity)
     // ========================================================================
-
     /// Mixing parameter: 0.0 = Additive (OR), 1.0 = Multiplicative (AND).
     ///
     /// **The Problem**: Should we combine signals via addition or multiplication?
@@ -383,6 +490,44 @@ pub struct LspPolicyCoordinates {
     ///
     /// **Training**: L2 discovers emergent combination structure via meta-learning.
     pub interaction_mixing: f64,
+
+    // ========================================================================
+    // Centrality Normalization (PageRank Gradient Stabilization)
+    // ========================================================================
+    /// Blend raw PageRank with percentile-normalized centrality.
+    ///
+    /// **The Problem**: PageRank scores span orders of magnitude (0.0001 to 0.1+).
+    /// When logged, this creates a ~7-unit range in log-space:
+    /// - ln(0.0001) = -9.2
+    /// - ln(0.1) = -2.3
+    ///
+    /// This causes three issues during training:
+    /// 1. **Gradient explosion**: Small weight changes cause huge score swings
+    /// 2. **Domination**: High-PR nodes always win, regardless of other signals
+    /// 3. **Brittleness**: Optimal weights depend heavily on corpus PR distribution
+    ///
+    /// **The Solution**: Blend raw centrality with percentile rank:
+    /// ```text
+    /// raw_centrality = pagerank (0.0001 to 0.1+)
+    /// percentile_centrality = pagerank_percentile (0.0 to 1.0)
+    ///
+    /// centrality = (1 - norm) * raw + norm * percentile
+    /// ```
+    ///
+    /// **Rationale**: Percentile normalization:
+    /// - Stabilizes gradients (fixed [0, 1] range)
+    /// - Preserves relative ranking (50th percentile vs 90th)
+    /// - Makes weights corpus-independent (percentile is universal)
+    ///
+    /// **Range**: [0.0, 1.0]
+    /// - 0.0: Pure raw PageRank (corpus-specific, wide dynamic range)
+    /// - 0.5: 50/50 blend (hybrid stability)
+    /// - 1.0: Pure percentile rank (corpus-agnostic, stable gradients)
+    ///
+    /// **Training**: L1 discovers optimal normalization strength for the corpus.
+    /// High-variance corpora (wide PR distribution) benefit from higher normalization.
+    /// Low-variance corpora can use raw PR safely.
+    pub centrality_normalization: f64,
 }
 
 impl Default for LspPolicyCoordinates {
@@ -396,14 +541,17 @@ impl Default for LspPolicyCoordinates {
     fn default() -> Self {
         Self {
             // Resource Physics - conservative defaults
-            marginal_utility_floor: 0.01,  // Middle of log range [0.001, 0.1]
-            batch_latency_bias: 0.3,       // Slight preference for sequential (2-3 waves)
+            marginal_utility_floor: 0.01, // Middle of log range [0.001, 0.1]
+            batch_latency_bias: 0.3,      // Slight preference for sequential (2-3 waves)
+            query_timeout_secs: 5.0,      // Reasonable default for most LSP servers
+            max_retries: 1.0,             // Single retry to handle transient failures
+            cache_negative_bias: 0.8,     // Usually cache negatives (most are permanent)
 
             // Signal Weights - uniform starting point
             weight_centrality: 1.0,
             weight_uncertainty: 1.0,
             weight_coherence: 1.0,
-            weight_causality: 0.5,         // Slight root bias
+            weight_causality: 0.5, // Slight root bias
             weight_bridge: 0.5,
 
             // Attention Beam - equal logits → uniform spread
@@ -412,11 +560,15 @@ impl Default for LspPolicyCoordinates {
             spread_logit_spatial: 0.0,
 
             // Navigation - moderate exploration
-            focus_temperature: 1.0,        // Balanced sampling
-            gated_threshold: 0.1,          // Minimal dropout
+            focus_temperature: 1.0,  // Balanced sampling
+            gated_threshold: 0.1,    // Minimal dropout
+            exploration_floor: 0.05, // Force 5% through to prevent "do nothing" optimum
 
             // Gene Expression - start with additive
-            interaction_mixing: 0.0,       // Pure additive (easier to reason about initially)
+            interaction_mixing: 0.0, // Pure additive (easier to reason about initially)
+
+            // Centrality Normalization - start with raw PageRank (backward compatible)
+            centrality_normalization: 0.0, // Pure raw PR (0.0 to 1.0 enables percentile blending)
         }
     }
 }
@@ -458,9 +610,7 @@ impl LspPolicyCoordinates {
         let max_logit = logits.iter().copied().fold(f64::NEG_INFINITY, f64::max);
 
         // Compute exp(x_i - max)
-        let exp_vals: Vec<f64> = logits.iter()
-            .map(|&x| (x - max_logit).exp())
-            .collect();
+        let exp_vals: Vec<f64> = logits.iter().map(|&x| (x - max_logit).exp()).collect();
 
         let sum: f64 = exp_vals.iter().sum();
 
@@ -484,6 +634,9 @@ impl LspPolicyCoordinates {
             weight_causality: 1.0,
             focus_temperature: 0.1,
             interaction_mixing: 0.0,
+            query_timeout_secs: 2.0,  // Fail-fast for speed
+            max_retries: 0.0,         // No retries, pure speed
+            cache_negative_bias: 1.0, // Always cache negatives (never re-query)
             ..Default::default()
         }
     }
@@ -500,6 +653,9 @@ impl LspPolicyCoordinates {
             weight_causality: 0.2,
             focus_temperature: 1.5,
             interaction_mixing: 0.0,
+            query_timeout_secs: 10.0, // Patient for thorough exploration
+            max_retries: 3.0,         // Aggressive retrying
+            cache_negative_bias: 0.3, // Low caching, re-query often
             ..Default::default()
         }
     }
@@ -562,15 +718,15 @@ mod tests {
         let (s, e, sp) = coords.spread_weights();
 
         // Equal logits → equal weights (1/3 each)
-        assert!((s - 1.0/3.0).abs() < 1e-10);
-        assert!((e - 1.0/3.0).abs() < 1e-10);
-        assert!((sp - 1.0/3.0).abs() < 1e-10);
+        assert!((s - 1.0 / 3.0).abs() < 1e-10);
+        assert!((e - 1.0 / 3.0).abs() < 1e-10);
+        assert!((sp - 1.0 / 3.0).abs() < 1e-10);
     }
 
     #[test]
     fn test_spread_weights_skewed_logits() {
         let coords = LspPolicyCoordinates {
-            spread_logit_structural: 10.0,  // Very high
+            spread_logit_structural: 10.0, // Very high
             spread_logit_semantic: 0.0,
             spread_logit_spatial: 0.0,
             ..Default::default()
@@ -587,9 +743,9 @@ mod tests {
     #[test]
     fn test_spread_weights_negative_logits() {
         let coords = LspPolicyCoordinates {
-            spread_logit_structural: -10.0,  // Very low
+            spread_logit_structural: -10.0, // Very low
             spread_logit_semantic: 0.0,
-            spread_logit_spatial: 5.0,       // High
+            spread_logit_spatial: 5.0, // High
             ..Default::default()
         };
 
@@ -628,7 +784,9 @@ mod tests {
         let json = serde_json::to_string(&coords).unwrap();
         let deserialized: LspPolicyCoordinates = serde_json::from_str(&json).unwrap();
 
-        assert!((coords.marginal_utility_floor - deserialized.marginal_utility_floor).abs() < 1e-10);
+        assert!(
+            (coords.marginal_utility_floor - deserialized.marginal_utility_floor).abs() < 1e-10
+        );
         assert!((coords.weight_centrality - deserialized.weight_centrality).abs() < 1e-10);
         assert!((coords.spread_logit_semantic - deserialized.spread_logit_semantic).abs() < 1e-10);
     }

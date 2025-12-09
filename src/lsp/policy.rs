@@ -68,8 +68,13 @@ use crate::types::{Tag, TagKind};
 pub struct QueryCandidate<'a> {
     /// The tag to potentially query
     pub tag: &'a Tag,
-    /// PageRank score from the call graph
+    /// PageRank score from the call graph (raw, corpus-specific)
     pub pagerank: f64,
+    /// PageRank percentile rank (0.0 = lowest, 1.0 = highest in corpus).
+    /// If None, falls back to raw pagerank for normalization.
+    /// This enables gradient-stabilized centrality scoring by blending
+    /// with raw PR via `centrality_normalization` coordinate.
+    pub pagerank_percentile: Option<f64>,
     /// Confidence from heuristic resolution (0.0 = unknown, 1.0 = certain)
     pub heuristic_confidence: f64,
     /// Coherence: number of other call sites sharing the same receiver.
@@ -150,8 +155,16 @@ impl PolicyEngine {
     ///
     /// This makes the **structure** of the scoring function a trainable coordinate.
     pub fn score_site(&self, candidate: &QueryCandidate) -> f64 {
-        // Extract signals
-        let centrality = candidate.pagerank;
+        // === CENTRALITY NORMALIZATION ===
+        // Blend raw centrality with normalized percentile to stabilize gradients.
+        // centrality_normalization: 0.0 = raw PR, 1.0 = percentile rank
+        let raw_centrality = candidate.pagerank;
+        let percentile_centrality = candidate.pagerank_percentile.unwrap_or(raw_centrality);
+
+        let norm = self.coords.centrality_normalization.clamp(0.0, 1.0);
+        let centrality = (1.0 - norm) * raw_centrality + norm * percentile_centrality;
+
+        // Extract remaining signals
         let uncertainty = 1.0 - candidate.heuristic_confidence;
         let coherence = candidate.coherence;
         let causality = if candidate.is_root { 1.0 } else { 0.0 };
@@ -178,8 +191,7 @@ impl PolicyEngine {
             -self.coords.weight_causality
         };
 
-        let multiplicative =
-            self.coords.weight_centrality * centrality.max(epsilon).ln()
+        let multiplicative = self.coords.weight_centrality * centrality.max(epsilon).ln()
             + self.coords.weight_uncertainty * uncertainty.max(epsilon).ln()
             + self.coords.weight_coherence * (1.0 + coherence).max(epsilon).ln()
             + self.coords.weight_bridge * (1.0 + bridge_score).max(epsilon).ln()
@@ -191,15 +203,16 @@ impl PolicyEngine {
         (1.0 - mixing) * additive + mixing * multiplicative
     }
 
-    /// Select a wavefront batch using gated stochastic attention.
+    /// Select a wavefront batch using gated stochastic attention with exploration floor.
     ///
     /// ## Algorithm
     ///
     /// 1. Score all candidates using `score_site()` (produces log-space scores)
     /// 2. Apply Boltzmann transformation to convert log-space to probability space
     /// 3. Sort by transformed score (descending)
-    /// 4. Apply gated threshold dropout: filter out candidates with score below threshold
-    /// 5. Apply marginal utility floor: stop when expected gain drops below price
+    /// 4. **EXPLORATION FLOOR**: Force minimum fraction through unconditionally (epsilon-greedy)
+    /// 5. Apply gated threshold dropout to remaining candidates
+    /// 6. Apply marginal utility floor: stop when expected gain drops below price
     ///
     /// ## Boltzmann Transformation (Anti-Matter Trap Fix)
     ///
@@ -216,6 +229,27 @@ impl PolicyEngine {
     /// - Low temperature → sharp focus on highest scores
     /// - High temperature → more uniform distribution
     ///
+    /// ## Exploration Floor (Economy Paradox Fix)
+    ///
+    /// **The Problem**: If `gated_threshold` is tuned too high, NO queries are made.
+    /// - Cost = 0 (good!)
+    /// - NDCG = baseline (bad!)
+    /// - Gradient = 0 (optimizer stuck!)
+    ///
+    /// Random exploration (making queries) initially LOWERS reward because Cost > 0
+    /// but NDCG improvement isn't immediate. The optimizer can't discover that
+    /// querying is valuable because the gradient is zero.
+    ///
+    /// **The Fix**: Epsilon-greedy exploration. Force `exploration_floor` fraction
+    /// of candidates through UNCONDITIONALLY (by score rank, not threshold).
+    /// This ensures:
+    /// 1. Non-zero gradient signal even when thresholds are high
+    /// 2. Discovery that querying improves NDCG (which eventually outweighs cost)
+    /// 3. Escape from "do nothing" local optimum
+    ///
+    /// The exploration set takes the TOP-scoring candidates (not random), so we're
+    /// still exploiting the scoring function, just bypassing the threshold gate.
+    ///
     /// ## Gated Threshold (Stochastic Dropout)
     ///
     /// The `gated_threshold` parameter controls attention beam focus:
@@ -224,6 +258,8 @@ impl PolicyEngine {
     ///
     /// This is a form of stochastic dropout that prunes the attention distribution.
     /// Now operates on transformed probabilities in [0, 1] space.
+    ///
+    /// Applied AFTER exploration floor - only affects exploitation candidates.
     ///
     /// ## Marginal Utility Floor (Lagrangian Multiplier)
     ///
@@ -235,13 +271,17 @@ impl PolicyEngine {
     /// This is the Lagrangian multiplier for the latency constraint.
     /// Now operates on transformed probabilities in [0, 1] space.
     ///
+    /// Applied AFTER exploration floor - only affects exploitation candidates.
+    ///
     /// ## Returns
     ///
     /// Tags sorted by score, filtered by thresholds. Ready for batch LSP query.
-    pub fn select_wavefront<'a>(
-        &self,
-        candidates: Vec<QueryCandidate<'a>>,
-    ) -> Vec<&'a Tag> {
+    /// Includes both exploration set (forced through) and exploitation set (threshold-gated).
+    pub fn select_wavefront<'a>(&self, candidates: Vec<QueryCandidate<'a>>) -> Vec<&'a Tag> {
+        if candidates.is_empty() {
+            return vec![];
+        }
+
         // Score all candidates (log-space)
         let scored: Vec<(f64, &Tag)> = candidates
             .iter()
@@ -260,65 +300,127 @@ impl PolicyEngine {
         // Sort by transformed score (descending - highest first)
         transformed.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
 
-        // Apply gated threshold dropout (now in probability space)
-        let gated: Vec<(f64, &Tag)> = transformed
-            .into_iter()
-            .filter(|(prob, _)| *prob >= self.coords.gated_threshold)
+        // === EXPLORATION FLOOR ===
+        // Force minimum fraction through unconditionally to prevent "do nothing" optimum.
+        // Take top-scoring candidates (not random) - still exploiting the scoring function.
+        let min_explore = (candidates.len() as f64 * self.coords.exploration_floor).ceil() as usize;
+        let min_explore = min_explore.max(1).min(candidates.len()); // At least 1, at most all
+
+        // Exploration set: Top min_explore candidates, unconditional
+        let mut selected: Vec<&Tag> = transformed
+            .iter()
+            .take(min_explore)
+            .map(|(_, tag)| *tag)
             .collect();
 
-        // Apply marginal utility floor (now in probability space)
-        // Stop when transformed score drops below the learned "price"
-        let selected: Vec<&Tag> = gated
-            .into_iter()
+        // === EXPLOITATION (THRESHOLD-GATED) ===
+        // Remaining candidates must pass both gated_threshold and marginal_utility_floor
+        let exploitation: Vec<&Tag> = transformed
+            .iter()
+            .skip(min_explore)
+            .filter(|(prob, _)| *prob >= self.coords.gated_threshold)
             .take_while(|(prob, _)| *prob >= self.coords.marginal_utility_floor)
-            .map(|(_, tag)| tag)
+            .map(|(_, tag)| *tag)
             .collect();
+
+        selected.extend(exploitation);
 
         selected
     }
 
-    /// Determine the number of wavefront generations based on batch_latency_bias.
+    /// Check if we should run another wavefront generation.
     ///
-    /// ## Wavefront Execution Model
+    /// ## Dissolved Decision Tree Philosophy
     ///
-    /// Pure batch (1 wave) is fast but ignores sequential information gain.
-    /// Pure sequential (3+ waves) is intelligent but slow.
-    /// Compromise: parameterize the trade-off.
+    /// Instead of hard-coded thresholds ("run exactly N waves"), use a continuous
+    /// stopping condition based on marginal utility and latency tolerance.
     ///
-    /// - `batch_latency_bias = 0.0`: 3 waves (sequential, smart)
-    ///   * Gen 1 (Spine): Query high-centrality roots
-    ///   * Gen 2 (Frontier): Re-score with updated type cache
-    ///   * Gen 3 (Fill): Cleanup remaining uncertainty
+    /// This replaces the discrete `num_generations()` budget with a Lagrangian
+    /// stopping check: "Is the next wave worth the latency cost?"
     ///
-    /// - `batch_latency_bias = 1.0`: 1 wave (batch, fast)
-    ///   * Query everything in parallel, no re-scoring
+    /// ## Algorithm
     ///
-    /// - `batch_latency_bias ∈ (0, 1)`: Interpolate
-    ///   * 0.0 - 0.5: 3 waves
-    ///   * 0.5 - 0.8: 2 waves
-    ///   * 0.8 - 1.0: 1 wave
+    /// 1. **Base check**: Did last wave produce enough value?
+    ///    If `last_yield_rate < marginal_utility_floor`, stop immediately.
     ///
-    /// ## Design Rationale
+    /// 2. **Diminishing returns**: Each successive wave is less valuable.
+    ///    Apply exponential decay based on `batch_latency_bias`:
+    ///    - High bias (→1.0): Strong decay → fewer waves (batch mode)
+    ///    - Low bias (→0.0): Weak decay → more waves (sequential mode)
     ///
-    /// This makes the execution strategy a **continuous coordinate**.
-    /// L1/L2 can discover the optimal latency/intelligence trade-off for each corpus.
+    /// 3. **Adjusted threshold**: The effective threshold rises with each wave:
+    ///    `threshold_wave_N = marginal_utility_floor / decay^N`
     ///
-    /// High-churn codebases might prefer 1 wave (speed matters, graph changes fast).
-    /// Stable codebases might prefer 3 waves (graph is reliable, intelligence pays off).
-    pub fn num_generations(&self) -> usize {
-        let bias = self.coords.batch_latency_bias.clamp(0.0, 1.0);
-
-        // Map bias to generation count
-        // 0.0 → 3 waves (fully sequential)
-        // 0.5 → 2 waves (moderate)
-        // 1.0 → 1 wave (fully batched)
-        if bias < 0.5 {
-            3
-        } else if bias < 0.8 {
-            2
-        } else {
-            1
+    ///    This encodes: "Later waves must have higher yield to justify latency."
+    ///
+    /// ## Parameters
+    ///
+    /// - `last_yield_rate`: Edges resolved per query in the previous wave.
+    ///   Measures actual productivity of the last wavefront.
+    ///
+    /// - `wave_index`: Which wave we're considering (0-indexed).
+    ///   - 0: First wave (Spine)
+    ///   - 1: Second wave (Frontier)
+    ///   - 2: Third wave (Fill)
+    ///   - ...
+    ///
+    /// ## How This Replaces num_generations()
+    ///
+    /// The old approach hard-coded: "run exactly 1, 2, or 3 waves based on bias."
+    /// This created discontinuities at 0.5 and 0.8 that L1 cannot optimize through.
+    ///
+    /// The new approach asks: "Did the last wave produce enough value to justify
+    /// another?" The answer depends continuously on:
+    /// - The actual yield from the last wave (empirical data)
+    /// - The marginal utility floor (learned price)
+    /// - The batch_latency_bias (decay rate, continuous)
+    /// - The wave index (diminishing returns)
+    ///
+    /// This makes the budget emerge from the value landscape, not from a discrete lookup.
+    ///
+    /// ## Training Dynamics
+    ///
+    /// - **Low batch_latency_bias** (→0.0): Weak decay → tolerates 3+ waves
+    ///   L1 discovers this is optimal for stable codebases where sequential gain is high.
+    ///
+    /// - **High batch_latency_bias** (→1.0): Strong decay → stops after 1 wave
+    ///   L1 discovers this is optimal for high-churn codebases where speed matters.
+    ///
+    /// - **Middle bias** (≈0.5): Moderate decay → 2 waves typical
+    ///   Balanced latency/intelligence trade-off.
+    ///
+    /// The optimizer smoothly navigates this trade-off without hitting discontinuities.
+    ///
+    /// ## Returns
+    ///
+    /// `true` if we should run another wavefront, `false` if we should stop.
+    pub fn should_continue_wavefront(&self, last_yield_rate: f64, wave_index: usize) -> bool {
+        // Base check: Did last wave meet minimum utility?
+        if last_yield_rate < self.coords.marginal_utility_floor {
+            return false;
         }
+
+        // Exponential decay based on batch_latency_bias
+        // High bias → strong decay (few waves)
+        // Low bias → weak decay (many waves)
+        //
+        // We map bias ∈ [0, 1] to decay_rate ∈ [0.9, 0.3]:
+        // - bias=0.0 → decay=0.9 (weak decay, tolerates many waves)
+        // - bias=1.0 → decay=0.3 (strong decay, stops quickly)
+        let decay_rate = 0.9 - 0.6 * self.coords.batch_latency_bias.clamp(0.0, 1.0);
+
+        // Apply diminishing returns: each wave must clear a higher bar
+        // decay^0 = 1.0 (first wave, no penalty)
+        // decay^1 = 0.9 (second wave, slight penalty)
+        // decay^2 = 0.81 (third wave, stronger penalty)
+        let decay = decay_rate.powi(wave_index as i32);
+
+        // Adjusted threshold rises with each wave
+        // Guard against division by very small decay values
+        let adjusted_threshold = self.coords.marginal_utility_floor / decay.max(0.01);
+
+        // Continue if yield exceeds the adjusted threshold
+        last_yield_rate >= adjusted_threshold
     }
 
     /// Check if we should continue querying based on marginal utility.
@@ -465,6 +567,7 @@ mod tests {
         let candidate = QueryCandidate {
             tag: &tag,
             pagerank: 0.5,
+            pagerank_percentile: None,
             heuristic_confidence: 0.2, // High uncertainty (0.8)
             coherence: 5.0,
             is_root: true,
@@ -476,7 +579,12 @@ mod tests {
         // Should be additive combination
         // ln(0.5) + 0.8 + ln(6) + 1.0 + ln(3)
         let expected = 0.5_f64.ln() + 0.8 + 6.0_f64.ln() + 1.0 + 3.0_f64.ln();
-        assert!((score - expected).abs() < 0.01, "score={}, expected={}", score, expected);
+        assert!(
+            (score - expected).abs() < 0.01,
+            "score={}, expected={}",
+            score,
+            expected
+        );
     }
 
     #[test]
@@ -498,9 +606,10 @@ mod tests {
         let candidate = QueryCandidate {
             tag: &tag,
             pagerank: 0.5,
+            pagerank_percentile: None,
             heuristic_confidence: 0.2, // Uncertainty = 0.8
             coherence: 5.0,
-            is_root: false, // Not a root, so causality_mult = -weight_causality
+            is_root: false,    // Not a root, so causality_mult = -weight_causality
             bridge_score: 2.0, // Worker 2 is adding this field
         };
 
@@ -514,7 +623,12 @@ mod tests {
             + 1.0 * 6.0_f64.ln()
             + 1.0 * 3.0_f64.ln()
             + (-1.0); // Non-root penalty
-        assert!((score - expected).abs() < 0.01, "score={}, expected={}", score, expected);
+        assert!(
+            (score - expected).abs() < 0.01,
+            "score={}, expected={}",
+            score,
+            expected
+        );
     }
 
     #[test]
@@ -539,6 +653,7 @@ mod tests {
             QueryCandidate {
                 tag: &tag1,
                 pagerank: 0.8,
+                pagerank_percentile: None,
                 heuristic_confidence: 0.1, // High uncertainty
                 coherence: 0.0,
                 is_root: true,
@@ -547,6 +662,7 @@ mod tests {
             QueryCandidate {
                 tag: &tag2,
                 pagerank: 0.1,
+                pagerank_percentile: None,
                 heuristic_confidence: 0.9, // Low uncertainty
                 coherence: 0.0,
                 is_root: false,
@@ -583,6 +699,7 @@ mod tests {
             QueryCandidate {
                 tag: &tag1,
                 pagerank: 0.9,
+                pagerank_percentile: None,
                 heuristic_confidence: 0.1,
                 coherence: 0.0,
                 is_root: true,
@@ -591,6 +708,7 @@ mod tests {
             QueryCandidate {
                 tag: &tag2,
                 pagerank: 0.5,
+                pagerank_percentile: None,
                 heuristic_confidence: 0.5,
                 coherence: 0.0,
                 is_root: false,
@@ -606,27 +724,82 @@ mod tests {
     }
 
     #[test]
-    fn test_num_generations_mapping() {
-        let coords_sequential = LspPolicyCoordinates {
-            batch_latency_bias: 0.0, // Fully sequential
+    fn test_should_continue_wavefront_sequential() {
+        // Low batch_latency_bias → weak decay → tolerates many waves
+        let coords = LspPolicyCoordinates {
+            batch_latency_bias: 0.0, // Fully sequential (decay = 0.9)
+            marginal_utility_floor: 0.1,
             ..Default::default()
         };
-        let engine_seq = PolicyEngine::new(coords_sequential);
-        assert_eq!(engine_seq.num_generations(), 3);
+        let engine = PolicyEngine::new(coords);
 
-        let coords_moderate = LspPolicyCoordinates {
-            batch_latency_bias: 0.6,
-            ..Default::default()
-        };
-        let engine_mod = PolicyEngine::new(coords_moderate);
-        assert_eq!(engine_mod.num_generations(), 2);
+        // High yield (0.2) should continue through multiple waves
+        assert!(engine.should_continue_wavefront(0.2, 0)); // Wave 0: threshold = 0.1 / 0.9^0 = 0.1
+        assert!(engine.should_continue_wavefront(0.2, 1)); // Wave 1: threshold = 0.1 / 0.9^1 ≈ 0.111
+        assert!(engine.should_continue_wavefront(0.2, 2)); // Wave 2: threshold = 0.1 / 0.9^2 ≈ 0.123
 
-        let coords_batched = LspPolicyCoordinates {
-            batch_latency_bias: 1.0, // Fully batched
+        // Moderate yield (0.12) should continue for a few waves then stop
+        // Wave 2: threshold = 0.1 / 0.9^2 ≈ 0.123 → 0.12 < 0.123 → stops
+        assert!(engine.should_continue_wavefront(0.12, 0));  // threshold = 0.1
+        assert!(engine.should_continue_wavefront(0.12, 1));  // threshold ≈ 0.111
+        assert!(!engine.should_continue_wavefront(0.12, 2)); // threshold ≈ 0.123 → stops
+    }
+
+    #[test]
+    fn test_should_continue_wavefront_batched() {
+        // High batch_latency_bias → strong decay → stops quickly
+        let coords = LspPolicyCoordinates {
+            batch_latency_bias: 1.0, // Fully batched (decay = 0.3)
+            marginal_utility_floor: 0.1,
             ..Default::default()
         };
-        let engine_batch = PolicyEngine::new(coords_batched);
-        assert_eq!(engine_batch.num_generations(), 1);
+        let engine = PolicyEngine::new(coords);
+
+        // Even high yield should stop quickly due to strong decay
+        assert!(engine.should_continue_wavefront(0.5, 0)); // Wave 0: threshold = 0.1 / 0.3^0 = 0.1
+        assert!(engine.should_continue_wavefront(0.5, 1)); // Wave 1: threshold = 0.1 / 0.3^1 ≈ 0.333
+        assert!(!engine.should_continue_wavefront(0.5, 2)); // Wave 2: threshold = 0.1 / 0.3^2 ≈ 1.11 (stops)
+
+        // Moderate yield stops immediately at wave 1
+        assert!(engine.should_continue_wavefront(0.3, 0));
+        assert!(!engine.should_continue_wavefront(0.3, 1));
+    }
+
+    #[test]
+    fn test_should_continue_wavefront_moderate() {
+        // Medium batch_latency_bias → moderate decay → 2-3 waves typical
+        let coords = LspPolicyCoordinates {
+            batch_latency_bias: 0.5, // Moderate (decay ≈ 0.6)
+            marginal_utility_floor: 0.1,
+            ..Default::default()
+        };
+        let engine = PolicyEngine::new(coords);
+
+        // Good yield continues for 2-3 waves
+        assert!(engine.should_continue_wavefront(0.3, 0)); // Wave 0: threshold = 0.1 / 0.6^0 = 0.1
+        assert!(engine.should_continue_wavefront(0.3, 1)); // Wave 1: threshold = 0.1 / 0.6^1 ≈ 0.167
+        assert!(engine.should_continue_wavefront(0.3, 2)); // Wave 2: threshold = 0.1 / 0.6^2 ≈ 0.278
+
+        // Lower yield stops at wave 2
+        assert!(engine.should_continue_wavefront(0.2, 0));
+        assert!(engine.should_continue_wavefront(0.2, 1));
+        assert!(!engine.should_continue_wavefront(0.2, 2));
+    }
+
+    #[test]
+    fn test_should_continue_wavefront_base_check() {
+        // Base check: yield below marginal_utility_floor always stops
+        let coords = LspPolicyCoordinates {
+            batch_latency_bias: 0.0, // Even with sequential preference
+            marginal_utility_floor: 0.5,
+            ..Default::default()
+        };
+        let engine = PolicyEngine::new(coords);
+
+        // Low yield stops immediately regardless of wave index
+        assert!(!engine.should_continue_wavefront(0.3, 0));
+        assert!(!engine.should_continue_wavefront(0.3, 1));
+        assert!(!engine.should_continue_wavefront(0.3, 2));
     }
 
     #[test]
@@ -666,6 +839,7 @@ mod tests {
         let candidate_root = QueryCandidate {
             tag: &tag_root,
             pagerank: 0.5,
+            pagerank_percentile: None,
             heuristic_confidence: 0.5,
             coherence: 0.0,
             is_root: true, // Definition
@@ -675,6 +849,7 @@ mod tests {
         let candidate_leaf = QueryCandidate {
             tag: &tag_leaf,
             pagerank: 0.5,
+            pagerank_percentile: None,
             heuristic_confidence: 0.5,
             coherence: 0.0,
             is_root: false, // Reference
@@ -687,7 +862,7 @@ mod tests {
         // Root should score higher due to causality weight
         assert!(score_root > score_leaf);
         assert!((score_root - 10.0).abs() < 0.01); // 1.0 * 10.0
-        assert!((score_leaf - 0.0).abs() < 0.01);  // 0.0 * 10.0
+        assert!((score_leaf - 0.0).abs() < 0.01); // 0.0 * 10.0
     }
     #[test]
     fn test_neighbor_weights_sum_to_one() {
@@ -703,7 +878,11 @@ mod tests {
 
         // Weights must sum to 1.0
         let sum = weights.structural + weights.semantic + weights.spatial;
-        assert!((sum - 1.0).abs() < 1e-10, "Weights must sum to 1.0, got {}", sum);
+        assert!(
+            (sum - 1.0).abs() < 1e-10,
+            "Weights must sum to 1.0, got {}",
+            sum
+        );
 
         // All weights must be non-negative and <= 1.0
         assert!(weights.structural >= 0.0 && weights.structural <= 1.0);
@@ -728,15 +907,15 @@ mod tests {
         let weights = engine.neighbor_weights();
 
         // Equal logits should give equal weights (1/3 each)
-        assert!((weights.structural - 1.0/3.0).abs() < 1e-10);
-        assert!((weights.semantic - 1.0/3.0).abs() < 1e-10);
-        assert!((weights.spatial - 1.0/3.0).abs() < 1e-10);
+        assert!((weights.structural - 1.0 / 3.0).abs() < 1e-10);
+        assert!((weights.semantic - 1.0 / 3.0).abs() < 1e-10);
+        assert!((weights.spatial - 1.0 / 3.0).abs() < 1e-10);
     }
 
     #[test]
     fn test_neighbor_weights_structural_dominant() {
         let coords = LspPolicyCoordinates {
-            spread_logit_structural: 10.0,  // Very high
+            spread_logit_structural: 10.0, // Very high
             spread_logit_semantic: 0.0,
             spread_logit_spatial: 0.0,
             ..Default::default()
@@ -746,9 +925,137 @@ mod tests {
         let weights = engine.neighbor_weights();
 
         // Structural should dominate
-        assert!(weights.structural > 0.99, "Structural weight should be > 0.99, got {}", weights.structural);
+        assert!(
+            weights.structural > 0.99,
+            "Structural weight should be > 0.99, got {}",
+            weights.structural
+        );
         assert!(weights.semantic < 0.01);
         assert!(weights.spatial < 0.01);
     }
 
+    #[test]
+    fn test_exploration_floor_forces_queries() {
+        // Economy Paradox scenario: gated_threshold is prohibitively high
+        let coords = LspPolicyCoordinates {
+            gated_threshold: 0.99,        // Almost impossible to pass
+            marginal_utility_floor: 0.99, // Also very high
+            exploration_floor: 0.1,       // Force 10% through
+            weight_centrality: 1.0,
+            weight_uncertainty: 1.0,
+            weight_coherence: 0.0,
+            weight_causality: 0.0,
+            weight_bridge: 0.0,
+            interaction_mixing: 0.0,
+            ..Default::default()
+        };
+
+        let engine = PolicyEngine::new(coords);
+
+        // Create 10 low-scoring candidates that would normally be filtered out
+        let tags: Vec<Tag> = (0..10)
+            .map(|i| make_test_tag(&format!("tag_{}", i), TagKind::Ref))
+            .collect();
+
+        let candidates: Vec<QueryCandidate> = tags
+            .iter()
+            .map(|t| QueryCandidate {
+                tag: t,
+                pagerank: 0.001,
+                pagerank_percentile: None,
+                // Very low PR
+                heuristic_confidence: 0.9, // High confidence (low uncertainty = 0.1)
+                coherence: 0.0,
+                bridge_score: 0.0,
+                is_root: false,
+            })
+            .collect();
+
+        let selected = engine.select_wavefront(candidates);
+
+        // Should have at least 1 (ceil(10 * 0.1) = 1) due to exploration floor
+        assert!(
+            selected.len() >= 1,
+            "Exploration floor should force at least 1 query, got {}",
+            selected.len()
+        );
+
+        // Specifically, should get exactly 1 (the exploration floor minimum)
+        // since none would pass the high thresholds
+        assert_eq!(
+            selected.len(),
+            1,
+            "With prohibitive thresholds, should get exactly the exploration floor count"
+        );
+    }
+
+    #[test]
+    fn test_exploration_floor_empty_candidates() {
+        let coords = LspPolicyCoordinates {
+            exploration_floor: 0.1,
+            ..Default::default()
+        };
+
+        let engine = PolicyEngine::new(coords);
+        let selected = engine.select_wavefront(vec![]);
+
+        // Empty input should produce empty output
+        assert_eq!(selected.len(), 0);
+    }
+
+    #[test]
+    fn test_centrality_normalization() {
+        // With raw centrality (norm = 0.0)
+        let coords_raw = LspPolicyCoordinates {
+            centrality_normalization: 0.0,
+            weight_centrality: 1.0,
+            weight_uncertainty: 0.0,
+            weight_coherence: 0.0,
+            weight_causality: 0.0,
+            weight_bridge: 0.0,
+            interaction_mixing: 0.0,
+            ..Default::default()
+        };
+
+        // With percentile centrality (norm = 1.0)
+        let coords_norm = LspPolicyCoordinates {
+            centrality_normalization: 1.0,
+            weight_centrality: 1.0,
+            weight_uncertainty: 0.0,
+            weight_coherence: 0.0,
+            weight_causality: 0.0,
+            weight_bridge: 0.0,
+            interaction_mixing: 0.0,
+            ..Default::default()
+        };
+
+        let engine_raw = PolicyEngine::new(coords_raw);
+        let engine_norm = PolicyEngine::new(coords_norm);
+
+        let tag = make_test_tag("test", TagKind::Def);
+
+        // Low raw PR but high percentile
+        let candidate = QueryCandidate {
+            tag: &tag,
+            pagerank: 0.001,  // Very low raw
+            pagerank_percentile: Some(0.9), // But high percentile
+            heuristic_confidence: 0.5,
+            coherence: 0.0,
+            bridge_score: 0.0,
+            is_root: false,
+        };
+
+        let score_raw = engine_raw.score_site(&candidate);
+        let score_norm = engine_norm.score_site(&candidate);
+
+        // Normalized should score higher (percentile 0.9 vs raw 0.001)
+        // Raw: ln(0.001) ≈ -6.9
+        // Norm: ln(0.9) ≈ -0.105
+        assert!(
+            score_norm > score_raw,
+            "Percentile normalization should boost low-raw high-percentile nodes. raw={}, norm={}",
+            score_raw,
+            score_norm
+        );
+    }
 }
