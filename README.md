@@ -1,10 +1,33 @@
 # ripmap
 
-Ultra-fast codebase cartography for LLMs.
+Codebase cartography for LLMs.
 
-ripmap reveals the load-bearing structure of your codebase. Not by size, but by
+ripmap learns to navigate code. Not by keyword matching, but by understanding
 structural significance. It uses tree-sitter parsing, PageRank on the symbol
-graph, and git-aware signals to surface what matters.
+graph, git-aware temporal signals, and LLM-driven optimization to surface
+what matters.
+
+## The Vision
+
+ripmap is not a search tool. It's a **Cognitive Mirror**—a machine that learns
+the algorithm for finding relevant code, not just the code itself.
+
+```
+Traditional Search: query → pattern match → results
+ripmap:             query → learned navigation policy → ranked context
+```
+
+Under the hood, ripmap is a **Recurrent Graph Neural Network** with ~55 trainable
+coordinates. These aren't hyperparameters—they're the **Physics Constants of Code
+Navigation**:
+
+- **PageRank damping** (α): How far should importance spread?
+- **Strategy weights**: Trust name matching vs. type hints vs. imports?
+- **Acceptance gates**: When is a candidate "good enough"?
+- **Focus decay**: How quickly does relevance fade from the query?
+
+The hypothesis: these constants are **universal**. A single set of 55 numbers
+governs navigation in Python, Rust, TypeScript, Go—any codebase.
 
 ## Example
 
@@ -69,6 +92,112 @@ $ cargo build --release
 $ ./target/release/ripmap --help
 ```
 
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              COGNITIVE MIRROR                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐  │
+│  │   Shadow    │───▶│  PageRank   │───▶│   Policy    │───▶│    Final    │  │
+│  │    Pass     │    │   (GNN)     │    │   Engine    │    │    Pass     │  │
+│  └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘  │
+│        │                  │                  │                  │          │
+│        ▼                  ▼                  ▼                  ▼          │
+│   High Recall        Structural         Gating &          High Precision   │
+│   Name Match         Importance         Wavefront         LSP-Verified     │
+│                                                                             │
+│  ════════════════════════════════════════════════════════════════════════  │
+│                         55 Trainable Coordinates                            │
+│  ════════════════════════════════════════════════════════════════════════  │
+│                                                                             │
+│   Shadow Strategy: name_match_weight, heuristic_confidence, ...            │
+│   Final Strategy:  type_hint_weight, import_weight, same_file_weight, ...  │
+│   Policy:          acceptance_bias, selection_temp, marginal_utility, ...  │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### The Bicameral Pipeline
+
+ripmap uses a two-hemisphere architecture inspired by how humans search:
+
+1. **Shadow Pass** (Right Brain): Cast a wide net. High recall via fuzzy name
+   matching. Seeds the graph with candidates.
+
+2. **PageRank** (Corpus Callosum): Propagate importance through the symbol graph.
+   Central APIs and load-bearing functions rise to the top.
+
+3. **Policy Engine** (Prefrontal Cortex): Gating decisions. Should we continue
+   exploring? Is this candidate worth keeping?
+
+4. **Final Pass** (Left Brain): Verify with precision. LSP-style type checking,
+   import validation. Prune false positives.
+
+### Dissolved Decision Trees
+
+Traditional code has discrete branches:
+```rust
+match strategy {
+    Strategy::Greedy => ...,
+    Strategy::Exploratory => ...,
+}
+```
+
+ripmap "dissolves" these into continuous coordinates:
+```rust
+let score = λ * greedy_signal + (1-λ) * exploration_bonus;
+```
+
+This enables **Liquid Logic**—the system can be "30% more greedy" rather than
+flipping a binary switch. Every decision becomes a tunable dial.
+
+## Training
+
+ripmap is trained by **LLMs reasoning about why rankings fail**. This is
+mesa-optimization where the inner optimizer is Claude, Gemini, or Codex.
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│                    LLM Mesa-Optimization                           │
+├────────────────────────────────────────────────────────────────────┤
+│  Failures → Claude → "boost_chat too high drowns structural..."   │
+│                 ↓                                                  │
+│         {param: [direction, magnitude, rationale]}                 │
+│                                                                    │
+│  Power: Semantic. Knows WHY rankings fail, proposes fixes.        │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+The "gradient" emerges from reasoning in concept space:
+
+```json
+{
+  "diagnosis": "High-PR distractors from unrelated modules flooding results",
+  "proposed_changes": {
+    "pagerank_alpha": ["decrease", "medium", "Reduce global spread"],
+    "boost_focus_match": ["increase", "small", "Strengthen local signal"]
+  }
+}
+```
+
+### Two-Level Training Stack
+
+- **L1 (Inner Loop)**: Claude proposes parameter changes based on NDCG failures
+- **L2 (Outer Loop)**: Gemini evolves the prompt that steers L1's reasoning
+
+```console
+$ ./target/release/ripmap-train \
+    --curated \
+    --reason \
+    --episodes 100 \
+    --agent claude
+```
+
+Ground truth comes from **git history**—files that changed together in bugfix
+commits have causal dependencies that ripmap learns to predict.
+
 ## Usage
 
 ```
@@ -94,39 +223,14 @@ Options:
 
 ### Common patterns
 
-Map entire codebase:
 ```console
-$ ripmap .
-```
-
-Focus on specific file:
-```console
-$ ripmap src/lib.rs
-```
-
-Semantic search:
-```console
-$ ripmap --focus "auth parser"
-```
-
-Quick overview (fewer tokens):
-```console
-$ ripmap --tokens 2048
-```
-
-Deep dive with signatures:
-```console
-$ ripmap --tokens 32768
-```
-
-Rust files only:
-```console
-$ ripmap -e rs
-```
-
-Full file contents for small projects:
-```console
-$ ripmap --join -e rs
+$ ripmap .                          # Map entire codebase
+$ ripmap src/lib.rs                 # Focus on specific file
+$ ripmap --focus "auth parser"      # Semantic search
+$ ripmap --tokens 2048              # Quick overview
+$ ripmap --tokens 32768             # Deep dive
+$ ripmap -e rs                      # Rust files only
+$ ripmap --join -e rs               # Full file contents
 ```
 
 ## Configuration
@@ -139,69 +243,19 @@ No config needed for most projects.
 | File | What's extracted |
 |------|------------------|
 | `ripmap.toml` | Native config (preferred) |
-| `pyproject.toml` | `[tool.ripmap]` → `[tool.ty]` → `[tool.ruff]` → `[tool.pyright]` → ... |
+| `pyproject.toml` | `[tool.ripmap]` → `[tool.ty]` → `[tool.ruff]` → ... |
 | `tsconfig.json` | `include` / `exclude` |
 | `biome.json` | `files.include` / `files.ignore` |
-| `package.json` | `eslintConfig.ignorePatterns` |
-| `deno.json` | `include` / `exclude` |
 | `Cargo.toml` | `[workspace]` members |
-| `composer.json` | `autoload.psr-4` directories |
-| `nx.json` | `workspaceLayout` |
-| `.prettierignore` | gitignore-style patterns |
-
-Use `--verbose` to see which config was detected:
-
-```console
-$ ripmap --verbose .
-📂 Scanning: /path/to/project
-   Config: /path/to/project/pyproject.toml [ruff]
-   Include: src/**
-   Exclude: **/node_modules/**, **/.git/**, ... (+14 more)
-```
 
 ### Native config (ripmap.toml)
 
 ```toml
 include = ["src/**", "lib/**"]
 exclude = ["**/generated/**"]
-extend-exclude = ["**/vendor/**"]  # adds to defaults
-src = ["src", "lib"]               # source roots
+extend-exclude = ["**/vendor/**"]
+src = ["src", "lib"]
 ```
-
-## How it works
-
-```
-File Discovery → Tag Extraction → Graph Building → PageRank → Boosts → Rendering
-      ↓              ↓                ↓              ↓          ↓          ↓
-   config        tree-sitter      petgraph      iterative   contextual   ANSI
-   cascade        + .scm          DiGraph        power       signals     colors
-```
-
-1. **File Discovery**: Auto-detects config, respects `.gitignore`, filters by extension
-2. **Tag Extraction**: tree-sitter parses symbols (classes, functions, methods)
-3. **Graph Building**: References between symbols become directed edges
-4. **PageRank**: Iterative power method computes importance scores
-5. **Contextual Boosts**: Focus query, git recency, call graph, temporal coupling
-6. **Rendering**: Ranked output within token budget
-
-### Why PageRank?
-
-Functions that are called by many others rank higher. Entry points and central
-APIs surface naturally. This mimics how humans navigate code: start at the
-important nodes, follow references.
-
-### Supported languages
-
-- Python
-- Rust
-- JavaScript/TypeScript
-- Go
-- Java
-- C/C++
-- Ruby
-- PHP
-
-Additional languages via tree-sitter grammar files in `queries/`.
 
 ## Performance
 
@@ -212,8 +266,6 @@ Designed for 1000x speedup over interpreted alternatives:
 - String interning for symbol names
 - Persistent tag cache with redb
 
-Typical performance on medium codebases (~1000 files):
-
 | Stage | Time |
 |-------|------|
 | File discovery | ~50ms |
@@ -221,7 +273,11 @@ Typical performance on medium codebases (~1000 files):
 | PageRank | ~10ms |
 | **Total** | **~200ms** |
 
-First run builds cache; subsequent runs are near-instant.
+## Supported Languages
+
+Python, Rust, JavaScript/TypeScript, Go, Java, C/C++, Ruby, PHP.
+
+Additional languages via tree-sitter grammar files in `queries/`.
 
 ## MCP Server
 
@@ -231,25 +287,10 @@ ripmap includes an MCP (Model Context Protocol) server for IDE integration:
 $ ripmap-mcp
 ```
 
-## Architecture
+## Documentation
 
-```
-src/
-├── main.rs              # CLI entry point
-├── lib.rs               # Public API
-├── config.rs            # Auto-detect project config
-├── discovery/           # File finding
-├── extraction/          # tree-sitter parsing
-├── callgraph/           # Call relationship resolution
-├── ranking/
-│   ├── pagerank.rs      # Core ranking algorithm
-│   ├── boosts.rs        # Contextual multipliers
-│   ├── focus.rs         # Semantic search
-│   └── git.rs           # Recency/churn signals
-├── rendering/           # Terminal output
-├── cache/               # Persistent tag storage
-└── mcp/                 # MCP server
-```
+- [LLM Mesa-Optimization](docs/10_LLM_MESA_OPTIMIZATION.md) - The training vision
+- [Dissolved Decision Trees](docs/8_DISSOLVED_DECISION_TREES.md) - Continuous coordinates
 
 ## Related
 
