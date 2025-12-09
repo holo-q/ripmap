@@ -11,7 +11,7 @@
 //!
 //! ```text
 //! Additive:       score = w_a*A + w_b*B + w_c*C + ...
-//! Multiplicative: score = ln(A * B * C * ...)
+//! Multiplicative: score = w_a*ln(A) + w_b*ln(B) + ... = ln(A^w_a * B^w_b * ...)
 //! Blended:        score = (1-mix)*additive + mix*multiplicative
 //! ```
 //!
@@ -28,6 +28,29 @@
 //!
 //! The `batch_latency_bias` coordinate controls the trade-off between
 //! sequential intelligence (3 waves) and batch throughput (1 wave).
+//!
+//! ## Attention Beam Direction (Neighbor Selection)
+//!
+//! The `spread_logit_*` coordinates control HOW we expand wavefronts - which
+//! neighbors to consider when generating candidates from resolved nodes:
+//!
+//! - **Structural** (call graph): Follow caller → callee, callee → caller edges
+//! - **Semantic** (type hierarchy): Follow subtype → supertype, method → method edges
+//! - **Spatial** (file locality): Prefer same file, same directory
+//!
+//! These logits are softmax-normalized to create a probability simplex (sum = 1.0).
+//! This prevents "dimensionality fighting" during training - L1/L2 can tune logits
+//! independently without constraint satisfaction conflicts.
+//!
+//! The spread weights are used during candidate generation to weight neighbor selection.
+//! High structural weight → follow call edges aggressively.
+//! High semantic weight → cluster queries by type.
+//! High spatial weight → exploit file locality.
+//!
+//! **Key distinction**: Spread weights control WHICH candidates to consider (neighbor
+//! expansion), while signal weights control HOW to score those candidates (ranking).
+//! This separation lets the optimizer independently tune exploration strategy vs
+//! exploitation preference.
 
 use crate::lsp::coordinates::LspPolicyCoordinates;
 use crate::types::{Tag, TagKind};
@@ -40,6 +63,7 @@ use crate::types::{Tag, TagKind};
 /// - `heuristic_confidence`: How certain we already are (1.0 = certain, 0.0 = totally unknown)
 /// - `coherence`: Fan-out potential (how many edges share this receiver)
 /// - `is_root`: Definition vs reference (type inference DAG causality)
+/// - `bridge_score`: Betweenness centrality proxy (graph connectivity impact)
 #[derive(Debug, Clone)]
 pub struct QueryCandidate<'a> {
     /// The tag to potentially query
@@ -56,6 +80,10 @@ pub struct QueryCandidate<'a> {
     /// false if it's a reference/call (leaf in DAG).
     /// Roots enable downstream inference, leaves depend on upstream.
     pub is_root: bool,
+    /// Betweenness centrality proxy: how many shortest paths pass through this node.
+    /// High bridge score = critical for graph connectivity.
+    /// Resolving a bridge node can unlock entire clusters of otherwise disconnected components.
+    pub bridge_score: f64,
 }
 
 /// The policy engine for LSP query selection.
@@ -88,7 +116,7 @@ impl PolicyEngine {
     ///
     /// Uses the gene expression model to blend additive and multiplicative scoring:
     /// - Additive: `w_a*A + w_b*B + ...` (OR-logic: prefer high centrality OR high uncertainty)
-    /// - Multiplicative: `ln(A*B*C*...)` (AND-logic: require high centrality AND high uncertainty)
+    /// - Multiplicative: `w_a*ln(A) + w_b*ln(B) + ...` (AND-logic: require high centrality AND high uncertainty, with trainable weights)
     /// - Blend: `(1-mix)*additive + mix*multiplicative` where mix ∈ [0,1]
     ///
     /// ## Signal Interpretation
@@ -108,6 +136,11 @@ impl PolicyEngine {
     ///   Leaves are calls/references that depend on upstream resolution.
     ///   Prefer roots to unlock inference cascades.
     ///
+    /// - **Bridge**: Betweenness centrality proxy (how many shortest paths pass through this node).
+    ///   High bridge score = critical for graph connectivity.
+    ///   Resolving a bridge node can unlock entire clusters of otherwise disconnected components.
+    ///   Log-transformed (ln(1+x)) like coherence for smooth behavior at zero.
+    ///
     /// ## Gene Expression Rationale
     ///
     /// The `interaction_mixing` parameter lets L2 discover optimal combination structure:
@@ -122,6 +155,7 @@ impl PolicyEngine {
         let uncertainty = 1.0 - candidate.heuristic_confidence;
         let coherence = candidate.coherence;
         let causality = if candidate.is_root { 1.0 } else { 0.0 };
+        let bridge_score = candidate.bridge_score; // Worker 2 is adding this field
 
         // Additive combination (OR-logic)
         // Log-transform centrality to compress dynamic range (PageRank can span orders of magnitude)
@@ -129,16 +163,27 @@ impl PolicyEngine {
         let additive = self.coords.weight_centrality * centrality.ln().max(-10.0)
             + self.coords.weight_uncertainty * uncertainty
             + self.coords.weight_coherence * coherence.ln_1p()
-            + self.coords.weight_causality * causality;
+            + self.coords.weight_causality * causality
+            + self.coords.weight_bridge * bridge_score.ln_1p(); // Worker 2 is adding this weight
 
         // Multiplicative combination (AND-logic)
-        // Combine signals geometrically: (A * B * C).ln() = ln(A) + ln(B) + ln(C)
-        // Add small epsilon to avoid ln(0). Coherence gets +1 offset so 0 coherence doesn't kill score.
+        // Weighted log-sum: w_a*ln(A) + w_b*ln(B) + ... = ln(A^w_a * B^w_b * ...)
+        // This applies trainable weights to each signal in the geometric mean.
+        // epsilon guards against ln(0). For binary causality, use multiplicative gate:
+        // if is_root: no penalty, if not is_root: negative contribution proportional to weight.
         let epsilon = 1e-10;
-        let multiplicative = (centrality.max(epsilon)
-            * uncertainty.max(epsilon)
-            * (1.0 + coherence).max(epsilon))
-        .ln();
+        let causality_mult = if candidate.is_root {
+            0.0
+        } else {
+            -self.coords.weight_causality
+        };
+
+        let multiplicative =
+            self.coords.weight_centrality * centrality.max(epsilon).ln()
+            + self.coords.weight_uncertainty * uncertainty.max(epsilon).ln()
+            + self.coords.weight_coherence * (1.0 + coherence).max(epsilon).ln()
+            + self.coords.weight_bridge * (1.0 + bridge_score).max(epsilon).ln()
+            + causality_mult;
 
         // Gene expression: blend additive and multiplicative
         // interaction_mixing ∈ [0, 1] controls the structure of the combination
@@ -150,10 +195,26 @@ impl PolicyEngine {
     ///
     /// ## Algorithm
     ///
-    /// 1. Score all candidates using `score_site()`
-    /// 2. Sort by score (descending)
-    /// 3. Apply gated threshold dropout: filter out candidates with score below threshold
-    /// 4. Apply marginal utility floor: stop when expected gain drops below price
+    /// 1. Score all candidates using `score_site()` (produces log-space scores)
+    /// 2. Apply Boltzmann transformation to convert log-space to probability space
+    /// 3. Sort by transformed score (descending)
+    /// 4. Apply gated threshold dropout: filter out candidates with score below threshold
+    /// 5. Apply marginal utility floor: stop when expected gain drops below price
+    ///
+    /// ## Boltzmann Transformation (Anti-Matter Trap Fix)
+    ///
+    /// The `score_site()` method returns log-space scores (which can be negative).
+    /// But `gated_threshold` and `marginal_utility_floor` are defined in [0, 1]
+    /// probability space. Without transformation, negative scores would always fail
+    /// the threshold filter (e.g., -5.0 >= 0.1 is always false).
+    ///
+    /// We apply: `probability = exp(log_score / temperature)`
+    ///
+    /// This converts log-space energies to Boltzmann probabilities using
+    /// `focus_temperature` as the temperature parameter. The temperature controls
+    /// the sharpness of the distribution:
+    /// - Low temperature → sharp focus on highest scores
+    /// - High temperature → more uniform distribution
     ///
     /// ## Gated Threshold (Stochastic Dropout)
     ///
@@ -162,6 +223,7 @@ impl PolicyEngine {
     /// - High threshold → tight beam, only top candidates
     ///
     /// This is a form of stochastic dropout that prunes the attention distribution.
+    /// Now operates on transformed probabilities in [0, 1] space.
     ///
     /// ## Marginal Utility Floor (Lagrangian Multiplier)
     ///
@@ -171,6 +233,7 @@ impl PolicyEngine {
     ///
     /// The optimizer discovers the budget implicitly by tuning the price.
     /// This is the Lagrangian multiplier for the latency constraint.
+    /// Now operates on transformed probabilities in [0, 1] space.
     ///
     /// ## Returns
     ///
@@ -179,26 +242,35 @@ impl PolicyEngine {
         &self,
         candidates: Vec<QueryCandidate<'a>>,
     ) -> Vec<&'a Tag> {
-        // Score all candidates
-        let mut scored: Vec<(f64, &Tag)> = candidates
+        // Score all candidates (log-space)
+        let scored: Vec<(f64, &Tag)> = candidates
             .iter()
             .map(|c| (self.score_site(c), c.tag))
             .collect();
 
-        // Sort by score (descending - highest first)
-        scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-
-        // Apply gated threshold dropout
-        let gated: Vec<(f64, &Tag)> = scored
+        // Boltzmann transform: convert log-space scores to probability-like values
+        // Using focus_temperature as the temperature parameter
+        // Avoid division by zero with a minimum temperature
+        let temp = self.coords.focus_temperature.max(0.01);
+        let mut transformed: Vec<(f64, &Tag)> = scored
             .into_iter()
-            .filter(|(score, _)| *score >= self.coords.gated_threshold)
+            .map(|(score, tag)| ((score / temp).exp(), tag))
             .collect();
 
-        // Apply marginal utility floor
-        // Stop when score drops below the learned "price"
+        // Sort by transformed score (descending - highest first)
+        transformed.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+
+        // Apply gated threshold dropout (now in probability space)
+        let gated: Vec<(f64, &Tag)> = transformed
+            .into_iter()
+            .filter(|(prob, _)| *prob >= self.coords.gated_threshold)
+            .collect();
+
+        // Apply marginal utility floor (now in probability space)
+        // Stop when transformed score drops below the learned "price"
         let selected: Vec<&Tag> = gated
             .into_iter()
-            .take_while(|(score, _)| *score >= self.coords.marginal_utility_floor)
+            .take_while(|(prob, _)| *prob >= self.coords.marginal_utility_floor)
             .map(|(_, tag)| tag)
             .collect();
 
@@ -279,6 +351,77 @@ impl PolicyEngine {
     pub fn should_continue(&self, last_yield_rate: f64) -> bool {
         last_yield_rate >= self.coords.marginal_utility_floor
     }
+
+    /// Expand neighbors using spread-weighted attention.
+    ///
+    /// Given a resolved node, generate candidate neighbors weighted by:
+    /// - **Structural**: Follow call edges (caller → callee, callee → caller)
+    /// - **Semantic**: Follow type hierarchy (subtype → supertype, etc.)
+    /// - **Spatial**: Follow file locality (same file has higher weight)
+    ///
+    /// The `spread_logit_*` coordinates control the attention beam direction.
+    /// Softmax ensures they sum to 1.0 (simplex constraint).
+    ///
+    /// ## Usage During Wavefront Expansion
+    ///
+    /// When we resolve a node via LSP and want to expand to neighbors, these weights
+    /// determine the mix of neighbor selection strategies:
+    /// - High structural weight → aggressively follow call graph edges
+    /// - High semantic weight → cluster queries within type hierarchies
+    /// - High spatial weight → exploit file locality, prefer nearby symbols
+    ///
+    /// This is orthogonal to candidate scoring (`score_site`). Spread weights control
+    /// WHICH candidates to generate (exploration strategy), while signal weights control
+    /// HOW to rank those candidates (exploitation preference).
+    ///
+    /// ## Returns
+    ///
+    /// `NeighborWeights` with softmax-normalized probabilities that sum to 1.0.
+    pub fn neighbor_weights(&self) -> NeighborWeights {
+        let (w_struct, w_sem, w_spatial) = self.coords.spread_weights();
+        NeighborWeights {
+            structural: w_struct,
+            semantic: w_sem,
+            spatial: w_spatial,
+        }
+    }
+}
+
+/// Weights for neighbor expansion during wavefront execution.
+///
+/// These probabilities control the mix of neighbor selection strategies when expanding
+/// from a resolved node. They sum to 1.0 (softmax-normalized simplex).
+///
+/// ## Interpretation
+///
+/// - `structural`: Probability mass for following call graph edges
+///   * High structural → follow callers/callees aggressively
+///   * Low structural → ignore call structure during expansion
+///
+/// - `semantic`: Probability mass for following type hierarchy edges
+///   * High semantic → cluster queries by type (methods of same class, subtype relationships)
+///   * Low semantic → ignore type structure during expansion
+///
+/// - `spatial`: Probability mass for following file locality
+///   * High spatial → prefer symbols in the same file or nearby files
+///   * Low spatial → ignore file proximity during expansion
+///
+/// ## Training Dynamics
+///
+/// The optimizer discovers the optimal exploration mix for each codebase:
+/// - OOP codebases might favor semantic (type-driven expansion)
+/// - Functional codebases might favor structural (call-driven expansion)
+/// - Monolithic files might favor spatial (file-locality expansion)
+///
+/// By making this continuous, L1/L2 can adapt the exploration strategy without code changes.
+#[derive(Debug, Clone, Copy)]
+pub struct NeighborWeights {
+    /// Weight for call graph edges (callers/callees)
+    pub structural: f64,
+    /// Weight for type hierarchy edges (subtypes/supertypes)
+    pub semantic: f64,
+    /// Weight for file locality (same file, same directory)
+    pub spatial: f64,
 }
 
 #[cfg(test)]
@@ -311,6 +454,7 @@ mod tests {
             weight_uncertainty: 1.0,
             weight_coherence: 1.0,
             weight_causality: 1.0,
+            weight_bridge: 1.0,
             interaction_mixing: 0.0, // Pure additive
             ..Default::default()
         };
@@ -324,13 +468,14 @@ mod tests {
             heuristic_confidence: 0.2, // High uncertainty (0.8)
             coherence: 5.0,
             is_root: true,
+            bridge_score: 2.0, // Worker 2 is adding this field
         };
 
         let score = engine.score_site(&candidate);
 
         // Should be additive combination
-        // ln(0.5) + 0.8 + ln(6) + 1.0
-        let expected = 0.5_f64.ln() + 0.8 + 6.0_f64.ln() + 1.0;
+        // ln(0.5) + 0.8 + ln(6) + 1.0 + ln(3)
+        let expected = 0.5_f64.ln() + 0.8 + 6.0_f64.ln() + 1.0 + 3.0_f64.ln();
         assert!((score - expected).abs() < 0.01, "score={}, expected={}", score, expected);
     }
 
@@ -342,6 +487,7 @@ mod tests {
             weight_uncertainty: 1.0,
             weight_coherence: 1.0,
             weight_causality: 1.0,
+            weight_bridge: 1.0,
             interaction_mixing: 1.0, // Pure multiplicative
             ..Default::default()
         };
@@ -354,13 +500,20 @@ mod tests {
             pagerank: 0.5,
             heuristic_confidence: 0.2, // Uncertainty = 0.8
             coherence: 5.0,
-            is_root: false,
+            is_root: false, // Not a root, so causality_mult = -weight_causality
+            bridge_score: 2.0, // Worker 2 is adding this field
         };
 
         let score = engine.score_site(&candidate);
 
-        // Should be multiplicative: ln(pagerank * uncertainty * (1+coherence))
-        let expected = (0.5 * 0.8 * 6.0).ln();
+        // Should be weighted multiplicative:
+        // w_c*ln(centrality) + w_u*ln(uncertainty) + w_coh*ln(1+coherence) + w_b*ln(1+bridge) + causality_mult
+        // causality_mult = -1.0 for non-roots (gate penalty)
+        let expected = 1.0 * 0.5_f64.ln()
+            + 1.0 * 0.8_f64.ln()
+            + 1.0 * 6.0_f64.ln()
+            + 1.0 * 3.0_f64.ln()
+            + (-1.0); // Non-root penalty
         assert!((score - expected).abs() < 0.01, "score={}, expected={}", score, expected);
     }
 
@@ -371,6 +524,7 @@ mod tests {
             weight_uncertainty: 1.0,
             weight_coherence: 0.0,
             weight_causality: 0.0,
+            weight_bridge: 0.0,
             interaction_mixing: 0.0,
             gated_threshold: 0.5, // Filter out low scores
             marginal_utility_floor: 0.0,
@@ -388,6 +542,7 @@ mod tests {
                 heuristic_confidence: 0.1, // High uncertainty
                 coherence: 0.0,
                 is_root: true,
+                bridge_score: 0.0,
             },
             QueryCandidate {
                 tag: &tag2,
@@ -395,6 +550,7 @@ mod tests {
                 heuristic_confidence: 0.9, // Low uncertainty
                 coherence: 0.0,
                 is_root: false,
+                bridge_score: 0.0,
             },
         ];
 
@@ -412,6 +568,7 @@ mod tests {
             weight_uncertainty: 1.0,
             weight_coherence: 0.0,
             weight_causality: 0.0,
+            weight_bridge: 0.0,
             interaction_mixing: 0.0,
             gated_threshold: 0.0,
             marginal_utility_floor: 1.0, // High floor - only top candidates
@@ -429,6 +586,7 @@ mod tests {
                 heuristic_confidence: 0.1,
                 coherence: 0.0,
                 is_root: true,
+                bridge_score: 0.0,
             },
             QueryCandidate {
                 tag: &tag2,
@@ -436,6 +594,7 @@ mod tests {
                 heuristic_confidence: 0.5,
                 coherence: 0.0,
                 is_root: false,
+                bridge_score: 0.0,
             },
         ];
 
@@ -510,6 +669,7 @@ mod tests {
             heuristic_confidence: 0.5,
             coherence: 0.0,
             is_root: true, // Definition
+            bridge_score: 0.0,
         };
 
         let candidate_leaf = QueryCandidate {
@@ -518,6 +678,7 @@ mod tests {
             heuristic_confidence: 0.5,
             coherence: 0.0,
             is_root: false, // Reference
+            bridge_score: 0.0,
         };
 
         let score_root = engine.score_site(&candidate_root);
@@ -528,4 +689,66 @@ mod tests {
         assert!((score_root - 10.0).abs() < 0.01); // 1.0 * 10.0
         assert!((score_leaf - 0.0).abs() < 0.01);  // 0.0 * 10.0
     }
+    #[test]
+    fn test_neighbor_weights_sum_to_one() {
+        let coords = LspPolicyCoordinates {
+            spread_logit_structural: 2.0,
+            spread_logit_semantic: 1.0,
+            spread_logit_spatial: 0.0,
+            ..Default::default()
+        };
+
+        let engine = PolicyEngine::new(coords);
+        let weights = engine.neighbor_weights();
+
+        // Weights must sum to 1.0
+        let sum = weights.structural + weights.semantic + weights.spatial;
+        assert!((sum - 1.0).abs() < 1e-10, "Weights must sum to 1.0, got {}", sum);
+
+        // All weights must be non-negative and <= 1.0
+        assert!(weights.structural >= 0.0 && weights.structural <= 1.0);
+        assert!(weights.semantic >= 0.0 && weights.semantic <= 1.0);
+        assert!(weights.spatial >= 0.0 && weights.spatial <= 1.0);
+
+        // Higher logit should have higher weight
+        assert!(weights.structural > weights.semantic);
+        assert!(weights.semantic > weights.spatial);
+    }
+
+    #[test]
+    fn test_neighbor_weights_uniform() {
+        let coords = LspPolicyCoordinates {
+            spread_logit_structural: 0.0,
+            spread_logit_semantic: 0.0,
+            spread_logit_spatial: 0.0,
+            ..Default::default()
+        };
+
+        let engine = PolicyEngine::new(coords);
+        let weights = engine.neighbor_weights();
+
+        // Equal logits should give equal weights (1/3 each)
+        assert!((weights.structural - 1.0/3.0).abs() < 1e-10);
+        assert!((weights.semantic - 1.0/3.0).abs() < 1e-10);
+        assert!((weights.spatial - 1.0/3.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_neighbor_weights_structural_dominant() {
+        let coords = LspPolicyCoordinates {
+            spread_logit_structural: 10.0,  // Very high
+            spread_logit_semantic: 0.0,
+            spread_logit_spatial: 0.0,
+            ..Default::default()
+        };
+
+        let engine = PolicyEngine::new(coords);
+        let weights = engine.neighbor_weights();
+
+        // Structural should dominate
+        assert!(weights.structural > 0.99, "Structural weight should be > 0.99, got {}", weights.structural);
+        assert!(weights.semantic < 0.01);
+        assert!(weights.spatial < 0.01);
+    }
+
 }

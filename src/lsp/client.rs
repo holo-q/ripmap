@@ -85,6 +85,47 @@
 //! - JSON parse errors: Skip malformed responses
 //! - Timeout (5s default): Mark query as failed, cache None result
 //! - LSP errors: Extract from error field, return None
+//!
+//! # Mock Client for Training (Oracle Bootstrap)
+//!
+//! The `MockClient` enables fast policy training without LSP overhead:
+//!
+//! ## Usage Example
+//!
+//! ```rust,ignore
+//! use ripmap::lsp::client::{MockClient, TypeResolver};
+//!
+//! // Phase 1: Build oracle cache offline (run ty on entire corpus)
+//! // ty dump-types src/**/*.py > oracle_cache.json
+//!
+//! // Phase 2: Train policy with instant lookups
+//! let oracle = MockClient::from_oracle_file("oracle_cache.json")?;
+//! let policy = PolicyEngine::new();
+//!
+//! for episode in 0..10000 {
+//!     oracle.reset_cost();  // Fresh episode
+//!
+//!     // Policy decides which positions to query
+//!     let selected = policy.select_queries(&graph);
+//!
+//!     // Instant lookups (no I/O)
+//!     let results = oracle.resolve_batch(&selected);
+//!
+//!     // Reward = quality - cost penalty
+//!     let ndcg = evaluate_graph(&graph, &results);
+//!     let reward = ndcg - (0.01 * oracle.simulated_cost() as f64);
+//!
+//!     policy.update(reward);
+//! }
+//!
+//! // Phase 3: Deploy with real LSP
+//! let lsp = LspClient::new();
+//! let selected = policy.select_queries(&graph);  // Trained to be economical
+//! let results = lsp.resolve_batch(&selected);
+//! ```
+//!
+//! This approach trains the policy 10^6× faster than using real LSP queries,
+//! while maintaining the same cost-aware reward structure.
 
 // === Implementation Notes ===
 //
@@ -131,7 +172,7 @@ use serde_json::{json, Value};
 /// vs heuristics (name matching ~0.4, type hints ~0.2). This creates the
 /// information-theoretic value: H(edge) drops from 0.4 → 0.0, weighted by
 /// centrality = massive entropy reduction.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TypeInfo {
     /// Type string, e.g., "MyClass", "List[str]", "Optional[Dict[str, Any]]"
     pub type_str: String,
@@ -170,6 +211,336 @@ struct JsonRpcResponse {
     result: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<Value>,
+}
+
+/// Trait for LSP-like type resolution
+///
+/// This trait abstracts over both real LSP clients (LspClient) and mock clients
+/// (MockClient). The policy engine can be generic over TypeResolver, enabling:
+///
+/// 1. Production: Use LspClient for real type resolution
+/// 2. Training (Oracle Bootstrap): Use MockClient for instant lookups from cache
+/// 3. Testing: Use MockClient with synthetic data
+///
+/// # Oracle Bootstrap Training Protocol
+///
+/// The core insight: separate **graph construction** from **policy training**.
+///
+/// **Phase 1: Build Perfect Graph (Offline)**
+/// - Run `ty` on entire corpus → dump all type resolutions to JSON
+/// - This is the "oracle cache" - ground truth for all positions
+/// - One-time cost: hours of wall-clock time
+///
+/// **Phase 2: Train Policy (Fast)**
+/// - Load oracle cache into MockClient
+/// - Policy selects which positions to query
+/// - MockClient returns instant hits (no subprocess, no I/O)
+/// - Reward = NDCG - (λ * query_count)
+/// - This teaches economy: only query high-value positions
+///
+/// **Phase 3: Production**
+/// - Trained policy deployed with real LspClient
+/// - Makes intelligent decisions about which positions to resolve
+/// - Maximizes information gain per dollar spent
+///
+/// # Why This Works
+///
+/// Training with real LSP would be impossibly slow:
+/// - Each query: 100-500ms of wall-clock latency
+/// - Training run: 10K episodes × 100 queries = 1M queries = 100K seconds = 28 hours
+///
+/// With MockClient:
+/// - Each query: nanoseconds (hash lookup)
+/// - Training run: 10K episodes in minutes
+/// - Same reward signal (NDCG), same cost accounting (query_count)
+///
+/// The policy learns to be economical because we penalize query count in the
+/// reward function. It doesn't matter if the queries are instant - what matters
+/// is that it learns *which* positions are worth querying.
+pub trait TypeResolver {
+    /// Get type information at a specific position
+    ///
+    /// Returns None if no type info available (either not in cache, or query failed)
+    fn hover(&self, file: &str, line: u32, col: u32) -> Option<TypeInfo>;
+
+    /// Batch resolve multiple positions
+    ///
+    /// Returns sparse results: only successful resolutions included
+    fn resolve_batch(&self, queries: &[(String, u32, u32)]) -> HashMap<(String, u32, u32), TypeInfo>;
+}
+
+/// Mock LSP client for Oracle Bootstrap training
+///
+/// Loads pre-computed type resolutions from a JSON file (the "oracle cache").
+/// Provides instant lookups without subprocess overhead, enabling fast policy training.
+///
+/// # Training Protocol: Oracle Bootstrap
+///
+/// **Problem**: Training with real LSP is impossibly slow (hours per training run).
+/// **Solution**: Pre-compute all type resolutions offline, train with instant lookups.
+///
+/// ## Phase 1: Build Perfect Graph (Offline, One-Time)
+///
+/// Run `ty` on the entire corpus and dump all type resolutions:
+///
+/// ```bash
+/// # For each file in corpus:
+/// ty dump-types src/**/*.py > oracle_cache.json
+/// ```
+///
+/// This produces the "oracle cache" - ground truth for all positions.
+/// Format:
+/// ```json
+/// {
+///   "src/main.py:42:10": { "type_str": "User", "confidence": 0.95 },
+///   "src/utils.py:15:5": { "type_str": "List[str]", "confidence": 0.95 }
+/// }
+/// ```
+///
+/// Wall-clock cost: Hours (one-time). But this gives us perfect information.
+///
+/// ## Phase 2: Train Policy (Fast, Iterative)
+///
+/// Load oracle cache into MockClient and train:
+///
+/// ```rust
+/// let oracle = MockClient::from_oracle_file("oracle_cache.json")?;
+/// let policy = PolicyEngine::new();
+///
+/// for episode in 0..10000 {
+///     oracle.reset_cost();  // Start fresh episode
+///
+///     // Policy selects which positions to query
+///     let selected_positions = policy.select_queries(&graph);
+///
+///     // MockClient returns instant hits (no I/O)
+///     let results = oracle.resolve_batch(&selected_positions);
+///
+///     // Compute reward: information gain - cost penalty
+///     let ndcg = evaluate_graph_quality(&graph, &results);
+///     let cost = oracle.simulated_cost() as f64;
+///     let reward = ndcg - (0.01 * cost);  // λ = 0.01
+///
+///     // Update policy (REINFORCE, PPO, whatever)
+///     policy.update(reward);
+/// }
+/// ```
+///
+/// Wall-clock cost: Minutes (iterative, fast). The policy learns economy.
+///
+/// ## Phase 3: Production Deployment
+///
+/// Deploy trained policy with real LspClient:
+///
+/// ```rust
+/// let lsp = LspClient::new();
+/// let policy = PolicyEngine::load_trained("policy.ckpt");
+///
+/// // Policy makes intelligent decisions about which positions to resolve
+/// let selected = policy.select_queries(&graph);
+/// let results = lsp.resolve_batch(&selected);
+/// ```
+///
+/// The policy has learned to be economical: it only queries high-value positions
+/// (high PageRank, uncertain edges, bridge positions). It doesn't waste queries
+/// on low-value positions.
+///
+/// # Why This Works
+///
+/// The key insight: **simulated cost == real cost** for training purposes.
+///
+/// We don't need real wall-clock latency during training. We only need:
+/// 1. Accurate reward signal (NDCG - λ * query_count)
+/// 2. Same interface (TypeResolver trait)
+/// 3. Same sparsity pattern (not all positions have types)
+///
+/// The MockClient provides all three, but with nanosecond lookups instead of
+/// millisecond LSP queries. This makes training 10^6× faster.
+///
+/// # Simulated Cost Accounting
+///
+/// The MockClient tracks query count to compute the cost penalty:
+///
+/// - `query_count`: Total queries made in current episode
+/// - `simulated_cost()`: Returns query count (for reward calculation)
+/// - `reset_cost()`: Reset counter for new episode
+///
+/// Even though queries are instant, we penalize them in the reward function:
+///
+/// ```
+/// reward = NDCG - (λ * query_count)
+/// ```
+///
+/// This teaches the policy to be economical. The faster training speed doesn't
+/// make the policy lazy - it still learns to minimize queries because we
+/// explicitly penalize them.
+///
+/// # Cache Format
+///
+/// The oracle cache is a JSON file mapping positions to type info:
+///
+/// ```json
+/// {
+///   "file.py:line:col": { "type_str": "Type", "confidence": 0.95 },
+///   ...
+/// }
+/// ```
+///
+/// Keys are formatted as `"file:line:col"` for easy parsing.
+/// Values are TypeInfo structs with type_str and confidence.
+///
+/// # Implementation Notes
+///
+/// - Thread-safe: Uses AtomicUsize for query counter
+/// - Zero I/O: All lookups are hash table reads
+/// - Exact semantics: Returns None for missing positions (just like real LSP)
+/// - Cost tracking: Increments counter on every query (for reward calculation)
+pub struct MockClient {
+    /// Pre-computed type cache: (file, line, col) -> TypeInfo
+    ///
+    /// This is the "oracle" - perfect type information for all positions.
+    /// Built offline by running `ty` on entire corpus.
+    oracle_cache: HashMap<(String, u32, u32), TypeInfo>,
+
+    /// Query counter for simulated cost calculation
+    ///
+    /// Tracks total queries made in current episode. Used to compute
+    /// cost penalty in reward function: reward = NDCG - (λ * query_count)
+    ///
+    /// Even though queries are instant, we penalize them to teach economy.
+    query_count: std::sync::atomic::AtomicUsize,
+}
+
+impl MockClient {
+    /// Load oracle cache from JSON file
+    ///
+    /// Expected format:
+    /// ```json
+    /// {
+    ///   "file.py:42:10": { "type_str": "User", "confidence": 0.95 },
+    ///   "file.py:43:5": { "type_str": "List[str]", "confidence": 0.95 }
+    /// }
+    /// ```
+    ///
+    /// Keys are formatted as `"file:line:col"` (1-indexed, matching LSP).
+    /// Values are TypeInfo structs with type_str and confidence.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// - File doesn't exist or can't be read
+    /// - JSON is malformed
+    /// - Key format is invalid (not "file:line:col")
+    pub fn from_oracle_file(path: &std::path::Path) -> Result<Self> {
+        let content = std::fs::read_to_string(path)
+            .context("Failed to read oracle cache file")?;
+        let raw: HashMap<String, TypeInfo> = serde_json::from_str(&content)
+            .context("Failed to parse oracle cache JSON")?;
+
+        // Parse keys from "file:line:col" format
+        let mut oracle_cache = HashMap::new();
+        for (key_str, type_info) in raw {
+            // Split on ':' from right to left to handle file paths with colons
+            let parts: Vec<&str> = key_str.rsplitn(3, ':').collect();
+            if parts.len() == 3 {
+                // parts are in reverse order: [col, line, file]
+                let col: u32 = parts[0].parse()
+                    .with_context(|| format!("Invalid column in key: {}", key_str))?;
+                let line: u32 = parts[1].parse()
+                    .with_context(|| format!("Invalid line in key: {}", key_str))?;
+                let file = parts[2].to_string();
+                oracle_cache.insert((file, line, col), type_info);
+            } else {
+                eprintln!("Warning: Skipping malformed key: {}", key_str);
+            }
+        }
+
+        Ok(Self {
+            oracle_cache,
+            query_count: std::sync::atomic::AtomicUsize::new(0),
+        })
+    }
+
+    /// Create empty mock (for testing)
+    ///
+    /// Returns a MockClient with no cached types. Useful for testing
+    /// policy behavior when no type information is available.
+    pub fn empty() -> Self {
+        Self {
+            oracle_cache: HashMap::new(),
+            query_count: std::sync::atomic::AtomicUsize::new(0),
+        }
+    }
+
+    /// Insert a single type into the oracle cache (for testing)
+    ///
+    /// Useful for building synthetic test scenarios:
+    /// ```rust
+    /// let mut mock = MockClient::empty();
+    /// mock.insert("file.py", 42, 10, TypeInfo {
+    ///     type_str: "User".to_string(),
+    ///     confidence: 0.95,
+    /// });
+    /// ```
+    pub fn insert(&mut self, file: &str, line: u32, col: u32, type_info: TypeInfo) {
+        self.oracle_cache.insert((file.to_string(), line, col), type_info);
+    }
+
+    /// Get simulated cost (total queries made in current episode)
+    ///
+    /// Used to compute cost penalty in reward function:
+    /// ```
+    /// reward = NDCG - (λ * simulated_cost)
+    /// ```
+    ///
+    /// Even though queries are instant, we penalize them to teach the
+    /// policy to be economical. This is the key to Oracle Bootstrap:
+    /// fast training with the same incentive structure as production.
+    pub fn simulated_cost(&self) -> usize {
+        self.query_count.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// Reset query counter (for new training episode)
+    ///
+    /// Call this at the start of each training episode to reset cost tracking:
+    /// ```rust
+    /// for episode in 0..10000 {
+    ///     oracle.reset_cost();  // Fresh start
+    ///     let selected = policy.select_queries(&graph);
+    ///     let results = oracle.resolve_batch(&selected);
+    ///     let reward = compute_reward(results, oracle.simulated_cost());
+    ///     policy.update(reward);
+    /// }
+    /// ```
+    pub fn reset_cost(&self) {
+        self.query_count.store(0, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+/// Implement TypeResolver for MockClient (instant lookups from oracle cache)
+impl TypeResolver for MockClient {
+    /// Hover lookup (instant, from oracle cache)
+    ///
+    /// Returns None if position not in cache (same semantics as real LSP).
+    /// Increments query counter for cost accounting.
+    fn hover(&self, file: &str, line: u32, col: u32) -> Option<TypeInfo> {
+        self.query_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        self.oracle_cache.get(&(file.to_string(), line, col)).cloned()
+    }
+
+    /// Batch resolve (instant, from oracle cache)
+    ///
+    /// Returns sparse results: only positions in cache are included.
+    /// Increments query counter by batch size for cost accounting.
+    fn resolve_batch(&self, queries: &[(String, u32, u32)]) -> HashMap<(String, u32, u32), TypeInfo> {
+        self.query_count.fetch_add(queries.len(), std::sync::atomic::Ordering::Relaxed);
+        queries.iter()
+            .filter_map(|(file, line, col)| {
+                self.oracle_cache.get(&(file.clone(), *line, *col))
+                    .map(|info| ((file.clone(), *line, *col), info.clone()))
+            })
+            .collect()
+    }
 }
 
 /// LSP client for ty server (Python type checker)
@@ -436,28 +807,135 @@ impl LspClient {
         }
     }
 
-    /// Batch resolve multiple positions (for wavefront execution)
+    /// Batch resolve multiple positions using pipelined I/O
     ///
-    /// The wavefront model queries N positions at once. We could:
-    /// 1. Send N individual requests (simple but slow)
-    /// 2. Send N requests in parallel (requires async)
-    /// 3. Use batch LSP methods (not all servers support)
+    /// Pipelining strategy:
+    /// 1. Check cache for all queries, separate hits from misses
+    /// 2. Send ALL miss requests to ty server (no waiting for responses)
+    /// 3. Read ALL responses back
+    /// 4. Match responses to requests by JSON-RPC ID
+    /// 5. Cache all results
     ///
-    /// For now: simple sequential within batch. The key is that the
-    /// *selection* of the batch is intelligent (PolicyEngine), not that
-    /// the execution is maximally parallel. We can optimize later.
+    /// This is a massive improvement over sequential query-response-query-response:
+    /// - Sequential: 100 queries × 50ms latency = 5000ms
+    /// - Pipelined: 100 queries sent, then 100 responses read = ~100ms
+    ///
+    /// Note: This is still synchronous within the batch (we hold locks during
+    /// the entire operation). True async would require tokio, but this pipelining
+    /// is already a significant speedup. We saturate the ty server's request queue
+    /// instead of blocking on each round trip.
     ///
     /// Returns only successful resolutions (sparse result).
     pub fn resolve_batch(&self, queries: &[(String, u32, u32)]) -> HashMap<(String, u32, u32), TypeInfo> {
         let mut results = HashMap::new();
+        let mut pending_queries: Vec<(String, u32, u32)> = Vec::new();
 
+        // Phase 1: Check cache, collect misses
         for (file, line, col) in queries {
-            if let Some(type_info) = self.hover(file, *line, *col) {
-                results.insert((file.clone(), *line, *col), type_info);
+            let key = (file.clone(), *line, *col);
+
+            if let Some(cached) = self.type_cache.get(&key) {
+                if let Some(type_info) = cached.value().clone() {
+                    results.insert(key, type_info);
+                }
+                continue;
+            }
+
+            pending_queries.push(key);
+        }
+
+        if pending_queries.is_empty() {
+            return results;
+        }
+
+        // Ensure server is running
+        if self.ensure_started().is_err() {
+            return results;
+        }
+
+        // Phase 2: Send all requests (pipelined - no waiting for responses)
+        let mut id_to_key: HashMap<u64, (String, u32, u32)> = HashMap::new();
+        {
+            let mut stdin_guard = self.stdin.lock().unwrap();
+            if let Some(stdin) = stdin_guard.as_mut() {
+                for (file, line, col) in &pending_queries {
+                    let request_id = {
+                        let mut id = self.next_id.lock().unwrap();
+                        let current = *id;
+                        *id += 1;
+                        current
+                    };
+
+                    id_to_key.insert(request_id, (file.clone(), *line, *col));
+
+                    let params = json!({
+                        "textDocument": {
+                            "uri": format!("file://{}", file)
+                        },
+                        "position": {
+                            "line": line.saturating_sub(1),
+                            "character": col.saturating_sub(1)
+                        }
+                    });
+
+                    let request = JsonRpcRequest {
+                        jsonrpc: "2.0".to_string(),
+                        id: request_id,
+                        method: "textDocument/hover".to_string(),
+                        params,
+                    };
+
+                    if self.send_request_locked(&request, stdin).is_err() {
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Phase 3: Read all responses
+        {
+            let mut stdout_guard = self.stdout.lock().unwrap();
+            if let Some(stdout) = stdout_guard.as_mut() {
+                for _ in 0..id_to_key.len() {
+                    match self.read_response_locked(stdout) {
+                        Ok(response) => {
+                            if let Some(key) = id_to_key.get(&response.id) {
+                                let type_info = self.parse_hover_response(&response);
+                                self.type_cache.insert(key.clone(), type_info.clone());
+                                if let Some(info) = type_info {
+                                    results.insert(key.clone(), info);
+                                }
+                            }
+                        }
+                        Err(_) => break,
+                    }
+                }
             }
         }
 
         results
+    }
+
+    /// Parse hover response into TypeInfo
+    ///
+    /// Extracted from hover_uncached() to support pipelined batch resolution.
+    /// Converts a JSON-RPC response into our TypeInfo struct.
+    fn parse_hover_response(&self, response: &JsonRpcResponse) -> Option<TypeInfo> {
+        if response.error.is_some() {
+            return None;
+        }
+
+        let result = response.result.as_ref()?;
+        if result.is_null() {
+            return None;
+        }
+
+        let type_str = self.extract_type_from_hover(result).ok()?;
+
+        Some(TypeInfo {
+            type_str,
+            confidence: 0.95,
+        })
     }
 
     /// Internal: query hover without caching
@@ -729,6 +1207,27 @@ impl LspClient {
     }
 }
 
+/// Implement TypeResolver for LspClient (real type resolution via ty server)
+impl TypeResolver for LspClient {
+    /// Get type information at a specific position
+    ///
+    /// This is the production path: queries real LSP server, pays wall-clock latency.
+    /// The policy engine should be economical with these calls.
+    fn hover(&self, file: &str, line: u32, col: u32) -> Option<TypeInfo> {
+        // Delegate to existing hover method (cache-aware)
+        self.hover(file, line, col)
+    }
+
+    /// Batch resolve multiple positions
+    ///
+    /// Uses pipelined I/O for efficiency (send all requests, then read all responses).
+    /// Still pays wall-clock latency, but amortizes round-trip overhead.
+    fn resolve_batch(&self, queries: &[(String, u32, u32)]) -> HashMap<(String, u32, u32), TypeInfo> {
+        // Delegate to existing resolve_batch method (pipelined, cache-aware)
+        self.resolve_batch(queries)
+    }
+}
+
 impl Drop for LspClient {
     fn drop(&mut self) {
         self.shutdown();
@@ -756,5 +1255,144 @@ mod tests {
 
         let plain = "str";
         assert_eq!(client.clean_type_string(plain), "str");
+    }
+
+    #[test]
+    fn test_mock_client_empty() {
+        let mock = MockClient::empty();
+
+        // Empty cache should return None
+        assert!(mock.hover("file.py", 42, 10).is_none());
+
+        // Cost should be tracked even for misses
+        assert_eq!(mock.simulated_cost(), 1);
+
+        // Reset should work
+        mock.reset_cost();
+        assert_eq!(mock.simulated_cost(), 0);
+    }
+
+    #[test]
+    fn test_mock_client_insert() {
+        let mut mock = MockClient::empty();
+
+        // Insert a type
+        mock.insert("file.py", 42, 10, TypeInfo {
+            type_str: "User".to_string(),
+            confidence: 0.95,
+        });
+
+        // Should be able to retrieve it
+        let result = mock.hover("file.py", 42, 10);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().type_str, "User");
+
+        // Cost should be tracked
+        assert_eq!(mock.simulated_cost(), 1);
+    }
+
+    #[test]
+    fn test_mock_client_batch() {
+        let mut mock = MockClient::empty();
+
+        // Insert multiple types
+        mock.insert("file.py", 42, 10, TypeInfo {
+            type_str: "User".to_string(),
+            confidence: 0.95,
+        });
+        mock.insert("file.py", 43, 5, TypeInfo {
+            type_str: "List[str]".to_string(),
+            confidence: 0.95,
+        });
+
+        // Batch query
+        let queries = vec![
+            ("file.py".to_string(), 42, 10),
+            ("file.py".to_string(), 43, 5),
+            ("file.py".to_string(), 44, 1), // Not in cache
+        ];
+
+        let results = mock.resolve_batch(&queries);
+
+        // Should get 2 results (sparse)
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[&("file.py".to_string(), 42, 10)].type_str, "User");
+        assert_eq!(results[&("file.py".to_string(), 43, 5)].type_str, "List[str]");
+
+        // Cost should be 3 (all queries counted, even misses)
+        assert_eq!(mock.simulated_cost(), 3);
+    }
+
+    #[test]
+    fn test_mock_client_from_json() {
+        // Create a temporary JSON file
+        use std::io::Write;
+        let mut temp_file = tempfile::NamedTempFile::new().unwrap();
+
+        let json_data = r#"{
+            "file.py:42:10": { "type_str": "User", "confidence": 0.95 },
+            "file.py:43:5": { "type_str": "List[str]", "confidence": 0.95 }
+        }"#;
+
+        temp_file.write_all(json_data.as_bytes()).unwrap();
+        temp_file.flush().unwrap();
+
+        // Load from file
+        let mock = MockClient::from_oracle_file(temp_file.path()).unwrap();
+
+        // Should have loaded both entries
+        assert!(mock.hover("file.py", 42, 10).is_some());
+        assert!(mock.hover("file.py", 43, 5).is_some());
+        assert!(mock.hover("file.py", 44, 1).is_none());
+
+        // Verify types
+        assert_eq!(mock.hover("file.py", 42, 10).unwrap().type_str, "User");
+        assert_eq!(mock.hover("file.py", 43, 5).unwrap().type_str, "List[str]");
+    }
+
+    #[test]
+    fn test_type_resolver_trait() {
+        // Test that both LspClient and MockClient implement TypeResolver
+        fn generic_test<T: TypeResolver>(resolver: &T, file: &str, line: u32, col: u32) -> Option<TypeInfo> {
+            resolver.hover(file, line, col)
+        }
+
+        // MockClient
+        let mut mock = MockClient::empty();
+        mock.insert("file.py", 42, 10, TypeInfo {
+            type_str: "User".to_string(),
+            confidence: 0.95,
+        });
+
+        let result = generic_test(&mock, "file.py", 42, 10);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().type_str, "User");
+
+        // LspClient (won't actually connect, but tests trait is implemented)
+        let lsp = LspClient::new();
+        let _result = generic_test(&lsp, "file.py", 42, 10);
+        // Can't test actual result without ty server running
+    }
+
+    #[test]
+    fn test_mock_client_cost_tracking() {
+        let mut mock = MockClient::empty();
+        mock.insert("file.py", 42, 10, TypeInfo {
+            type_str: "User".to_string(),
+            confidence: 0.95,
+        });
+
+        // Episode 1
+        assert_eq!(mock.simulated_cost(), 0);
+        mock.hover("file.py", 42, 10);
+        assert_eq!(mock.simulated_cost(), 1);
+        mock.hover("file.py", 42, 10);
+        assert_eq!(mock.simulated_cost(), 2);
+
+        // Reset for episode 2
+        mock.reset_cost();
+        assert_eq!(mock.simulated_cost(), 0);
+        mock.hover("file.py", 42, 10);
+        assert_eq!(mock.simulated_cost(), 1);
     }
 }
