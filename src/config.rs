@@ -1,19 +1,39 @@
 //! Configuration loading from project config files.
 //!
-//! Ripmap auto-detects config from your existing tooling:
+//! Ripmap auto-detects config from your existing tooling. Just run `ripmap` and it
+//! will find your project's include/exclude patterns automatically.
 //!
 //! ## Supported config files (in priority order)
 //!
+//! ### Language-specific
 //! | File | Sections checked |
 //! |------|-----------------|
-//! | `ripmap.toml` | root |
-//! | `pyproject.toml` | `[tool.ripmap]` → `[tool.ty]` → `[tool.ruff]` → `[tool.pyright]` |
-//! | `package.json` | `ripmap` → `eslint` → `prettier` |
-//! | `tsconfig.json` | `include`/`exclude` |
+//! | `ripmap.toml` | root (native config) |
+//! | `pyproject.toml` | `[tool.ripmap]` → `[tool.ty.environment]` → `[tool.ruff]` → `[tool.pyright]` → `[tool.mypy]` → `[tool.black]` → `[tool.isort]` → `[tool.pytest]` |
+//! | `package.json` | `ripmap` → `eslintConfig` |
+//! | `tsconfig.json` / `jsconfig.json` | `include`/`exclude` |
 //! | `biome.json` | `files.include`/`files.ignore` |
-//! | `deno.json` | `include`/`exclude` |
-//! | `.prettierignore` | gitignore-style patterns |
-//! | `.eslintignore` | gitignore-style patterns |
+//! | `deno.json` | `include`/`exclude` + `lint`/`fmt` sections |
+//! | `jest.config.json` | `roots`, `testMatch`, `testPathIgnorePatterns` |
+//! | `Cargo.toml` | `[workspace]` members/exclude |
+//! | `composer.json` | `autoload.psr-4` directories |
+//!
+//! ### Monorepo tools
+//! | File | What's extracted |
+//! |------|-----------------|
+//! | `nx.json` | `workspaceLayout.appsDir`, `workspaceLayout.libsDir` |
+//! | `turbo.json` | `globalDependencies` |
+//!
+//! ### Gitignore-style (fallback)
+//! | File | Notes |
+//! |------|-------|
+//! | `.ripmapignore` | Native ignore file |
+//! | `.eslintignore` | ESLint (legacy, flat config preferred) |
+//! | `.prettierignore` | Prettier (true gitignore syntax) |
+//! | `.stylelintignore` | Stylelint (uses node-ignore) |
+//!
+//! Note: `.dockerignore` is intentionally unsupported - its pattern matching
+//! has inverted anchoring behavior compared to `.gitignore`.
 //!
 //! ## Example ripmap.toml
 //!
@@ -145,13 +165,28 @@ fn extract_ripmap(v: &JsonValue) -> Option<ExtractedConfig> {
 }
 
 fn extract_ty(v: &JsonValue) -> Option<ExtractedConfig> {
-    let src = v.get("tool")?.get("ty")?.get("src")?;
-    let cfg = ExtractedConfig {
-        include: json_string_array(src.get("include")),
-        exclude: json_string_array(src.get("exclude")),
-        ..Default::default()
-    };
-    if cfg.is_empty() { None } else { Some(cfg) }
+    let ty = v.get("tool")?.get("ty")?;
+
+    // ty uses environment.root for project paths (not include/exclude)
+    // See: https://docs.astral.sh/ty/reference/configuration/
+    let mut src = Vec::new();
+    if let Some(env) = ty.get("environment") {
+        src = json_string_array(env.get("root"));
+    }
+
+    // Also check legacy src.include/exclude for backwards compat
+    let mut include = Vec::new();
+    let mut exclude = Vec::new();
+    if let Some(src_section) = ty.get("src") {
+        include = json_string_array(src_section.get("include"));
+        exclude = json_string_array(src_section.get("exclude"));
+    }
+
+    if src.is_empty() && include.is_empty() && exclude.is_empty() {
+        None
+    } else {
+        Some(ExtractedConfig { include, exclude, src, ..Default::default() })
+    }
 }
 
 fn extract_ruff(v: &JsonValue) -> Option<ExtractedConfig> {
@@ -322,9 +357,245 @@ fn extract_cargo(v: &JsonValue) -> Option<ExtractedConfig> {
 }
 
 // ============================================================================
-// .CSPROJ / DIRECTORY.BUILD.PROPS ADAPTER (.NET)
+// ESLINT FLAT CONFIG (eslint.config.js/mjs) - parsed as JSON export
 // ============================================================================
-// Note: These are XML, handled separately in load_dotnet_config
+
+fn extract_eslint_flat(v: &JsonValue) -> Option<ExtractedConfig> {
+    // eslint.config.js exports an array, we look for ignores in the objects
+    let arr = v.as_array()?;
+    let mut exclude = Vec::new();
+    for item in arr {
+        if let Some(ignores) = item.get("ignores").and_then(|v| v.as_array()) {
+            for ig in ignores {
+                if let Some(s) = ig.as_str() {
+                    exclude.push(s.to_string());
+                }
+            }
+        }
+    }
+    if exclude.is_empty() {
+        None
+    } else {
+        Some(ExtractedConfig { exclude, ..Default::default() })
+    }
+}
+
+// ============================================================================
+// JEST CONFIG (jest.config.js/json)
+// ============================================================================
+
+fn extract_jest(v: &JsonValue) -> Option<ExtractedConfig> {
+    let cfg = ExtractedConfig {
+        include: json_string_array(v.get("roots"))
+            .into_iter()
+            .chain(json_string_array(v.get("testMatch")))
+            .collect(),
+        exclude: json_string_array(v.get("testPathIgnorePatterns"))
+            .into_iter()
+            .chain(json_string_array(v.get("modulePathIgnorePatterns")))
+            .chain(json_string_array(v.get("coveragePathIgnorePatterns")))
+            .collect(),
+        ..Default::default()
+    };
+    if cfg.is_empty() { None } else { Some(cfg) }
+}
+
+// ============================================================================
+// VITEST CONFIG (vitest.config.ts exports)
+// ============================================================================
+
+fn extract_vitest(v: &JsonValue) -> Option<ExtractedConfig> {
+    let test = v.get("test")?;
+    let cfg = ExtractedConfig {
+        include: json_string_array(test.get("include")),
+        exclude: json_string_array(test.get("exclude")),
+        ..Default::default()
+    };
+    if cfg.is_empty() { None } else { Some(cfg) }
+}
+
+// ============================================================================
+// NX WORKSPACE (nx.json)
+// ============================================================================
+
+fn extract_nx(v: &JsonValue) -> Option<ExtractedConfig> {
+    // nx.json has implicitDependencies and targetDefaults
+    // We extract from workspaceLayout if present
+    let layout = v.get("workspaceLayout")?;
+    let cfg = ExtractedConfig {
+        src: vec![
+            layout.get("appsDir").and_then(|v| v.as_str()).unwrap_or("apps").to_string(),
+            layout.get("libsDir").and_then(|v| v.as_str()).unwrap_or("libs").to_string(),
+        ],
+        ..Default::default()
+    };
+    Some(cfg)
+}
+
+// ============================================================================
+// TURBO (turbo.json)
+// ============================================================================
+
+fn extract_turbo(v: &JsonValue) -> Option<ExtractedConfig> {
+    // turbo.json has globalDependencies and pipeline
+    let deps = json_string_array(v.get("globalDependencies"));
+    if deps.is_empty() {
+        None
+    } else {
+        Some(ExtractedConfig {
+            include: deps,
+            ..Default::default()
+        })
+    }
+}
+
+// ============================================================================
+// VITE CONFIG (vite.config.ts)
+// ============================================================================
+
+fn extract_vite(v: &JsonValue) -> Option<ExtractedConfig> {
+    let build = v.get("build")?;
+    let rollup = build.get("rollupOptions")?;
+    let external = json_string_array(rollup.get("external"));
+    if external.is_empty() {
+        None
+    } else {
+        Some(ExtractedConfig { exclude: external, ..Default::default() })
+    }
+}
+
+// ============================================================================
+// WEBPACK CONFIG
+// ============================================================================
+
+fn extract_webpack(v: &JsonValue) -> Option<ExtractedConfig> {
+    let resolve = v.get("resolve")?;
+    let modules = json_string_array(resolve.get("modules"));
+    if modules.is_empty() {
+        None
+    } else {
+        Some(ExtractedConfig { src: modules, ..Default::default() })
+    }
+}
+
+// ============================================================================
+// GO.MOD / GO.WORK (Go ecosystem)
+// ============================================================================
+
+fn extract_go_work(v: &JsonValue) -> Option<ExtractedConfig> {
+    // go.work has "use" directives listing module directories
+    let uses = json_string_array(v.get("use"));
+    if uses.is_empty() {
+        None
+    } else {
+        Some(ExtractedConfig { include: uses, ..Default::default() })
+    }
+}
+
+// ============================================================================
+// COMPOSER.JSON (PHP)
+// ============================================================================
+
+fn extract_composer(v: &JsonValue) -> Option<ExtractedConfig> {
+    // composer.json has autoload.psr-4 mapping namespaces to directories
+    let mut src = Vec::new();
+    if let Some(autoload) = v.get("autoload") {
+        if let Some(psr4) = autoload.get("psr-4").and_then(|v| v.as_object()) {
+            for path in psr4.values() {
+                if let Some(s) = path.as_str() {
+                    src.push(s.to_string());
+                } else if let Some(arr) = path.as_array() {
+                    for p in arr {
+                        if let Some(s) = p.as_str() {
+                            src.push(s.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if src.is_empty() {
+        None
+    } else {
+        Some(ExtractedConfig { src, ..Default::default() })
+    }
+}
+
+// ============================================================================
+// PHPSTAN.NEON (PHP static analysis)
+// ============================================================================
+// Note: NEON format is similar to YAML, needs separate parser
+
+// ============================================================================
+// RUBOCOP.YML (Ruby)
+// ============================================================================
+// Note: YAML format, needs separate parser - use serde_yaml if needed
+
+// ============================================================================
+// GRADLE BUILD (build.gradle.kts as JSON export)
+// ============================================================================
+
+fn extract_gradle(v: &JsonValue) -> Option<ExtractedConfig> {
+    // Gradle JSON export might have sourceSets
+    let source_sets = v.get("sourceSets")?;
+    let main = source_sets.get("main")?;
+    let dirs = json_string_array(main.get("srcDirs"));
+    if dirs.is_empty() {
+        None
+    } else {
+        Some(ExtractedConfig { src: dirs, ..Default::default() })
+    }
+}
+
+// ============================================================================
+// MAVEN POM.XML (Java) - needs XML parsing
+// ============================================================================
+// XML files are handled separately via load_xml_config
+
+// ============================================================================
+// .NET PROJECT FILES (.csproj, Directory.Build.props) - XML
+// ============================================================================
+// XML files are handled separately via load_xml_config
+
+// ============================================================================
+// GITIGNORE-STYLE FILES
+// ============================================================================
+
+/// Parse gitignore-style file (one pattern per line, # comments, ! negation)
+fn parse_gitignore_patterns(content: &str) -> Vec<String> {
+    content
+        .lines()
+        .map(|line| line.trim())
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .map(|line| {
+            // Convert gitignore patterns to glob patterns
+            let pattern = line.trim_start_matches('!'); // Handle negation (we ignore it for now)
+            if pattern.starts_with('/') {
+                // Anchored to root
+                pattern[1..].to_string()
+            } else if pattern.ends_with('/') {
+                // Directory pattern
+                format!("**/{}", pattern.trim_end_matches('/'))
+            } else if !pattern.contains('/') {
+                // Simple name - match anywhere
+                format!("**/{}", pattern)
+            } else {
+                pattern.to_string()
+            }
+        })
+        .collect()
+}
+
+/// Load patterns from a gitignore-style file
+fn load_ignore_file(path: &Path) -> Option<ExtractedConfig> {
+    let content = std::fs::read_to_string(path).ok()?;
+    let patterns = parse_gitignore_patterns(&content);
+    if patterns.is_empty() {
+        None
+    } else {
+        Some(ExtractedConfig { exclude: patterns, ..Default::default() })
+    }
+}
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -415,58 +686,44 @@ const PACKAGE_JSON_ADAPTERS: &[ToolAdapter] = &[
 ];
 
 /// Config files to check (in priority order)
+/// Priority: explicit ripmap config > language-specific tools > monorepo tools > ignore files
 const CONFIG_FILES: &[(&str, &[ToolAdapter])] = &[
-    ("ripmap.toml", &[]), // Special case: direct config
+    // === EXPLICIT RIPMAP CONFIG ===
+    ("ripmap.toml", &[]),  // Special case: direct config
+
+    // === PYTHON ECOSYSTEM ===
     ("pyproject.toml", PYPROJECT_ADAPTERS),
+
+    // === JAVASCRIPT/TYPESCRIPT ECOSYSTEM ===
     ("package.json", PACKAGE_JSON_ADAPTERS),
-    (
-        "tsconfig.json",
-        &[ToolAdapter {
-            name: "tsconfig",
-            snark: None,
-            extract: extract_tsconfig,
-        }],
-    ),
-    (
-        "biome.json",
-        &[ToolAdapter {
-            name: "biome",
-            snark: None,
-            extract: extract_biome,
-        }],
-    ),
-    (
-        "biome.jsonc",
-        &[ToolAdapter {
-            name: "biome",
-            snark: None,
-            extract: extract_biome,
-        }],
-    ),
-    (
-        "deno.json",
-        &[ToolAdapter {
-            name: "deno",
-            snark: None,
-            extract: extract_deno,
-        }],
-    ),
-    (
-        "deno.jsonc",
-        &[ToolAdapter {
-            name: "deno",
-            snark: None,
-            extract: extract_deno,
-        }],
-    ),
-    (
-        "Cargo.toml",
-        &[ToolAdapter {
-            name: "cargo",
-            snark: None,
-            extract: extract_cargo,
-        }],
-    ),
+    ("tsconfig.json", &[ToolAdapter { name: "tsconfig", snark: None, extract: extract_tsconfig }]),
+    ("jsconfig.json", &[ToolAdapter { name: "jsconfig", snark: None, extract: extract_tsconfig }]),  // Same format as tsconfig
+    ("biome.json", &[ToolAdapter { name: "biome", snark: None, extract: extract_biome }]),
+    ("biome.jsonc", &[ToolAdapter { name: "biome", snark: None, extract: extract_biome }]),
+    ("deno.json", &[ToolAdapter { name: "deno", snark: None, extract: extract_deno }]),
+    ("deno.jsonc", &[ToolAdapter { name: "deno", snark: None, extract: extract_deno }]),
+    ("jest.config.json", &[ToolAdapter { name: "jest", snark: None, extract: extract_jest }]),
+
+    // === MONOREPO / BUILD TOOLS ===
+    ("nx.json", &[ToolAdapter { name: "nx", snark: None, extract: extract_nx }]),
+    ("turbo.json", &[ToolAdapter { name: "turbo", snark: None, extract: extract_turbo }]),
+
+    // === RUST ECOSYSTEM ===
+    ("Cargo.toml", &[ToolAdapter { name: "cargo", snark: None, extract: extract_cargo }]),
+
+    // === PHP ECOSYSTEM ===
+    ("composer.json", &[ToolAdapter { name: "composer", snark: None, extract: extract_composer }]),
+];
+
+/// Gitignore-style files to check as fallback (in priority order)
+/// These are checked AFTER all structured config files.
+/// Note: .dockerignore is intentionally excluded - it has inverted anchoring
+/// behavior where simple patterns match root only (opposite of .gitignore).
+const IGNORE_FILES: &[&str] = &[
+    ".ripmapignore",     // Our own ignore file (gitignore syntax)
+    ".eslintignore",     // ESLint (gitignore syntax, legacy - flat config preferred)
+    ".prettierignore",   // Prettier (true gitignore syntax)
+    ".stylelintignore",  // Stylelint (true gitignore syntax, uses node-ignore)
 ];
 
 impl Config {
@@ -495,6 +752,7 @@ impl Config {
 
     /// Try to load config from a single directory, checking all config files.
     fn try_load_from_dir(dir: &Path) -> Option<Self> {
+        // First: check structured config files
         for (filename, adapters) in CONFIG_FILES {
             let path = dir.join(filename);
             if !path.exists() {
@@ -510,8 +768,14 @@ impl Config {
             }
 
             // Load and parse the config file
-            let content = std::fs::read_to_string(&path).ok()?;
-            let json = Self::parse_config_file(&content, filename)?;
+            let content = match std::fs::read_to_string(&path) {
+                Ok(c) => c,
+                Err(_) => continue,
+            };
+            let json = match Self::parse_config_file(&content, filename) {
+                Some(j) => j,
+                None => continue,
+            };
 
             // Try each adapter in order
             for adapter in *adapters {
@@ -528,6 +792,20 @@ impl Config {
                 }
             }
         }
+
+        // Fallback: check gitignore-style files
+        for filename in IGNORE_FILES {
+            let path = dir.join(filename);
+            if path.exists() {
+                if let Some(extracted) = load_ignore_file(&path) {
+                    return Some(Self::from_extracted(
+                        extracted,
+                        format!("{}", path.display()),
+                    ));
+                }
+            }
+        }
+
         None
     }
 
