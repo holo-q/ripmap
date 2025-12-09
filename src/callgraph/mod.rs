@@ -32,10 +32,12 @@
 //! let graph = resolver.build_graph(&tags);
 //! ```
 
+mod coordinates;
 mod graph;
 mod resolver;
 mod strategies;
 
+pub use coordinates::StrategyCoordinates;
 pub use graph::{CallEdge, CallGraph, FunctionId};
 pub use resolver::{CallResolver, ResolutionStats, ResolverBuilder, ResolverConfig};
 pub use strategies::{
